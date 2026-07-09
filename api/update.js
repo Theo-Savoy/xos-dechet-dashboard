@@ -1,6 +1,6 @@
 // POST /api/update — Mise à jour en lot d'opportunités Salesforce + journal Blob.
 // Auth cookie gérée par middleware.js, rien à faire ici.
-import { put, get } from '@vercel/blob';
+import { put } from '@vercel/blob';
 
 const SF_ID = /^[a-zA-Z0-9]{15,18}$/;
 const DATE_YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -137,18 +137,11 @@ export default async function handler(req, res) {
   const failed = normalized.length - updated;
 
   // ── Journal Blob (seulement si au moins une réussite) ──
+  // Un blob immuable par action (pathname unique) : pas de read-modify-write,
+  // car la relecture d'un blob réécrit est servie par un cache (~60s) et
+  // ferait perdre des entrées entre deux actions rapprochées.
   if (updated > 0) {
     try {
-      const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-      // ponytail: lecture → ajout → écriture sans lock, trafic faible, race acceptée
-      const existing = await get('history.json', { access: 'private', token: blobToken });
-      let journal = { entries: [] };
-      if (existing) {
-        try {
-          journal = JSON.parse(await new Response(existing.stream).text());
-        } catch { journal = { entries: [] }; }
-        if (!Array.isArray(journal.entries)) journal = { entries: [] };
-      }
       const entry = {
         at: parisNowISO(),
         changes: journalChanges,
@@ -163,11 +156,11 @@ export default async function handler(req, res) {
             : (normalized[i].errors.map(e => e && e.message).filter(Boolean).join(' ; ') || 'Erreur inconnue'),
         })),
       };
-      journal.entries.unshift(entry); // plus récentes en premier
-      await put('history.json', JSON.stringify(journal), {
+      // Date.now() sur 13 chiffres => tri lexicographique = chronologique
+      const pathname = 'history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.json';
+      await put(pathname, JSON.stringify(entry), {
         access: 'private',
-        token: blobToken,
-        allowOverwrite: true,
+        token: process.env.BLOB_READ_WRITE_TOKEN,
         addRandomSuffix: false,
         contentType: 'application/json',
       });

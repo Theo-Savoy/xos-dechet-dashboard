@@ -83,17 +83,19 @@ Erreurs : 400 (payload invalide, message explicite), 500/502 (SF ou Blob,
 `{"error": "...", "message": "..."}`). Timeout fetch SF : 30s.
 Headers réponse : `Cache-Control: no-store`.
 
-Après un lot où au moins une opp a réussi, appender au journal Blob (lecture →
-ajout → écriture ; pas de lock, trafic faible, race acceptée) :
+Après un lot où au moins une opp a réussi, écrire UNE entrée dans UN blob
+immuable `history/<Date.now()>-<rand>.json` (pathname unique — jamais de
+read-modify-write : la relecture d'un blob réécrit est servie par un cache
+~60s et perdrait des entrées entre deux actions rapprochées) :
 ```json
 { "at": "ISO-8601 Europe/Paris", "changes": {...},
   "opps": [{"id", "name", "account", "owner", "success", "error": "msg|null"}] }
 ```
-Journal = `{"entries": [ ... ]}`, entrées les plus récentes en premier.
 Si le PATCH SF a échoué globalement, ne rien journaliser.
 
 ### GET /api/history
-Retourne le journal Blob tel quel (`{"entries": []}` si blob absent).
+`list({prefix: 'history/'})` + lecture des blobs, tri par pathname décroissant
+(= chronologique inverse), plafond 200 entrées. Retourne `{"entries": [...]}`.
 `Cache-Control: no-store`. Méthode GET uniquement.
 
 ### api/refresh.py — ajout "meta"
