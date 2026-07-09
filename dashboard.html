@@ -498,6 +498,37 @@ let META = { stages: [], users: [] };
 let historyOpen = false;
 let LAST_DATA = null;
 
+const REASON_FAMILIES = {
+  'CloseDate dépassée >1 an': 'closedate',
+  'CloseDate dépassée 6-12 mois': 'closedate',
+  'CloseDate dépassée 3-6 mois': 'closedate',
+  'CloseDate dépassée <3 mois': 'closedate',
+  'Aucune activité jamais enregistrée': 'activity',
+  "Pas d'activité depuis >1 an": 'activity',
+  "Pas d'activité depuis >3 mois": 'activity',
+  "Pas d'activité depuis >30j": 'activity',
+  'Pas de montant': 'amount_missing',
+  'Probabilité = 0%': 'prob_zero',
+  'Owner inactif': 'owner_inactive',
+  'Ancien commercial': 'owner_inactive',
+  'Créée il y a >2 ans': 'age',
+  'Créée il y a >1 an': 'age',
+  'Stage: Suspect enlisée': 'stalled',
+  'Stage: Suspect enlisé': 'stalled',
+  'Montant incohérrent (≤100€)': 'incoherent_amount'
+};
+
+const REASON_FAMILY_LABELS = {
+  'closedate': '⏰ Retard CloseDate',
+  'activity': '⚡ Inactivité',
+  'amount_missing': '💰 Absence de montant',
+  'prob_zero': '📉 Probabilité',
+  'owner_inactive': '👤 Propriétaire inactif / ancien',
+  'age': "📅 Ancienneté d'opportunité",
+  'stalled': '📌 Étape enlisée',
+  'incoherent_amount': '⚠️ Montant incohérent'
+};
+
 function escapeHtml(s) {
   if (!s) return '';
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -746,6 +777,7 @@ function populateReasonsFilter() {
   var menu = document.getElementById('reasons-dropdown-menu');
   if (!menu) return;
 
+  // 1. Récupérer toutes les raisons uniques présentes
   var reasonsMap = {};
   (ALL_OPPS || []).forEach(function(o) {
     (o.reasons || []).forEach(function(r) {
@@ -753,15 +785,55 @@ function populateReasonsFilter() {
     });
   });
 
-  var sortedReasons = Object.keys(reasonsMap).sort();
+  var allUniqueReasons = Object.keys(reasonsMap);
 
-  menu.innerHTML = sortedReasons.map(function(r) {
-    var checked = selectedReasons.has(r) ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;cursor:pointer;user-select:none;color:var(--text);font-size:12px;margin:2px 0;border-radius:3px;">' +
-      '<input type="checkbox" value="' + escapeHtml(r) + '"' + checked + ' onchange="toggleReasonFilter(this.value, this.checked)" style="accent-color:var(--accent);">' +
-      '<span>' + escapeHtml(r) + '</span>' +
-      '</label>';
-  }).join('');
+  // 2. Les regrouper par famille
+  var grouped = {};
+  allUniqueReasons.forEach(function(r) {
+    var family = REASON_FAMILIES[r] || 'autres';
+    if (!grouped[family]) {
+      grouped[family] = [];
+    }
+    grouped[family].push(r);
+  });
+
+  // Ordre d'affichage des familles
+  var familyOrder = [
+    'closedate',
+    'activity',
+    'amount_missing',
+    'prob_zero',
+    'owner_inactive',
+    'age',
+    'stalled',
+    'incoherent_amount',
+    'autres'
+  ];
+
+  // 3. Générer le HTML regroupé
+  var html = '';
+  familyOrder.forEach(function(family) {
+    var list = grouped[family] || [];
+    if (list.length === 0) return;
+
+    // Trier les raisons à l'intérieur
+    list.sort();
+
+    var labelFamily = REASON_FAMILY_LABELS[family] || 'Autres anomalies';
+    html += '<div style="margin-bottom: 8px;">';
+    html += '  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin: 6px 4px 4px 4px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); padding-bottom: 2px;">' + escapeHtml(labelFamily) + '</div>';
+    
+    list.forEach(function(r) {
+      var checked = selectedReasons.has(r) ? ' checked' : '';
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;cursor:pointer;user-select:none;color:var(--text);font-size:12px;margin:2px 0;border-radius:3px;">' +
+        '<input type="checkbox" value="' + escapeHtml(r) + '"' + checked + ' onchange="toggleReasonFilter(this.value, this.checked)" style="accent-color:var(--accent); cursor:pointer;">' +
+        '<span>' + escapeHtml(r) + '</span>' +
+        '</label>';
+    });
+    html += '</div>';
+  });
+
+  menu.innerHTML = html;
   
   updateReasonsLabel();
 }
@@ -787,13 +859,39 @@ function applyFilters() {
       }
     }
     if (selectedReasons.size > 0) {
-      var hasMatchingReason = false;
-      (o.reasons || []).forEach(function(r) {
-        if (selectedReasons.has(r)) {
-          hasMatchingReason = true;
+      // Regrouper les filtres sélectionnés par famille
+      var selectedByFamily = {};
+      selectedReasons.forEach(function(r) {
+        var family = REASON_FAMILIES[r] || r;
+        if (!selectedByFamily[family]) {
+          selectedByFamily[family] = [];
         }
+        selectedByFamily[family].push(r);
       });
-      if (!hasMatchingReason) return false;
+
+      // Valider que l'opportunité satisfait CHAQUE famille de filtres sélectionnée (ET entre familles)
+      var families = Object.keys(selectedByFamily);
+      var matchAllFamilies = true;
+      
+      for (var i = 0; i < families.length; i++) {
+        var family = families[i];
+        var allowedReasons = selectedByFamily[family];
+        
+        // Il faut au moins une des raisons autorisées pour cette famille (OU dans la famille)
+        var matchFamily = false;
+        for (var j = 0; j < allowedReasons.length; j++) {
+          if ((o.reasons || []).indexOf(allowedReasons[j]) !== -1) {
+            matchFamily = true;
+            break;
+          }
+        }
+        if (!matchFamily) {
+          matchAllFamilies = false;
+          break;
+        }
+      }
+      
+      if (!matchAllFamilies) return false;
     }
     if (searchText) {
       var haystack = (o.name + ' ' + o.account + ' ' + o.owner + ' ' + o.stage + ' ' + (o.type_vente || '')).toLowerCase();
