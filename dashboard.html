@@ -280,6 +280,7 @@ th.th-check { cursor: default; }
   .two-col { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
+.dropdown-menu label:hover { background-color: var(--panel-hover); }
 </style>
 </head>
 <body>
@@ -405,6 +406,18 @@ th.th-check { cursor: default; }
       <option value="all">Tous les types</option>
     </select>
   </div>
+  <div class="filter-group" style="position:relative;">
+    <span class="filter-label">Raison:</span>
+    <div class="dropdown-multiselect" id="reasons-dropdown-container" style="position:relative;">
+      <button class="search-box dropdown-trigger" onclick="toggleReasonsDropdown(event)" style="text-align:left;width:180px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:4px 8px;font-size:12px;">
+        <span id="reasons-dropdown-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;">Toutes les raisons</span>
+        <span>▼</span>
+      </button>
+      <div class="dropdown-menu" id="reasons-dropdown-menu" style="display:none;position:absolute;z-index:20;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:8px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);width:280px;top:100%;left:0;margin-top:4px;">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
   <div class="filter-group">
     <button class="filter-btn" id="btn-history" onclick="toggleHistory()">🗂️ Traitées</button>
   </div>
@@ -480,6 +493,7 @@ let catFilter = 'all';
 let typeVenteFilter = 'all';
 let searchText = '';
 let selectedIds = new Set();
+let selectedReasons = new Set();
 let META = { stages: [], users: [] };
 let historyOpen = false;
 let LAST_DATA = null;
@@ -697,6 +711,69 @@ function populateTypeVenteFilter() {
   }).join('');
 }
 
+function toggleReasonsDropdown(event) {
+  event.stopPropagation();
+  var menu = document.getElementById('reasons-dropdown-menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleReasonFilter(val, checked) {
+  if (checked) {
+    selectedReasons.add(val);
+  } else {
+    selectedReasons.delete(val);
+  }
+  updateReasonsLabel();
+  applyFilters();
+}
+
+function updateReasonsLabel() {
+  var label = document.getElementById('reasons-dropdown-label');
+  if (!label) return;
+
+  var n = selectedReasons.size;
+  if (n === 0) {
+    label.textContent = 'Toutes les raisons';
+  } else if (n === 1) {
+    label.textContent = Array.from(selectedReasons)[0];
+  } else {
+    label.textContent = n + ' raisons sélectionnées';
+  }
+}
+
+function populateReasonsFilter() {
+  var menu = document.getElementById('reasons-dropdown-menu');
+  if (!menu) return;
+
+  var reasonsMap = {};
+  (ALL_OPPS || []).forEach(function(o) {
+    (o.reasons || []).forEach(function(r) {
+      reasonsMap[r] = true;
+    });
+  });
+
+  var sortedReasons = Object.keys(reasonsMap).sort();
+
+  menu.innerHTML = sortedReasons.map(function(r) {
+    var checked = selectedReasons.has(r) ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;cursor:pointer;user-select:none;color:var(--text);font-size:12px;margin:2px 0;border-radius:3px;">' +
+      '<input type="checkbox" value="' + escapeHtml(r) + '"' + checked + ' onchange="toggleReasonFilter(this.value, this.checked)" style="accent-color:var(--accent);">' +
+      '<span>' + escapeHtml(r) + '</span>' +
+      '</label>';
+  }).join('');
+  
+  updateReasonsLabel();
+}
+
+window.addEventListener('click', function(e) {
+  var container = document.getElementById('reasons-dropdown-container');
+  var menu = document.getElementById('reasons-dropdown-menu');
+  if (container && menu && !container.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
 function applyFilters() {
   filtered = ALL_OPPS.filter(function(o) {
     if (ownerFilter !== 'all' && o.owner !== ownerFilter) return false;
@@ -708,6 +785,15 @@ function applyFilters() {
       } else {
         if (tv !== typeVenteFilter) return false;
       }
+    }
+    if (selectedReasons.size > 0) {
+      var hasMatchingReason = false;
+      (o.reasons || []).forEach(function(r) {
+        if (selectedReasons.has(r)) {
+          hasMatchingReason = true;
+        }
+      });
+      if (!hasMatchingReason) return false;
     }
     if (searchText) {
       var haystack = (o.name + ' ' + o.account + ' ' + o.owner + ' ' + o.stage + ' ' + (o.type_vente || '')).toLowerCase();
@@ -744,6 +830,7 @@ function renderData(d) {
   META = d.meta || { stages: [], users: [] };
   populateBulkSelects();
   populateTypeVenteFilter();
+  populateReasonsFilter();
   updateKPIs(d);
   applyFilters();
   var ts = d.generated_at ? d.generated_at.substring(0, 19).replace('T', ' ') : 'unknown';
