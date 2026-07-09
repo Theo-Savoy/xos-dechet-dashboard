@@ -24,12 +24,15 @@ def do_refresh():
                 current = json.load(f)
             gen_at = current.get("generated_at", "")
             if gen_at:
-                gen_dt = datetime.fromisoformat(gen_at.replace("Z", "+00:00"))
-                age = (datetime.now(gen_dt.tzinfo) - gen_dt).total_seconds() / 60
-                if age < min_refresh_minutes:
+                # Handle both naive and tz-aware datetimes
+                gen_str = gen_at.replace("Z", "+00:00")
+                gen_dt = datetime.fromisoformat(gen_str)
+                now_dt = datetime.now(gen_dt.tzinfo) if gen_dt.tzinfo else datetime.now()
+                age = (now_dt - gen_dt).total_seconds() / 60
+                if 0 <= age < min_refresh_minutes:
                     return 429, {
                         "error": "rate_limited",
-                        "message": "Dernière actualisation il y a %d min. Minimum %d min entre deux refresh." % (int(age), min_refresh_minutes),
+                        "message": "Derniere actualisation il y a %d min. Minimum %d min entre deux refresh." % (int(age), min_refresh_minutes),
                     }
         except Exception:
             pass
