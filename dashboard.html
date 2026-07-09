@@ -671,7 +671,7 @@ function updateApplyState() {
 
 function selectedOppsPayload() {
   return ALL_OPPS.filter(function(o) { return selectedIds.has(o.id); }).map(function(o) {
-    return { id: o.id, name: o.name, account: o.account, owner: o.owner };
+    return { id: o.id, name: o.name, account: o.account, owner: o.owner, type_vente: o.type_vente };
   });
 }
 
@@ -714,7 +714,11 @@ function closeLost() {
   var excludedCount = 0;
   if (Array.isArray(validTypes) && validTypes.length > 0) {
     var validIds = new Set(ALL_OPPS.filter(function(o) {
-      return selectedIds.has(o.id) && validTypes.indexOf(o.type_vente) !== -1;
+      var tv = o.type_vente;
+      // Si type_vente est manquant (null, undefined, vide ou tiret/indéfini), on le considère comme compatible en front.
+      // Le backend se chargera de lui attribuer un type par défaut valide lors de la mise à jour dans Salesforce.
+      var hasNoType = !tv || tv === '—' || tv === 'null';
+      return selectedIds.has(o.id) && (hasNoType || validTypes.indexOf(tv) !== -1);
     }).map(function(o) { return o.id; }));
     excludedCount = opps.length - validIds.size;
     validOpps = opps.filter(function(o) { return validIds.has(o.id); });

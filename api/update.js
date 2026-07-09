@@ -116,7 +116,14 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         allOrNone: false,
-        records: opps.map(o => ({ attributes: { type: 'Opportunity' }, id: o.id, ...fields })),
+        records: opps.map(o => {
+          const rec = { attributes: { type: 'Opportunity' }, id: o.id, ...fields };
+          const tv = o.type_vente;
+          if (fields.Raison_de_perte_V2__c && (!tv || tv === '—' || tv === 'null')) {
+            rec.Type_de_vente__c = 'Catalogue';
+          }
+          return rec;
+        }),
       }),
       signal: AbortSignal.timeout(30000),
     });
