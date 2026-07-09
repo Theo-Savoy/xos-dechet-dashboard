@@ -705,22 +705,32 @@ function closeLost() {
   if (opps.length === 0) return;
 
   var changes = { stage: lostStage.name, loss_reason: 'Nettoyage' };
-  var summary = opps.length + ' opportunité' + (opps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: Nettoyage)';
 
   // Raison_de_perte_V2__c est une picklist dépendante de Type_de_vente__c :
-  // prévenir si des opps sélectionnées ont un type incompatible avec Nettoyage.
+  // filtrer les opps dont le type_vente n'autorise pas Nettoyage.
   var validTypes = (META.loss_valid_for || {})['Nettoyage'] || [];
+  var validOpps = opps;
+  var excludedCount = 0;
   if (validTypes.length) {
-    var bad = ALL_OPPS.filter(function(o) {
-      return selectedIds.has(o.id) && validTypes.indexOf(o.type_vente) === -1;
-    });
-    if (bad.length) {
-      summary += '\n\n⚠️ ' + bad.length + ' opp(s) ont un Type de vente incompatible avec la raison « Nettoyage » (dépendance de picklist Salesforce) et échoueront. Corrigez la dépendance dans Setup ou désélectionnez-les.';
-    }
+    var validIds = new Set(ALL_OPPS.filter(function(o) {
+      return selectedIds.has(o.id) && validTypes.indexOf(o.type_vente) !== -1;
+    }).map(function(o) { return o.id; }));
+    excludedCount = opps.length - validIds.size;
+    validOpps = opps.filter(function(o) { return validIds.has(o.id); });
+  }
+
+  if (validOpps.length === 0) {
+    alert('Aucune opportunité sélectionnée n\'a un Type de vente compatible avec la raison « Nettoyage ».');
+    return;
+  }
+
+  var summary = validOpps.length + ' opportunité' + (validOpps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: Nettoyage)';
+  if (excludedCount > 0) {
+    summary += '\n\n⚠️ ' + excludedCount + ' opp(s) exclue(s) : Type de vente incompatible avec « Nettoyage ».';
   }
   if (!confirm(summary)) return;
 
-  sendBulkUpdate(opps, changes);
+  sendBulkUpdate(validOpps, changes);
 }
 
 function optimisticBulkUpdate(opps, changes) {
@@ -769,6 +779,15 @@ function sendBulkUpdate(opps, changes) {
   applyBtn.textContent = '⏳';
   loseBtn.textContent = '⏳';
 
+  function restoreButtons() {
+    applyBtn.disabled = false;
+    loseBtn.disabled = false;
+    clearBtn.disabled = false;
+    applyBtn.textContent = applyLabel;
+    loseBtn.textContent = loseLabel;
+    updateApplyState();
+  }
+
   fetch('/api/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -793,14 +812,7 @@ function sendBulkUpdate(opps, changes) {
   }).catch(function(e) {
     console.error('Bulk update failed:', e);
     alert('Échec de la mise à jour: ' + e.message);
-  }).then(function() {
-    applyBtn.disabled = false;
-    loseBtn.disabled = false;
-    clearBtn.disabled = false;
-    applyBtn.textContent = applyLabel;
-    loseBtn.textContent = loseLabel;
-    updateApplyState();
-  });
+  }).then(restoreButtons, restoreButtons);
 }
 
 function toggleHistory() {
