@@ -704,6 +704,18 @@ function closeLost() {
 
   var changes = { stage: lostStage.name, loss_reason: 'Nettoyage' };
   var summary = opps.length + ' opportunité' + (opps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: Nettoyage)';
+
+  // Raison_de_perte_V2__c est une picklist dépendante de Type_de_vente__c :
+  // prévenir si des opps sélectionnées ont un type incompatible avec Nettoyage.
+  var validTypes = (META.loss_valid_for || {})['Nettoyage'] || [];
+  if (validTypes.length) {
+    var bad = ALL_OPPS.filter(function(o) {
+      return selectedIds.has(o.id) && validTypes.indexOf(o.type_vente) === -1;
+    });
+    if (bad.length) {
+      summary += '\n\n⚠️ ' + bad.length + ' opp(s) ont un Type de vente incompatible avec la raison « Nettoyage » (dépendance de picklist Salesforce) et échoueront. Corrigez la dépendance dans Setup ou désélectionnez-les.';
+    }
+  }
   if (!confirm(summary)) return;
 
   sendBulkUpdate(opps, changes);
@@ -729,7 +741,16 @@ function sendBulkUpdate(opps, changes) {
     return r.json().then(function(d) { return { ok: r.ok, data: d }; });
   }).then(function(res) {
     if (!res.ok) throw new Error(res.data.message || res.data.error || 'Erreur');
-    alert(res.data.updated + ' mise(s) à jour, ' + res.data.failed + ' échec(s).');
+    var msg = res.data.updated + ' mise(s) à jour, ' + res.data.failed + ' échec(s).';
+    if (res.data.failed > 0) {
+      var seen = {};
+      (res.data.results || []).forEach(function(r) {
+        (r.errors || []).forEach(function(e) { if (e && e.message) seen[e.message] = (seen[e.message] || 0) + 1; });
+      });
+      var details = Object.keys(seen).slice(0, 3).map(function(m) { return '- ' + m + ' (×' + seen[m] + ')'; });
+      if (details.length) msg += '\n\nErreurs :\n' + details.join('\n');
+    }
+    alert(msg);
     clearSelection();
     refreshData();
   }).catch(function(e) {

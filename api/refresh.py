@@ -281,12 +281,43 @@ def do_refresh():
         "SELECT Id, Name FROM User WHERE IsActive = true AND UserType = 'Standard' "
         "ORDER BY Name"
     )
+    # Valeurs actives de la picklist restreinte Raison_de_perte_V2__c (describe)
+    desc_req = urllib.request.Request(base_url + "/sobjects/Opportunity/describe", method="GET")
+    desc_req.add_header("Authorization", "Bearer " + access_token)
+    with urllib.request.urlopen(desc_req, timeout=60) as resp:
+        opp_desc = json.loads(resp.read().decode())
+    loss_field = next((f for f in opp_desc.get("fields", []) if f.get("name") == "Raison_de_perte_V2__c"), {})
+    loss_reasons = [p.get("value", "") for p in loss_field.get("picklistValues", []) if p.get("active")]
+    loss_controller = loss_field.get("controllerName")  # picklist dépendante ?
+
+    # Décodage de la dépendance : pour chaque raison, les valeurs du champ
+    # contrôleur (Type_de_vente__c) qui l'autorisent (bitmap validFor base64)
+    import base64
+    ctrl_field = next((f for f in opp_desc.get("fields", []) if f.get("name") == loss_controller), {})
+    ctrl_values = [p.get("value", "") for p in ctrl_field.get("picklistValues", []) if p.get("active")]
+    loss_valid_for = {}
+    for p in loss_field.get("picklistValues", []):
+        if not p.get("active"):
+            continue
+        vf = p.get("validFor")
+        if not vf:
+            loss_valid_for[p.get("value", "")] = []
+            continue
+        bits = base64.b64decode(vf)
+        loss_valid_for[p.get("value", "")] = [
+            ctrl_values[i] for i in range(len(ctrl_values))
+            if i // 8 < len(bits) and bits[i // 8] & (0x80 >> (i % 8))
+        ]
+
     meta = {
         "stages": [
             {"name": s.get("MasterLabel", ""), "closed": s.get("IsClosed", False), "won": s.get("IsWon", False)}
             for s in stage_records
         ],
         "users": [{"id": u.get("Id", ""), "name": u.get("Name", "")} for u in active_user_records],
+        "loss_reasons": loss_reasons,
+        "loss_controller": loss_controller,
+        "loss_valid_for": loss_valid_for,
     }
 
     dashboard_data = {
