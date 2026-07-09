@@ -272,8 +272,26 @@ def do_refresh():
             key = reason.split("(")[0].strip().rstrip(":")
             reason_stats[key] = reason_stats.get(key, 0) + 1
 
+    # ── 7. Meta (étapes actives + utilisateurs actifs, pour les actions en lot) ──
+    stage_records = soql_query_all(
+        "SELECT MasterLabel, IsClosed, IsWon, SortOrder FROM OpportunityStage "
+        "WHERE IsActive = true ORDER BY SortOrder"
+    )
+    active_user_records = soql_query_all(
+        "SELECT Id, Name FROM User WHERE IsActive = true AND UserType = 'Standard' "
+        "ORDER BY Name"
+    )
+    meta = {
+        "stages": [
+            {"name": s.get("MasterLabel", ""), "closed": s.get("IsClosed", False), "won": s.get("IsWon", False)}
+            for s in stage_records
+        ],
+        "users": [{"id": u.get("Id", ""), "name": u.get("Name", "")} for u in active_user_records],
+    }
+
     dashboard_data = {
         "generated_at": datetime.now(ZoneInfo("Europe/Paris")).isoformat(),
+        "meta": meta,
         "total_dechet": total_dechet,
         "total_incoherent": total_incoherent,
         "total_open": total_open,
