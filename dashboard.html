@@ -480,11 +480,18 @@ let historyOpen = false;
 let LAST_DATA = null;
 
 const REASON_FAMILIES = {
+  'CloseDate depassée >1 an': 'closedate',
+  'CloseDate depassée 6-12 mois': 'closedate',
+  'CloseDate depassée 3-6 mois': 'closedate',
+  'CloseDate depassée <3 mois': 'closedate',
   'CloseDate dépassée >1 an': 'closedate',
   'CloseDate dépassée 6-12 mois': 'closedate',
   'CloseDate dépassée 3-6 mois': 'closedate',
   'CloseDate dépassée <3 mois': 'closedate',
   'Aucune activité jamais enregistrée': 'activity',
+  'Pas d activité depuis >1 an': 'activity',
+  'Pas d activité depuis >3 mois': 'activity',
+  'Pas d activité depuis >30j': 'activity',
   "Pas d'activité depuis >1 an": 'activity',
   "Pas d'activité depuis >3 mois": 'activity',
   "Pas d'activité depuis >30j": 'activity',
@@ -496,6 +503,7 @@ const REASON_FAMILIES = {
   'Créée il y a >1 an': 'age',
   'Stage: Suspect enlisée': 'stalled',
   'Stage: Suspect enlisé': 'stalled',
+  'Montant incohérent (≤100€)': 'incoherent_amount',
   'Montant incohérrent (≤100€)': 'incoherent_amount'
 };
 
