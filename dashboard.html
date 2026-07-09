@@ -423,6 +423,7 @@ th.th-check { cursor: default; }
   <select id="bulk-owner" onchange="updateApplyState()"><option value="">— Propriétaire —</option></select>
   <input type="date" id="bulk-date" onchange="updateApplyState()">
   <select id="bulk-stage" onchange="updateApplyState()"><option value="">— Étape —</option></select>
+  <select id="bulk-type-vente" onchange="updateApplyState()"><option value="">— Type de vente —</option></select>
   <button class="filter-btn" id="bulk-apply" onclick="applyBulk()" disabled style="border-color:var(--accent);color:var(--accent);">Appliquer</button>
   <span style="border-left: 1px solid var(--border); margin: 0 10px; height: 20px;"></span>
   <select id="bulk-loss-reason" style="border-color:var(--red);color:var(--red);"><option value="">— Raison de perte —</option></select>
@@ -588,6 +589,55 @@ function updateSelectionUI() {
   var someSelected = filtered.some(function(o) { return selectedIds.has(o.id); });
   chkAll.checked = allSelected;
   chkAll.indeterminate = someSelected && !allSelected;
+
+  updateLossReasonDropdown();
+}
+
+function updateLossReasonDropdown() {
+  var lossSel = document.getElementById('bulk-loss-reason');
+  if (!lossSel) return;
+
+  var selectedTypes = new Set();
+  ALL_OPPS.forEach(function(o) {
+    if (selectedIds.has(o.id)) {
+      var tv = o.type_vente;
+      if (tv && tv !== '—' && tv !== 'null') {
+        selectedTypes.add(tv);
+      }
+    }
+  });
+
+  var prevValue = lossSel.value || 'Nettoyage';
+
+  var reasons = (META.loss_reasons || []).filter(function(r) {
+    var validTypes = (META.loss_valid_for || {})[r];
+    if (!validTypes) return true; // pas de restriction (tous compatibles)
+    
+    var compatible = true;
+    selectedTypes.forEach(function(t) {
+      if (validTypes.indexOf(t) === -1) {
+        compatible = false;
+      }
+    });
+    return compatible;
+  });
+
+  lossSel.innerHTML = '<option value="">— Raison de perte —</option>' + reasons.map(function(r) {
+    var selected = r === prevValue ? ' selected' : '';
+    return '<option value="' + escapeHtml(r) + '"' + selected + '>' + escapeHtml(r) + '</option>';
+  }).join('');
+
+  if (reasons.indexOf(prevValue) === -1) {
+    if (reasons.indexOf('Nettoyage') !== -1) {
+      lossSel.value = 'Nettoyage';
+    } else if (reasons.length > 0) {
+      lossSel.value = reasons[0];
+    } else {
+      lossSel.value = '';
+    }
+  } else {
+    lossSel.value = prevValue;
+  }
 }
 
 function sortBy(key) {
@@ -710,6 +760,13 @@ function populateBulkSelects() {
     return '<option value="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</option>';
   }).join('');
 
+  var typeVenteSel = document.getElementById('bulk-type-vente');
+  if (typeVenteSel) {
+    typeVenteSel.innerHTML = '<option value="">— Type de vente —</option>' + (META.type_vente_values || []).map(function(t) {
+      return '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>';
+    }).join('');
+  }
+
   var lossSel = document.getElementById('bulk-loss-reason');
   if (lossSel) {
     lossSel.innerHTML = '<option value="">— Raison de perte —</option>' + (META.loss_reasons || []).map(function(r) {
@@ -723,7 +780,8 @@ function updateApplyState() {
   var owner = document.getElementById('bulk-owner').value;
   var date = document.getElementById('bulk-date').value;
   var stage = document.getElementById('bulk-stage').value;
-  document.getElementById('bulk-apply').disabled = !(owner || date || stage);
+  var typeVente = document.getElementById('bulk-type-vente').value;
+  document.getElementById('bulk-apply').disabled = !(owner || date || stage || typeVente);
 }
 
 function selectedOppsPayload() {
@@ -736,10 +794,12 @@ function applyBulk() {
   var ownerSel = document.getElementById('bulk-owner');
   var date = document.getElementById('bulk-date').value;
   var stage = document.getElementById('bulk-stage').value;
+  var typeVenteSel = document.getElementById('bulk-type-vente');
   var changes = {};
   if (ownerSel.value) changes.owner_id = ownerSel.value;
   if (date) changes.close_date = date;
   if (stage) changes.stage = stage;
+  if (typeVenteSel && typeVenteSel.value) changes.type_vente = typeVenteSel.value;
   if (Object.keys(changes).length === 0) return;
 
   var opps = selectedOppsPayload();
@@ -749,6 +809,7 @@ function applyBulk() {
   if (changes.owner_id) summary += '- Propriétaire → ' + ownerSel.options[ownerSel.selectedIndex].textContent + '\n';
   if (changes.close_date) summary += '- CloseDate → ' + changes.close_date + '\n';
   if (changes.stage) summary += '- Étape → ' + changes.stage + '\n';
+  if (changes.type_vente) summary += '- Type de vente → ' + changes.type_vente + '\n';
   if (!confirm(summary)) return;
 
   sendBulkUpdate(opps, changes);
@@ -767,48 +828,54 @@ function closeLost() {
 
   var changes = { stage: lostStage.name, loss_reason: lossReason };
 
+  // Exclure les opportunités qui n'ont pas de Type de vente (l'utilisateur doit le renseigner lui-même)
+  var validOpps = opps.filter(function(o) {
+    var tv = o.type_vente;
+    return tv && tv !== '—' && tv !== 'null';
+  });
+  var excludedNoTypeCount = opps.length - validOpps.length;
+
   // Raison_de_perte_V2__c est une picklist dépendante de Type_de_vente__c :
   // filtrer les opps dont le type_vente n'autorise pas la raison sélectionnée.
-  // null = pas de restriction (tous les types valides), [] = aucun type valide
   var validTypes = (META.loss_valid_for || {})[lossReason];
-  var validOpps = opps;
-  var excludedCount = 0;
+  var finalOpps = validOpps;
+  var excludedIncompatibleCount = 0;
   var validTypesArray = Array.isArray(validTypes) ? validTypes : [];
-  var fallbackType = validTypesArray[0] || 'Catalogue';
 
   if (validTypesArray.length > 0) {
     var validIds = new Set(ALL_OPPS.filter(function(o) {
       var tv = o.type_vente;
-      // Si type_vente est manquant (null, undefined, vide ou tiret/indéfini), on le considère comme compatible en front.
-      // Le backend se chargera de lui attribuer un type par défaut valide lors de la mise à jour dans Salesforce.
-      var hasNoType = !tv || tv === '—' || tv === 'null';
-      return selectedIds.has(o.id) && (hasNoType || validTypesArray.indexOf(tv) !== -1);
+      return selectedIds.has(o.id) && validTypesArray.indexOf(tv) !== -1;
     }).map(function(o) { return o.id; }));
-    excludedCount = opps.length - validIds.size;
-    validOpps = opps.filter(function(o) { return validIds.has(o.id); });
+    excludedIncompatibleCount = validOpps.length - validOpps.filter(function(o) { return validIds.has(o.id); }).length;
+    finalOpps = validOpps.filter(function(o) { return validIds.has(o.id); });
   }
 
-  if (validOpps.length === 0) {
-    alert('Aucune opportunité sélectionnée n\'a un Type de vente compatible avec la raison « ' + lossReason + ' ».');
+  if (finalOpps.length === 0) {
+    var msg = 'Aucune opportunité sélectionnée ne peut être close :';
+    if (excludedNoTypeCount > 0) msg += '\n- ' + excludedNoTypeCount + ' opp(s) n\'ont pas de Type de vente (veuillez le renseigner d\'abord).';
+    if (excludedIncompatibleCount > 0) msg += '\n- ' + excludedIncompatibleCount + ' opp(s) ont un Type de vente incompatible avec la raison « ' + lossReason + ' ».';
+    alert(msg);
     return;
   }
 
-  var summary = validOpps.length + ' opportunité' + (validOpps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: ' + lossReason + ')';
-  if (excludedCount > 0) {
-    summary += '\n\n⚠️ ' + excludedCount + ' opp(s) exclue(s) : Type de vente incompatible avec « ' + lossReason + ' ».';
+  var summary = finalOpps.length + ' opportunité' + (finalOpps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: ' + lossReason + ')';
+  var warningParts = [];
+  if (excludedNoTypeCount > 0) warningParts.push(excludedNoTypeCount + ' opp(s) sans Type de vente');
+  if (excludedIncompatibleCount > 0) warningParts.push(excludedIncompatibleCount + ' opp(s) avec Type de vente incompatible avec « ' + lossReason + ' »');
+  
+  if (warningParts.length > 0) {
+    summary += '\n\n⚠️ Attention :\n- ' + warningParts.join('\n- ');
   }
   if (!confirm(summary)) return;
 
-  // Assigner le fallback compatible si le type de vente d'origine est vide/null
-  var payloadOpps = validOpps.map(function(o) {
-    var tv = o.type_vente;
-    var hasNoType = !tv || tv === '—' || tv === 'null';
+  var payloadOpps = finalOpps.map(function(o) {
     return {
       id: o.id,
       name: o.name,
       account: o.account,
       owner: o.owner,
-      type_vente: hasNoType ? fallbackType : tv
+      type_vente: o.type_vente
     };
   });
 
@@ -831,6 +898,7 @@ function optimisticBulkUpdate(opps, changes) {
         if (newOwner) { o.owner = newOwner.name; o.owner_active = true; }
       }
       if (changes.stage) o.stage = changes.stage;
+      if (changes.type_vente) o.type_vente = changes.type_vente;
       if (changes.close_date) {
         o.close_date = changes.close_date;
         var today = new Date(); today.setHours(0,0,0,0);

@@ -68,8 +68,15 @@ export default async function handler(req, res) {
     fields.Raison_de_perte_V2__c = changes.loss_reason;
     journalChanges.loss_reason = changes.loss_reason;
   }
-  if (!('OwnerId' in fields) && !('CloseDate' in fields) && !('StageName' in fields)) {
-    return res.status(400).json({ error: 'invalid_payload', message: 'changes doit contenir au moins une clé parmi owner_id, close_date, stage.' });
+  if (changes.type_vente != null && changes.type_vente !== '') {
+    if (typeof changes.type_vente !== 'string') {
+      return res.status(400).json({ error: 'invalid_payload', message: 'type_vente doit être une chaîne de caractères.' });
+    }
+    fields.Type_de_vente__c = changes.type_vente;
+    journalChanges.type_vente = changes.type_vente;
+  }
+  if (!('OwnerId' in fields) && !('CloseDate' in fields) && !('StageName' in fields) && !('Type_de_vente__c' in fields)) {
+    return res.status(400).json({ error: 'invalid_payload', message: 'changes doit contenir au moins une clé parmi owner_id, close_date, stage, type_vente.' });
   }
 
   // ── OAuth Salesforce (même flux que api/refresh.py) ──

@@ -319,6 +319,7 @@ def do_refresh():
         "loss_reasons": loss_reasons,
         "loss_controller": loss_controller,
         "loss_valid_for": loss_valid_for,
+        "type_vente_values": ctrl_values,
     }
 
     dashboard_data = {
