@@ -238,6 +238,43 @@ tr:hover td { background: var(--panel-hover); }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 .pagination .page-info { color: var(--text-muted); font-size: 12px; }
 
+.bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+.bulk-bar select, .bulk-bar input[type="date"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.bulk-bar select:focus, .bulk-bar input[type="date"]:focus { outline: none; border-color: var(--accent); }
+.bulk-count { font-weight: 600; font-size: 12px; }
+.bulk-bar .filter-btn:disabled { opacity: 0.4; cursor: default; }
+input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+th.th-check { cursor: default; }
+
+.history-entry { border-bottom: 1px solid var(--border); padding: 12px 0; }
+.history-entry:first-child { padding-top: 0; }
+.history-entry:last-child { border-bottom: none; }
+.history-date { font-weight: 600; margin-bottom: 6px; }
+.history-changes { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.history-opp { padding: 2px 0; font-size: 12px; }
+.history-ok { color: var(--green); }
+.history-ko { color: var(--red); }
+
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 @media (max-width: 900px) {
   .two-col { grid-template-columns: 1fr; }
@@ -363,6 +400,9 @@ tr:hover td { background: var(--panel-hover); }
     <button class="filter-btn" onclick="setCatFilter('incoherent')">Incohérent</button>
   </div>
   <div class="filter-group">
+    <button class="filter-btn" id="btn-history" onclick="toggleHistory()">🗂️ Traitées</button>
+  </div>
+  <div class="filter-group">
     <span class="filter-label">Recherche:</span>
     <input class="search-box" type="text" placeholder="Nom, compte, étape..." oninput="setSearch(this.value)">
   </div>
@@ -372,12 +412,23 @@ tr:hover td { background: var(--panel-hover); }
   </div>
 </div>
 
-<div class="section">
+<div class="bulk-bar" id="bulk-bar">
+  <span class="bulk-count" id="bulk-count">0 sélectionnée</span>
+  <select id="bulk-owner" onchange="updateApplyState()"><option value="">— Propriétaire —</option></select>
+  <input type="date" id="bulk-date" onchange="updateApplyState()">
+  <select id="bulk-stage" onchange="updateApplyState()"><option value="">— Étape —</option></select>
+  <button class="filter-btn" id="bulk-apply" onclick="applyBulk()" disabled style="border-color:var(--accent);color:var(--accent);">Appliquer</button>
+  <button class="filter-btn" id="bulk-lose" onclick="closeLost()" style="border-color:var(--red);color:var(--red);">☠ Clore en perdue</button>
+  <button class="filter-btn" id="bulk-clear" onclick="clearSelection()">Désélectionner</button>
+</div>
+
+<div class="section" id="main-section">
   <div class="section-header">📋 Liste des opportunités — tri par score de pertinence</div>
   <div class="section-body">
     <table id="main-table">
       <thead>
         <tr>
+          <th class="th-check"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
           <th onclick="sortBy('category')" id="th-cat">Catégorie</th>
           <th onclick="sortBy('score')" id="th-score">Score</th>
           <th onclick="sortBy('name')" id="th-name">Opportunité</th>
@@ -403,6 +454,11 @@ tr:hover td { background: var(--panel-hover); }
   </div>
 </div>
 
+<div class="section" id="history-section" style="display:none;">
+  <div class="section-header">🗂️ Opportunités traitées</div>
+  <div class="section-body" id="history-body"></div>
+</div>
+
 <script>
 let ALL_OPPS = [];
 let filtered = [];
@@ -413,6 +469,9 @@ let sortDir = 'desc';
 let ownerFilter = 'all';
 let catFilter = 'all';
 let searchText = '';
+let selectedIds = new Set();
+let META = { stages: [], users: [] };
+let historyOpen = false;
 
 function escapeHtml(s) {
   if (!s) return '';
@@ -463,6 +522,7 @@ function renderTable() {
       return '<span class="reason-tag">' + escapeHtml(r.split('(')[0].trim()) + '</span>';
     }).join('');
     return '<tr>' +
+      '<td><input type="checkbox" onchange="toggleSelectOne(\'' + escapeHtml(o.id) + '\', this.checked)"' + (selectedIds.has(o.id) ? ' checked' : '') + '></td>' +
       '<td>' + categoryBadge(o.category || 'dechet') + '</td>' +
       '<td class="score-cell ' + scoreClass(o.score) + '">' + o.score + '</td>' +
       '<td>' + escapeHtml(o.name) + '</td>' +
@@ -487,6 +547,37 @@ function renderTable() {
   document.querySelectorAll('th').forEach(function(th) { th.classList.remove('sorted-asc', 'sorted-desc'); });
   var th = document.getElementById('th-' + sortKey);
   if (th) th.classList.add(sortDir === 'desc' ? 'sorted-desc' : 'sorted-asc');
+
+  updateSelectionUI();
+}
+
+function toggleSelectAll(checked) {
+  filtered.forEach(function(o) {
+    if (checked) selectedIds.add(o.id); else selectedIds.delete(o.id);
+  });
+  renderTable();
+}
+
+function toggleSelectOne(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateSelectionUI();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  renderTable();
+}
+
+function updateSelectionUI() {
+  var n = selectedIds.size;
+  document.getElementById('bulk-bar').style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('bulk-count').textContent = n + (n > 1 ? ' sélectionnées' : ' sélectionnée');
+
+  var chkAll = document.getElementById('chk-all');
+  var allSelected = filtered.length > 0 && filtered.every(function(o) { return selectedIds.has(o.id); });
+  var someSelected = filtered.some(function(o) { return selectedIds.has(o.id); });
+  chkAll.checked = allSelected;
+  chkAll.indeterminate = someSelected && !allSelected;
 }
 
 function sortBy(key) {
@@ -550,10 +641,150 @@ function updateKPIs(d) {
 
 function renderData(d) {
   ALL_OPPS = d.opps;
+  META = d.meta || { stages: [], users: [] };
+  populateBulkSelects();
   updateKPIs(d);
   applyFilters();
   var ts = d.generated_at ? d.generated_at.substring(0, 19).replace('T', ' ') : 'unknown';
   document.getElementById('last-updated').textContent = 'Dernière MAJ: ' + ts;
+}
+
+function populateBulkSelects() {
+  var ownerSel = document.getElementById('bulk-owner');
+  var stageSel = document.getElementById('bulk-stage');
+  ownerSel.innerHTML = '<option value="">— Propriétaire —</option>' + (META.users || []).map(function(u) {
+    return '<option value="' + escapeHtml(u.id) + '">' + escapeHtml(u.name) + '</option>';
+  }).join('');
+  stageSel.innerHTML = '<option value="">— Étape —</option>' + (META.stages || []).map(function(s) {
+    return '<option value="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</option>';
+  }).join('');
+}
+
+function updateApplyState() {
+  var owner = document.getElementById('bulk-owner').value;
+  var date = document.getElementById('bulk-date').value;
+  var stage = document.getElementById('bulk-stage').value;
+  document.getElementById('bulk-apply').disabled = !(owner || date || stage);
+}
+
+function selectedOppsPayload() {
+  return ALL_OPPS.filter(function(o) { return selectedIds.has(o.id); }).map(function(o) {
+    return { id: o.id, name: o.name, account: o.account, owner: o.owner };
+  });
+}
+
+function applyBulk() {
+  var ownerSel = document.getElementById('bulk-owner');
+  var date = document.getElementById('bulk-date').value;
+  var stage = document.getElementById('bulk-stage').value;
+  var changes = {};
+  if (ownerSel.value) changes.owner_id = ownerSel.value;
+  if (date) changes.close_date = date;
+  if (stage) changes.stage = stage;
+  if (Object.keys(changes).length === 0) return;
+
+  var opps = selectedOppsPayload();
+  if (opps.length === 0) return;
+
+  var summary = opps.length + ' opportunité' + (opps.length > 1 ? 's' : '') + ' :\n';
+  if (changes.owner_id) summary += '- Propriétaire → ' + ownerSel.options[ownerSel.selectedIndex].textContent + '\n';
+  if (changes.close_date) summary += '- CloseDate → ' + changes.close_date + '\n';
+  if (changes.stage) summary += '- Étape → ' + changes.stage + '\n';
+  if (!confirm(summary)) return;
+
+  sendBulkUpdate(opps, changes);
+}
+
+function closeLost() {
+  var lostStage = (META.stages || []).filter(function(s) { return s.closed && !s.won; })[0];
+  if (!lostStage) { alert('Aucune étape de perte trouvée.'); return; }
+
+  var opps = selectedOppsPayload();
+  if (opps.length === 0) return;
+
+  var changes = { stage: lostStage.name, loss_reason: 'Nettoyage' };
+  var summary = opps.length + ' opportunité' + (opps.length > 1 ? 's' : '') + ' → Clore en perdue (' + lostStage.name + ', raison: Nettoyage)';
+  if (!confirm(summary)) return;
+
+  sendBulkUpdate(opps, changes);
+}
+
+function sendBulkUpdate(opps, changes) {
+  var applyBtn = document.getElementById('bulk-apply');
+  var loseBtn = document.getElementById('bulk-lose');
+  var clearBtn = document.getElementById('bulk-clear');
+  var applyLabel = applyBtn.textContent;
+  var loseLabel = loseBtn.textContent;
+  applyBtn.disabled = true;
+  loseBtn.disabled = true;
+  clearBtn.disabled = true;
+  applyBtn.textContent = '⏳';
+  loseBtn.textContent = '⏳';
+
+  fetch('/api/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ opps: opps, changes: changes })
+  }).then(function(r) {
+    return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+  }).then(function(res) {
+    if (!res.ok) throw new Error(res.data.message || res.data.error || 'Erreur');
+    alert(res.data.updated + ' mise(s) à jour, ' + res.data.failed + ' échec(s).');
+    clearSelection();
+    refreshData();
+  }).catch(function(e) {
+    console.error('Bulk update failed:', e);
+    alert('Échec de la mise à jour: ' + e.message);
+  }).then(function() {
+    applyBtn.disabled = false;
+    loseBtn.disabled = false;
+    clearBtn.disabled = false;
+    applyBtn.textContent = applyLabel;
+    loseBtn.textContent = loseLabel;
+    updateApplyState();
+  });
+}
+
+function toggleHistory() {
+  historyOpen = !historyOpen;
+  document.getElementById('btn-history').classList.toggle('active', historyOpen);
+  document.getElementById('main-section').style.display = historyOpen ? 'none' : '';
+  document.getElementById('history-section').style.display = historyOpen ? '' : 'none';
+  if (historyOpen) loadHistory();
+}
+
+function loadHistory() {
+  var body = document.getElementById('history-body');
+  body.innerHTML = 'Chargement...';
+  fetch('/api/history').then(function(r) {
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    return r.json();
+  }).then(function(d) {
+    renderHistory(d.entries || []);
+  }).catch(function(e) {
+    console.error('Failed to load history:', e);
+    body.innerHTML = 'Erreur: impossible de charger l\'historique.';
+  });
+}
+
+function renderHistory(entries) {
+  var body = document.getElementById('history-body');
+  if (entries.length === 0) {
+    body.innerHTML = 'Aucune opp traitée pour l\'instant.';
+    return;
+  }
+  body.innerHTML = entries.map(function(e) {
+    var changesTags = Object.keys(e.changes || {}).map(function(k) {
+      return '<span class="reason-tag">' + escapeHtml(k) + ': ' + escapeHtml(String(e.changes[k])) + '</span>';
+    }).join('');
+    var opps = (e.opps || []).map(function(o) {
+      var link = 'https://db0000000d7rdeay.my.salesforce.com/lightning/r/Opportunity/' + encodeURIComponent(o.id) + '/view';
+      var mark = o.success ? '<span class="history-ok">✓</span>' : '<span class="history-ko">✗ ' + escapeHtml(o.error || '') + '</span>';
+      return '<div class="history-opp">' + mark + ' <a href="' + link + '" target="_blank" class="table-link">' + escapeHtml(o.name) + '</a> — ' + escapeHtml(o.account) + ' (' + escapeHtml(o.owner) + ')</div>';
+    }).join('');
+    var dateStr = e.at ? e.at.substring(0, 19).replace('T', ' ') : '';
+    return '<div class="history-entry"><div class="history-date">' + escapeHtml(dateStr) + '</div><div class="history-changes">' + changesTags + '</div>' + opps + '</div>';
+  }).join('');
 }
 
 function loadData() {
@@ -570,7 +801,7 @@ function loadData() {
     renderData(d);
   }).catch(function(e) {
     console.error('Failed to load data:', e);
-    document.getElementById('table-body').innerHTML = '<tr><td colspan="13">Erreur: impossible de charger les données.</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="14">Erreur: impossible de charger les données.</td></tr>';
   });
 }
 
