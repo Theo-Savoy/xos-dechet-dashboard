@@ -64,7 +64,7 @@ def do_refresh():
             url = nxt  # full URL from Salesforce
         return records
 
-    # ── 3. Fetch déchet opps (CloseDate < today) ──
+    # ── 3. Fetch déchet opps (CloseDate < today OR StageName = 'Suspect enlisé') ──
     soql_dechet = (
         "SELECT Id, Name, AccountId, Account.Name, Account.Industry, "
         "Account.OwnerId, Account.Owner.Name, "
@@ -72,7 +72,7 @@ def do_refresh():
         "Type_de_vente__c, CreatedDate, IsWon, IsClosed, LeadSource, "
         "CampaignId, Campaign.Name, LastActivityDate, LastModifiedDate, "
         "ExpectedRevenue, HasOpenActivity, LastStageChangeDate "
-        "FROM Opportunity WHERE IsClosed = false AND CloseDate < TODAY "
+        "FROM Opportunity WHERE IsClosed = false AND (CloseDate < TODAY OR StageName = 'Suspect enlisé') "
         "ORDER BY CloseDate ASC"
     )
     dechet_records = soql_query_all(soql_dechet)
@@ -197,7 +197,7 @@ def do_refresh():
         elif d_cr > 365:
             score += 2; reasons.append("Creee il y a >1 an")
 
-        if stage == "Suspect enlise":
+        if stage in ("Suspect enlise", "Suspect enlisé"):
             score += 3; reasons.append("Stage: Suspect enlise")
 
         if amt and amt > 0 and category == "dechet":
