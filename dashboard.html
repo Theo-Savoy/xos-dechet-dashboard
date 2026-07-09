@@ -809,8 +809,15 @@ function renderHistory(entries) {
 }
 
 function loadData() {
-  // Réponse servie par le cache CDN (24h max) => refresh auto quotidien.
-  return fetch('/api/refresh').then(function(r) {
+  // Clé de cache = version de la dernière action de traitement : après un lot,
+  // le cache CDN (24h) saute pour tout le monde, pas seulement pour l'acteur.
+  return fetch('/api/version').then(function(r) {
+    return r.ok ? r.json() : { version: '0' };
+  }).catch(function() {
+    return { version: '0' };
+  }).then(function(v) {
+    return fetch('/api/refresh?v=' + encodeURIComponent(v.version || '0'));
+  }).then(function(r) {
     if (!r.ok) throw new Error('Erreur ' + r.status);
     return r.json();
   }).then(function(d) {
