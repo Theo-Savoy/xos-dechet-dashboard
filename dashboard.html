@@ -753,9 +753,11 @@ function renderData(d) {
 function populateBulkSelects() {
   var ownerSel = document.getElementById('bulk-owner');
   var stageSel = document.getElementById('bulk-stage');
-  ownerSel.innerHTML = '<option value="">— Propriétaire —</option>' + (META.users || []).map(function(u) {
-    return '<option value="' + escapeHtml(u.id) + '">' + escapeHtml(u.name) + '</option>';
-  }).join('');
+  ownerSel.innerHTML = '<option value="">— Propriétaire —</option>' +
+    '<option value="ACCOUNT_OWNER">👤 Propriétaire du Compte</option>' +
+    (META.users || []).map(function(u) {
+      return '<option value="' + escapeHtml(u.id) + '">' + escapeHtml(u.name) + '</option>';
+    }).join('');
   stageSel.innerHTML = '<option value="">— Étape —</option>' + (META.stages || []).map(function(s) {
     return '<option value="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</option>';
   }).join('');
@@ -786,7 +788,15 @@ function updateApplyState() {
 
 function selectedOppsPayload() {
   return ALL_OPPS.filter(function(o) { return selectedIds.has(o.id); }).map(function(o) {
-    return { id: o.id, name: o.name, account: o.account, owner: o.owner, type_vente: o.type_vente };
+    return {
+      id: o.id,
+      name: o.name,
+      account: o.account,
+      owner: o.owner,
+      type_vente: o.type_vente,
+      account_owner_id: o.account_owner_id,
+      account_owner_name: o.account_owner_name
+    };
   });
 }
 
@@ -806,7 +816,9 @@ function applyBulk() {
   if (opps.length === 0) return;
 
   var summary = opps.length + ' opportunité' + (opps.length > 1 ? 's' : '') + ' :\n';
-  if (changes.owner_id) summary += '- Propriétaire → ' + ownerSel.options[ownerSel.selectedIndex].textContent + '\n';
+  if (changes.owner_id) {
+    summary += '- Propriétaire → ' + ownerSel.options[ownerSel.selectedIndex].textContent + '\n';
+  }
   if (changes.close_date) summary += '- CloseDate → ' + changes.close_date + '\n';
   if (changes.stage) summary += '- Étape → ' + changes.stage + '\n';
   if (changes.type_vente) summary += '- Type de vente → ' + changes.type_vente + '\n';
@@ -894,8 +906,13 @@ function optimisticBulkUpdate(opps, changes) {
     ALL_OPPS.forEach(function(o) {
       if (!ids.has(o.id)) return;
       if (changes.owner_id) {
-        var newOwner = (META.users || []).filter(function(u) { return u.id === changes.owner_id; })[0];
-        if (newOwner) { o.owner = newOwner.name; o.owner_active = true; }
+        if (changes.owner_id === 'ACCOUNT_OWNER') {
+          o.owner = o.account_owner_name || 'Propriétaire du compte';
+          o.owner_active = true;
+        } else {
+          var newOwner = (META.users || []).filter(function(u) { return u.id === changes.owner_id; })[0];
+          if (newOwner) { o.owner = newOwner.name; o.owner_active = true; }
+        }
       }
       if (changes.stage) o.stage = changes.stage;
       if (changes.type_vente) o.type_vente = changes.type_vente;

@@ -67,6 +67,7 @@ def do_refresh():
     # ── 3. Fetch déchet opps (CloseDate < today) ──
     soql_dechet = (
         "SELECT Id, Name, AccountId, Account.Name, Account.Industry, "
+        "Account.OwnerId, Account.Owner.Name, "
         "OwnerId, Owner.Name, StageName, CloseDate, Amount, Probability, "
         "Type_de_vente__c, CreatedDate, IsWon, IsClosed, LeadSource, "
         "CampaignId, Campaign.Name, LastActivityDate, LastModifiedDate, "
@@ -81,6 +82,7 @@ def do_refresh():
     # Exclude opps already in déchet (CloseDate < today) to avoid duplicates.
     soql_incoherent = (
         "SELECT Id, Name, AccountId, Account.Name, Account.Industry, "
+        "Account.OwnerId, Account.Owner.Name, "
         "OwnerId, Owner.Name, StageName, CloseDate, Amount, Probability, "
         "Type_de_vente__c, CreatedDate, IsWon, IsClosed, LeadSource, "
         "CampaignId, Campaign.Name, LastActivityDate, LastModifiedDate, "
@@ -203,11 +205,15 @@ def do_refresh():
 
         display_reasons = [reason_display.get(x, x) for x in reasons]
 
+        acc = r.get("Account") or {}
+        acc_owner_id = acc.get("OwnerId") if isinstance(acc, dict) else None
+        acc_owner_name = (acc.get("Owner") or {}).get("Name") if isinstance(acc, dict) else None
+
         return {
             "id": opp_id,
             "name": r.get("Name", ""),
-            "account": (r.get("Account") or {}).get("Name", "\u2014") if isinstance(r.get("Account"), dict) else "\u2014",
-            "industry": (r.get("Account") or {}).get("Industry", "\u2014") if isinstance(r.get("Account"), dict) else "\u2014",
+            "account": acc.get("Name", "\u2014") if isinstance(acc, dict) else "\u2014",
+            "industry": acc.get("Industry", "\u2014") if isinstance(acc, dict) else "\u2014",
             "owner": on,
             "owner_active": oa,
             "stage": stage,
@@ -216,6 +222,8 @@ def do_refresh():
             "amount": amt,
             "probability": prob,
             "type_vente": r.get("Type_de_vente__c", "\u2014"),
+            "account_owner_id": acc_owner_id,
+            "account_owner_name": acc_owner_name,
             "created_date": cstr[:10] if cstr else "",
             "days_since_creation": d_cr,
             "last_activity": las or "",

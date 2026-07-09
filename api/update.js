@@ -40,10 +40,12 @@ export default async function handler(req, res) {
   const fields = {};        // champs Salesforce
   const journalChanges = {}; // changes nettoyés pour le journal
   if (changes.owner_id != null && changes.owner_id !== '') {
-    if (typeof changes.owner_id !== 'string' || !SF_ID.test(changes.owner_id)) {
-      return res.status(400).json({ error: 'invalid_payload', message: 'owner_id doit être un id Salesforce valide.' });
+    if (changes.owner_id !== 'ACCOUNT_OWNER') {
+      if (typeof changes.owner_id !== 'string' || !SF_ID.test(changes.owner_id)) {
+        return res.status(400).json({ error: 'invalid_payload', message: 'owner_id doit être un id Salesforce valide.' });
+      }
+      fields.OwnerId = changes.owner_id;
     }
-    fields.OwnerId = changes.owner_id;
     journalChanges.owner_id = changes.owner_id;
   }
   if (changes.close_date != null && changes.close_date !== '') {
@@ -128,6 +130,9 @@ export default async function handler(req, res) {
           const tv = o.type_vente;
           if (fields.Raison_de_perte_V2__c && tv && tv !== '—' && tv !== 'null') {
             rec.Type_de_vente__c = tv;
+          }
+          if (changes.owner_id === 'ACCOUNT_OWNER' && o.account_owner_id) {
+            rec.OwnerId = o.account_owner_id;
           }
           return rec;
         }),
