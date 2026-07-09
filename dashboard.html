@@ -708,10 +708,11 @@ function closeLost() {
 
   // Raison_de_perte_V2__c est une picklist dépendante de Type_de_vente__c :
   // filtrer les opps dont le type_vente n'autorise pas Nettoyage.
-  var validTypes = (META.loss_valid_for || {})['Nettoyage'] || [];
+  // null = pas de restriction (tous les types valides), [] = aucun type valide
+  var validTypes = (META.loss_valid_for || {})['Nettoyage'];
   var validOpps = opps;
   var excludedCount = 0;
-  if (validTypes.length) {
+  if (Array.isArray(validTypes) && validTypes.length > 0) {
     var validIds = new Set(ALL_OPPS.filter(function(o) {
       return selectedIds.has(o.id) && validTypes.indexOf(o.type_vente) !== -1;
     }).map(function(o) { return o.id; }));

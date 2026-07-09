@@ -301,7 +301,8 @@ def do_refresh():
             continue
         vf = p.get("validFor")
         if not vf:
-            loss_valid_for[p.get("value", "")] = []
+            # validFor absent = pas de restriction (tous les types valides)
+            loss_valid_for[p.get("value", "")] = None
             continue
         bits = base64.b64decode(vf)
         loss_valid_for[p.get("value", "")] = [
