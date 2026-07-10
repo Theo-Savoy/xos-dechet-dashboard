@@ -84,6 +84,10 @@ export async function POST(request) {
     return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers });
   }
 
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return new Response(JSON.stringify({ error: "invalid_body" }), { status: 400, headers });
+  }
+
   const action = body.action;
   if (!action) {
     return new Response(JSON.stringify({ error: "missing_action" }), { status: 400, headers });
@@ -96,7 +100,7 @@ export async function POST(request) {
     const { recordId, recordType, comments } = body;
 
     // Validation
-    if (!recordId || !SF_ID.test(recordId)) {
+    if (!recordId || typeof recordId !== "string" || !SF_ID.test(recordId)) {
       return new Response(JSON.stringify({ error: "invalid_record_id" }), { status: 400, headers });
     }
     if (!["Account", "Contact", "Opportunity"].includes(recordType)) {
@@ -166,16 +170,29 @@ export async function POST(request) {
   }
 
   if (action === "create_contact") {
-    const { firstName, lastName, email, phone, accountId } = body;
+    const { firstName: _fn, lastName: _ln, email: _em, phone: _ph, accountId: _ac } = body;
+
+    // Normalize: trim strings; map empty trimmed optionals to undefined
+    const lastName = typeof _ln === "string" ? _ln.trim() : _ln;
+    const firstName = typeof _fn === "string" ? _fn.trim() || undefined : _fn;
+    const email = typeof _em === "string" ? _em.trim() || undefined : _em;
+    const phone = typeof _ph === "string" ? _ph.trim() || undefined : _ph;
+    const accountId = typeof _ac === "string" ? _ac.trim() || undefined : _ac;
 
     // Validation
-    if (!lastName || typeof lastName !== "string" || lastName.trim().length === 0) {
+    if (!lastName || typeof lastName !== "string" || lastName.length === 0) {
       return new Response(JSON.stringify({ error: "missing_last_name" }), { status: 400, headers });
     }
-    if (email && !EMAIL_REGEX.test(email)) {
+    if (firstName !== undefined && typeof firstName !== "string") {
+      return new Response(JSON.stringify({ error: "invalid_first_name" }), { status: 400, headers });
+    }
+    if (phone !== undefined && typeof phone !== "string") {
+      return new Response(JSON.stringify({ error: "invalid_phone" }), { status: 400, headers });
+    }
+    if (email && (typeof email !== "string" || !EMAIL_REGEX.test(email))) {
       return new Response(JSON.stringify({ error: "invalid_email" }), { status: 400, headers });
     }
-    if (accountId && !SF_ID.test(accountId)) {
+    if (accountId && (typeof accountId !== "string" || !SF_ID.test(accountId))) {
       return new Response(JSON.stringify({ error: "invalid_account_id" }), { status: 400, headers });
     }
 
@@ -187,11 +204,11 @@ export async function POST(request) {
     const accessToken = tokenResult.accessToken;
 
     const contactFields = {
-      LastName: lastName.trim(),
+      LastName: lastName,
     };
-    if (firstName) contactFields.FirstName = firstName.trim();
-    if (email) contactFields.Email = email.trim();
-    if (phone) contactFields.Phone = phone.trim();
+    if (firstName) contactFields.FirstName = firstName;
+    if (email) contactFields.Email = email;
+    if (phone) contactFields.Phone = phone;
     if (accountId) contactFields.AccountId = accountId;
 
     // Salesforce write
@@ -220,7 +237,7 @@ export async function POST(request) {
     await journalAction({
       actorId: user.id,
       actionType: "create_contact",
-      changes: { firstName, lastName, email, phone, accountId },
+      changes: { firstName: _fn, lastName: _ln, email: _em, phone: _ph, accountId: _ac },
       targets: [{ id: contactId, type: "Contact" }],
       result: { success: true, contactId },
     });

@@ -32,7 +32,19 @@ function makeReq(body) {
   return new Request(url, {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+function makeRawReq(rawBody) {
+  const url = `http://localhost/api/log`;
+  const headers = new Headers();
+  headers.set("Authorization", "Bearer supabase-jwt-token");
+  headers.set("Content-Type", "application/json");
+  return new Request(url, {
+    method: "POST",
+    headers,
+    body: rawBody,
   });
 }
 
@@ -89,9 +101,39 @@ describe("POST /api/log", () => {
     expect(body.error).toBe("missing_action");
   });
 
+  it("returns 400 invalid_body when parsed body is null", async () => {
+    // body is valid JSON but parses to null
+    const res = await POST(makeRawReq("null"));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 invalid_body when body is not a JSON object", async () => {
+    // body parses to a valid JSON array
+    const res = await POST(makeRawReq("[]"));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 invalid_body when body is a JSON primitive (string)", async () => {
+    const res = await POST(makeRawReq('"hello"'));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
+
   describe("action: log_call", () => {
     it("returns 400 on invalid record ID", async () => {
       const res = await POST(makeReq({ action: "log_call", recordId: "tooShort", recordType: "Account", comments: "hello" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("invalid_record_id");
+    });
+
+    it("returns 400 invalid_record_id when recordId is not a string (coerced number)", async () => {
+      const res = await POST(makeReq({ action: "log_call", recordId: 123456789012345, recordType: "Account", comments: "hello" }));
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("invalid_record_id");
@@ -223,8 +265,29 @@ describe("POST /api/log", () => {
       expect(body.error).toBe("missing_last_name");
     });
 
+    it("returns 400 invalid_first_name when firstName is not a string", async () => {
+      const res = await POST(makeReq({ action: "create_contact", lastName: "Dupont", firstName: { bad: true } }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("invalid_first_name");
+    });
+
+    it("returns 400 invalid_phone when phone is not a string", async () => {
+      const res = await POST(makeReq({ action: "create_contact", lastName: "Dupont", phone: 12345 }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("invalid_phone");
+    });
+
     it("returns 400 on invalid email", async () => {
       const res = await POST(makeReq({ action: "create_contact", lastName: "Dupont", email: "not-an-email" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("invalid_email");
+    });
+
+    it("returns 400 invalid_email when email is not a string (no coercion)", async () => {
+      const res = await POST(makeReq({ action: "create_contact", lastName: "Dupont", email: 42 }));
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("invalid_email");
@@ -237,7 +300,46 @@ describe("POST /api/log", () => {
       expect(body.error).toBe("invalid_account_id");
     });
 
-    it("creates a Salesforce Contact and logs to database on success", async () => {
+    it("returns 400 invalid_account_id when accountId is not a string (coerced number)", async () => {
+      const res = await POST(makeReq({ action: "create_contact", lastName: "Dupont", accountId: 123456789012345 }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("invalid_account_id");
+    });
+
+    it("omits whitespace-only optional fields from SF payload (empty strings trimmed away)", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "sf-access-token" }), { status: 200 })
+      );
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "contact-sf-id-999", success: true }), { status: 201 })
+      );
+
+      const res = await POST(makeReq({
+        action: "create_contact",
+        firstName: "   ",
+        lastName: "Dupont",
+        email: "   ",
+        phone: "\t\n  ",
+      }));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+
+      const [, sfCall] = fetchSpy.mock.calls;
+      const [, init] = sfCall;
+      const payload = JSON.parse(init.body);
+      expect(payload.LastName).toBe("Dupont");
+      expect(payload.FirstName).toBeUndefined();
+      expect(payload.Email).toBeUndefined();
+      expect(payload.Phone).toBeUndefined();
+      expect(payload.AccountId).toBeUndefined();
+    });
+
+    it("creates a Salesforce Contact with trimmed strings and logs to database on success", async () => {
       const fetchSpy = vi.spyOn(globalThis, "fetch");
 
       // 1. OAuth
@@ -251,10 +353,10 @@ describe("POST /api/log", () => {
 
       const res = await POST(makeReq({
         action: "create_contact",
-        firstName: "Jean",
-        lastName: "Dupont",
-        email: "jean.dupont@acme.com",
-        phone: "+33612345678",
+        firstName: "  Jean  ",
+        lastName: "  Dupont  ",
+        email: "  jean.dupont@acme.com  ",
+        phone: "  +33612345678  ",
         accountId: "001000000000001",
       }));
 
@@ -282,10 +384,10 @@ describe("POST /api/log", () => {
         actor: "user-123",
         action_type: "create_contact",
         changes: {
-          firstName: "Jean",
-          lastName: "Dupont",
-          email: "jean.dupont@acme.com",
-          phone: "+33612345678",
+          firstName: "  Jean  ",
+          lastName: "  Dupont  ",
+          email: "  jean.dupont@acme.com  ",
+          phone: "  +33612345678  ",
           accountId: "001000000000001",
         },
         targets: [{ id: "contact-sf-id-789", type: "Contact" }],

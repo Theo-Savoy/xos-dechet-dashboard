@@ -30,6 +30,8 @@ export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
   const [error, setError] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const logAbortRef = useRef<AbortController | null>(null);
+  const createAbortRef = useRef<AbortController | null>(null);
 
   // Command mode states
   const [commandMode, setCommandMode] = useState<"log" | "create" | null>(null);
@@ -95,6 +97,8 @@ export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
   useEffect(() => {
     if (!open) {
       abortRef.current?.abort();
+      logAbortRef.current?.abort();
+      createAbortRef.current?.abort();
       setQuery("");
       setResults([]);
       setLoading(false);
@@ -126,7 +130,7 @@ export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
       abortRef.current = controller;
       setLoading(true);
       setError(false);
- 
+
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
           signal: controller.signal,
@@ -164,51 +168,69 @@ export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
   useEffect(() => {
     if (logSearchQuery.length < 2) {
       setLogSearchResults([]);
+      setLogSearchLoading(false);
+      logAbortRef.current?.abort();
       return;
     }
+    logAbortRef.current?.abort();
+    const controller = new AbortController();
+    logAbortRef.current = controller;
     setLogSearchLoading(true);
     const delay = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(logSearchQuery)}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
         });
-        if (res.ok) {
+        if (res.ok && !controller.signal.aborted) {
           const body = await res.json();
           setLogSearchResults(body.results ?? []);
         }
       } catch (err) {
-        console.error(err);
+        if (err instanceof DOMException && err.name === "AbortError") return;
       } finally {
-        setLogSearchLoading(false);
+        if (!controller.signal.aborted) setLogSearchLoading(false);
       }
     }, 250);
-    return () => clearTimeout(delay);
+    return () => {
+      clearTimeout(delay);
+      controller.abort();
+    };
   }, [logSearchQuery, accessToken]);
 
   // Dynamic search for /create Account association
   useEffect(() => {
     if (createAccountQuery.length < 2) {
       setCreateAccountResults([]);
+      setCreateAccountLoading(false);
+      createAbortRef.current?.abort();
       return;
     }
+    createAbortRef.current?.abort();
+    const controller = new AbortController();
+    createAbortRef.current = controller;
     setCreateAccountLoading(true);
     const delay = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(createAccountQuery)}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
         });
-        if (res.ok) {
+        if (res.ok && !controller.signal.aborted) {
           const body = await res.json();
           const accounts = (body.results ?? []).filter((r: SearchResult) => r.type === "Account");
           setCreateAccountResults(accounts);
         }
       } catch (err) {
-        console.error(err);
+        if (err instanceof DOMException && err.name === "AbortError") return;
       } finally {
-        setCreateAccountLoading(false);
+        if (!controller.signal.aborted) setCreateAccountLoading(false);
       }
     }, 250);
-    return () => clearTimeout(delay);
+    return () => {
+      clearTimeout(delay);
+      controller.abort();
+    };
   }, [createAccountQuery, accessToken]);
 
   const handleLogSubmit = async () => {

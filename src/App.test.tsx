@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth/useSession", () => ({
@@ -19,12 +19,28 @@ vi.mock("./auth/LoginScreen", () => ({
   LoginScreen: () => <div data-testid="login-screen" />,
 }));
 
+// Default matchMedia mock — returns "no preference"
+const defaultMatchMedia = (query: string): MediaQueryList => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  dispatchEvent: vi.fn(),
+});
+window.matchMedia = vi.fn().mockImplementation(defaultMatchMedia);
+
 import App from "./App";
 import { useSession } from "./auth/useSession";
 
 const mockUseSession = vi.mocked(useSession);
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.mocked(window.matchMedia).mockImplementation(defaultMatchMedia);
+});
 
 describe("App — loading state", () => {
   it("renders boot screen while session is loading", () => {
@@ -91,6 +107,32 @@ describe("App — bridgeError state", () => {
 
     render(<App />);
 
+    expect(screen.getByTestId("desktop")).toBeTruthy();
+  });
+
+  it("reveals desktop immediately when prefers-reduced-motion is reduce", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    mockUseSession.mockReturnValue({
+      session: { user: { email: "theo@xos-learning.fr" }, access_token: "tok" } as never,
+      loading: false,
+      bridgeError: false,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("boot-screen")).toBeNull();
+    });
     expect(screen.getByTestId("desktop")).toBeTruthy();
   });
 });
