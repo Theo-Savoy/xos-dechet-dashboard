@@ -33,4 +33,4 @@ assert.match(followUpQuery, new RegExp(`${mapping.objects.task.fields.activityDa
 assert.match(followUpQuery, new RegExp(`${mapping.objects.task.fields.activityDate} = LAST_N_DAYS:7`));
 assert.match(followUpQuery, /LIMIT 500$/);
 
-console.log("call-target-query.test.js: OK");
+console.log("call-target-query.check.js: OK");

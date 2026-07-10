@@ -65,6 +65,11 @@ const mapping = {
         "Appel argumenté",
         "RDV planifié",
       ],
+      resultSemantic: {
+        rdv: "RDV planifié",
+        followUpNoAnswer: "Appel non décroché",
+        followUpVoicemail: "Message répondeur",
+      },
     },
     opportunity: {
       name: "Opportunity",
