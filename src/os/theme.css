@@ -67,6 +67,10 @@
   --xos-text: #f4f5fb;
   --xos-text-muted: rgba(244, 245, 251, 0.64);
 
+  /* Fenêtres : coque translucide + contenu opaque */
+  --xos-window-shell-bg: rgba(5, 9, 31, 0.9);
+  --xos-window-content-bg: #0a1129;
+
   /* Typographie */
   --xos-font-display: "Brockmann", system-ui, sans-serif;
   --xos-font-numeric: "Neue Montreal", system-ui, sans-serif;

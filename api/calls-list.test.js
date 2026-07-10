@@ -8,6 +8,7 @@ import {
   SOQL_FETCH_CAP,
 } from "./_crm/salesforce.js";
 import mapping from "./_crm/mapping.js";
+import { FONCTION_PRESETS } from "../src/crm/index.ts";
 import { POST } from "./calls-list.js";
 
 const { mockVerifyJWT } = vi.hoisted(() => ({
@@ -80,6 +81,12 @@ const SF_RECORDS = [
 ];
 
 describe("adapter exports", () => {
+  it("fonctionPresets mirror front FONCTION_PRESETS ids and labels", () => {
+    const backend = mapping.objects.contact.fonctionPresets;
+    expect(FONCTION_PRESETS.map((preset) => preset.id)).toEqual(backend.map((preset) => preset.id));
+    expect(FONCTION_PRESETS.map((preset) => preset.label)).toEqual(backend.map((preset) => preset.label));
+  });
+
   it("escapeSOQL escapes quotes and backslashes", () => {
     expect(escapeSOQL("O'Brien")).toBe("O\\'Brien");
     expect(escapeSOQL("path\\to")).toBe("path\\\\to");
@@ -120,6 +127,27 @@ describe("adapter exports", () => {
     );
     expect(soql).toContain("Title LIKE '%responsable%formation%'");
     expect(soql).toContain("Title IN ('RF')");
+  });
+
+  it("buildTargetQuery adds responsable_rh preset clauses", () => {
+    const soql = buildTargetQuery(
+      { ...baseFilters, contact: { fonctions: ["responsable_rh"] } },
+      mapping,
+      null,
+    );
+    expect(soql).toContain("Title LIKE '%responsable rh%'");
+    expect(soql).toContain("Title LIKE '%hr business partner%'");
+    expect(soql).toContain("Title IN ('RRH', 'HRBP', 'Cadre RH')");
+  });
+
+  it("buildTargetQuery ignores unknown fonction presets without crashing", () => {
+    const soql = buildTargetQuery(
+      { ...baseFilters, contact: { fonctions: ["preset_inexistant", "responsable_formation"] } },
+      mapping,
+      null,
+    );
+    expect(soql).toContain("Title LIKE '%responsable%formation%'");
+    expect(soql).not.toContain("preset_inexistant");
   });
 
   it("filterTargetContacts applies relance predicates from Tasks child records", () => {

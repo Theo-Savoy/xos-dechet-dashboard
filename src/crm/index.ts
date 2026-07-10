@@ -76,6 +76,13 @@ export const FONCTION_PRESETS = [
   { id: "directeur_formation", label: "Directeur formation" },
   { id: "digital_learning_manager", label: "Digital learning manager" },
   { id: "charge_formation", label: "Chargé de formation" },
+  { id: "responsable_rh", label: "Responsable RH" },
+  { id: "developpement_rh", label: "Développement RH / compétences" },
+  { id: "directeur_rh", label: "Directeur RH" },
+  { id: "pedagogie", label: "Pédagogie / ingénierie pédagogique" },
+  { id: "sirh", label: "SIRH" },
+  { id: "recrutement", label: "Recrutement" },
+  { id: "direction_generale", label: "Direction générale / dirigeant" },
 ] as const;
 export type FonctionPresetId = (typeof FONCTION_PRESETS)[number]["id"];
 

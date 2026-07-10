@@ -51,6 +51,23 @@ assert.match(fonctionQuery, /Title LIKE '%responsable%formation%'/);
 assert.match(fonctionQuery, /Title IN \('RF'\)/);
 assert.match(fonctionQuery, /Title LIKE '%direct%formation%'/);
 
+const rhQuery = buildTargetQuery(
+  { ...baseFilters, contact: { fonctions: ["responsable_rh", "directeur_rh"] } },
+  mapping,
+  null,
+);
+assert.match(rhQuery, /Title LIKE '%responsable rh%'/);
+assert.match(rhQuery, /Title IN \('RRH', 'HRBP', 'Cadre RH'\)/);
+assert.match(rhQuery, /Title LIKE '%drh%'/);
+assert.match(rhQuery, /Title IN \('CHRO'\)/);
+
+const unknownPresetQuery = buildTargetQuery(
+  { ...baseFilters, contact: { fonctions: ["preset_inexistant"] } },
+  mapping,
+  null,
+);
+assert.doesNotMatch(unknownPresetQuery, /preset_inexistant/);
+
 const now = new Date("2026-07-10T12:00:00Z");
 const records = [
   {
