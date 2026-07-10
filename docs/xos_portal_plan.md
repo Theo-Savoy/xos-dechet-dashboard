@@ -20,15 +20,16 @@ L'objectif est double :
 | **Persistance** | **Supabase Postgres** : profils (mapping ↔ user Salesforce), challenges/scores Arena, configuration, journal d'actions. | Le journal actuel en Blob immuable est déjà un contournement des limites de Vercel Blob (pas de read-modify-write sûr). Arena et la config exigent requêtes, transactions et concurrence propres. |
 | **Écritures Salesforce** | Via l'**utilisateur d'intégration** côté serveur (comme aujourd'hui), chaque action **attribuée à la personne connectée** dans le journal Postgres. | Upgrade possible plus tard vers OAuth SF par user (actions sous le nom de chacun dans SF) sans rien casser. |
 | **API** | Endpoints serverless Vercel conservés et étendus (nouveaux endpoints en Node, protégés par vérification du JWT Supabase). | Continuité, pas de réécriture. |
-| **Périmètre** | **Tout le plan, phasé** : socle → Launcher → Weekly Perf → Lead Tracker → Arena. | Architecture dimensionnée pour l'ensemble dès le départ. |
+| **Périmètre** | **Tout le plan, phasé** : socle → Launcher → Weekly Perf → Call Manager → Arena. | Architecture dimensionnée pour l'ensemble dès le départ. |
 | **Cible d'affichage** | Desktop-first (métaphore bureau). Mobile : consultation dégradée non prioritaire. | Le public est l'équipe commerciale au poste de travail. |
 | **Déploiement & URL** | Projet Vercel renommé **xos**, domaine canonique actif : **`https://xos.hellotheo.fr`** (redirect URL Supabase à configurer). L'ancien alias **`https://xos-dechet-repo.vercel.app`** reste actif pour assurer la transition. *(⚠️ Ne jamais utiliser xos.vercel.app qui appartient à un autre site).* | Zéro migration d'env vars, iframe same-origin, branding propre pour le lancement. |
 | **Tests des écritures SF** | Org de production avec précautions : enregistrements de test créés puis nettoyés ; chaque spec d'agent est relue sous cet angle (pas de sandbox disponible). | Pratique actuelle d'update.js, discipline vérifiée à la gate QC. |
 | **Basic Auth legacy** | Coexistence connexion Supabase par lien magique + Basic Auth pendant les phases 0–2, puis **extinction du Basic Auth** une fois l'équipe basculée sur le lien magique Supabase. | Un secret partagé de moins à terme. |
+| **Intégration Slack + Agent** | **Chat custom** X OS + **Slack API** (DM user↔bot) pour persistance/miroir mobile. **Cerveau = agent Hermes sur VPS Théo** (mémoire + skills multi-user, connexion aux outils commerciaux). X OS/Vercel = UI + proxy JWT vers Hermes + transport Slack. Pas d'iframe Slack ; pas d'app Navigateur générique. | Slack refuse l'embarquement. Hermes centralise l'intelligence et les use cases métier ; X OS reste le bureau de travail. |
 
 ### Réalités des données Salesforce (vérifiées avec Théo)
 - Les activités (appels, RDV) **sont loggées** en Tasks/Events → le Pulse hebdo est faisable.
-- **L'objet Lead n'est pas utilisé : la prospection vit sur l'objet Contact**, plus Opportunities/Accounts/Campaigns → le Lead Tracker est respécifié sur **Contacts + opportunités en étapes amont + campagnes** (voir app 3). Chaque dashboard commence par un **audit SOQL de volumétrie** pour caler ses définitions avant tout développement UI.
+- **L'objet Lead n'est pas utilisé : la prospection vit sur l'objet Contact**, plus Opportunities/Accounts/Campaigns → le Call Manager s'appuie sur les **Contacts à appeler + tâches d'appels Salesforce** (voir app 3). Chaque dashboard commence par un **audit SOQL de volumétrie** pour caler ses définitions avant tout développement UI.
 
 ---
 
@@ -64,16 +65,20 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   ├── apps/            une app = un dossier, contrat AppManifest
 │   │   ├── cleaner/     iframe → /dashboard.html (préservé)
 │   │   ├── weekly/      Weekly Perf
-│   │   ├── leads/       Lead Tracker (Contacts)
+│   │   ├── calls/       Call Manager (séances de prospection)
 │   │   ├── arena/       Gamification
+│   │   ├── agent/       Chat Agent XOS (UI custom → proxy Hermes VPS + Slack API)
 │   │   └── hub/         Paramètres & statut
-│   ├── lib/             client Supabase, client API, composants partagés (ui/)
+│   ├── auth/            login OTP, session, bridge SSO
+│   ├── components/ui/   design system partagé
+│   ├── lib/             client Supabase, types
 │   └── main.tsx
 ├── public/dashboard.html   ← dashboard déchet actuel, servi tel quel sur /dashboard.html
 ├── api/                 serverless Vercel (Node + refresh.py existant)
 │   ├── refresh.py       ✅ inchangé        ├── update.js  ✅ inchangé
 │   ├── search.js        Launcher (SOSL)    ├── log.js     /log & /create
-│   ├── perf.js          Weekly Perf        ├── funnel.js  Lead Tracker
+│   ├── perf.js          Weekly Perf        ├── calls.js   Call Manager
+│   ├── chat.js          Proxy Hermes + historique  ├── slack/   oauth, events
 │   ├── arena/*.js       challenges         └── status.js  Hub (limits SF)
 ├── middleware.js        auth edge : session Supabase OU Basic Auth legacy
 └── supabase/migrations/ schéma Postgres
@@ -93,7 +98,7 @@ interface AppManifest {
 Chaque app est enregistrée dans `src/os/registry.ts`. Une app ne touche jamais au shell ni à une autre app.
 
 **Schéma Supabase** (migrations SQL versionnées) :
-- `profiles` : id (= auth.users), email, full_name, `sf_user_id`, role (`manager`/`commercial`)
+- `profiles` : id (= auth.users), email, full_name, `sf_user_id`, role (`manager`/`commercial`), `slack_user_id`, `slack_dm_channel_id` *(Phase 7)*
 - `settings` : key, value jsonb (seuils de retard, exclusions de comptes…)
 - `challenges` : titre, métrique, période, statut, créateur
 - `challenge_results` : challenge_id, profile_id, valeur, rang, maj
@@ -106,7 +111,7 @@ Chaque app est enregistrée dans `src/os/registry.ts`. Une app ne touche jamais 
 2. Endpoints Node : vérification du JWT Supabase (header Authorization) avant toute action ; l'identité vérifiée alimente `action_journal.actor`.
 3. `middleware.js` : accepte **soit** une session Supabase valide (cookie) **soit** le Basic Auth legacy — l'iframe Cleaner et l'accès direct historique à `/dashboard.html` continuent de fonctionner pendant toute la transition.
 
-**Cache des données** : `refresh.py` garde son cache CDN 24 h (+ bouton refresh). Les nouveaux endpoints analytics (`perf`, `funnel`, `arena`) utilisent `s-maxage=900` (15 min) — la perf hebdo doit être plus fraîche que l'hygiène CRM. `search` : pas de cache.
+**Cache des données** : `refresh.py` garde son cache CDN 24 h (+ bouton refresh). Les nouveaux endpoints analytics (`perf`, `calls`, `arena`) utilisent `s-maxage=900` (15 min) — la perf hebdo doit être plus fraîche que l'hygiène CRM. `search` : pas de cache.
 
 ---
 
@@ -124,12 +129,12 @@ Suivi hebdomadaire de la performance commerciale pour piloter le rythme de vente
 *   **Le Taux d'Effort** : ratio d'opportunités passées à l'étape supérieure sur la période (`OpportunityHistory`).
 *   **Précondition** : audit SOQL de volumétrie (types de Tasks réellement utilisés, nommage des étapes) pour figer les définitions exactes des trois métriques — validées par Théo avant l'UI.
 
-### 3. 🎯 Lead Tracker (Suivi de la Prospection) — *Nouveau, respécifié sur Contact*
-L'objet Lead n'étant pas utilisé, l'entonnoir se construit sur **Contacts → Opportunités amont → Opportunités qualifiées** :
-*   **Entonnoir de Prospection** : contacts créés → contacts rattachés à une opportunité → opportunités passées en étape qualifiée, avec taux de transformation à chaque cran.
-*   **Bottleneck Detector** : temps de stagnation par étape amont (`LastStageChangeDate` / `OpportunityHistory`).
-*   **Performance des canaux** : efficacité comparée par `LeadSource` des opportunités et par Campagne (`CampaignId`).
-*   **Précondition** : audit SOQL (remplissage de `LeadSource`, usage réel des campagnes, process de création des contacts) — définitions validées par Théo avant l'UI.
+### 3. 🎯 Call Manager (Séances de Prospection) — *Nouveau — Phase 4*
+Outil **opérationnel** pour enchaîner les appels de prospection sans friction (pas un dashboard d'analyse) :
+*   **Séance de prospection** : le commercial crée une séance et se voit attribuer une **liste séquentielle de contacts à appeler** ; le moteur (`api/calls.js`) gère la progression et les statistiques de session.
+*   **Appel rapide** : bouton d'appel + **formulaire de log d'appel pré-rempli** (compte/contact/opp) pour enchaîner les appels en 1 clic et logguer directement dans Salesforce.
+*   **Suivi de session** : avancement dans la liste, contacts traités/restants, statistiques d'effort de la séance.
+*   **Précondition** : audit SOQL des tâches d'appels (statut, historique d'efforts, volumétrie comptes/contacts par commercial) — validé par Théo avant l'UI.
 
 ### 4. ⚡ XOS Launcher (Spotlight Command) — *Nouveau*
 Un centre de commande rapide inspiré de Spotlight (macOS), accessible via `Cmd + K` (lib `cmdk`).
@@ -151,6 +156,20 @@ Rendre la saisie CRM et la prospection ludiques grâce au challenge d'équipe.
 *   **Configuration** (managers) : seuils de retard, exclusions de comptes — stockés dans `settings` (Supabase), consommés par les endpoints.
 *   **Compte** : profil connecté, mapping vers le user Salesforce, déconnexion.
 
+### 7. 🤖 Agent XOS (Chat + Slack + Hermes) — *Nouveau — Phase 7*
+Assistant conversationnel : **go-to quotidien** de l'équipe. X OS est l'interface ; **Hermes sur VPS** est le cerveau ; Slack est le fil de messages partagé (dont mobile).
+*   **Ce que ce n'est pas** : iframe Slack, app Navigateur générique, ni LLM embarqué dans le repo Vercel.
+*   **Parcours utilisateur** :
+    1. Connexion X OS (magic link `@xos-learning.fr`).
+    2. Première visite : **Connecter Slack** (OAuth) → `profiles.slack_user_id`.
+    3. App **Agent** : DM privé user ↔ bot ; chaque message part vers Hermes avec l'identité du commercial pour charger **sa** mémoire et **ses** skills.
+*   **Architecture** :
+    *   **Front** (`src/apps/agent/`) : UI messagerie.
+    *   **Vercel** (`api/chat`, `api/slack/`) : auth JWT, transport Slack, **proxy sécurisé** vers Hermes.
+    *   **Hermes (VPS)** : agent multi-user — configuration **mémoire par commercial** + **skills** (Salesforce, log d'appel, Cleaner, recherche, etc.) pour coller aux process terrain.
+    *   **Slack** : persistance et sync du fil ; reprise dans l'app Slack native.
+*   **Bénéfice** : un seul assistant qui connaît le contexte de chaque commercial et agit sur les vrais outils, sans quitter X OS.
+
 ---
 
 ## 📅 Stratégie d'Implémentation
@@ -160,8 +179,10 @@ graph TD
     Z[Phase 0: Socle technique — Vite/React/TS + Supabase Auth/DB] --> A[Phase 1: Bureau virtuel & Cleaner iframé]
     A --> B[Phase 2: XOS Launcher Cmd+K + Hub]
     B --> C[Phase 3: Weekly Perf]
-    C --> D[Phase 4: Lead Tracker]
+    C --> D[Phase 4: Call Manager]
     D --> E[Phase 5: Arena]
+    E --> F[Phase 6: Business Review]
+    F --> G[Phase 7: Agent XOS — chat Slack + Hermes VPS]
 ```
 
 Le détail des lots, l'assignation aux agents (via Orca) et les critères de vérification par lot sont dans **`docs/xos_implementation_plan.md`**.
@@ -173,3 +194,4 @@ Le détail des lots, l'assignation aux agents (via Orca) et les critères de vé
 2. **Définitions des métriques** (Pulse, entonnoir) dépendantes de la discipline de saisie réelle : audits SOQL préalables + validation Théo avant chaque UI de dashboard.
 3. **Polices** : Brockmann (webfont) + Neue Montreal (OTF→woff2) livrées ; ⚠️ Aeonik en version TRIAL seulement → exclue de la prod.
 4. **Quotas API Salesforce** : les nouveaux endpoints sont cachés (15 min) et le Hub affiche la consommation.
+5. **Slack + Hermes** : workspace unique ; rate limits Slack ; disponibilité VPS ↔ Vercel ; skills et mémoire gérés côté Hermes, pas dans le repo X OS.
