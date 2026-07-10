@@ -21,6 +21,14 @@ function App() {
       return;
     }
 
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (reducedMotion) {
+      setRevealDesktop(true);
+      setHideBoot(true);
+      return;
+    }
+
     const revealTimer = window.setTimeout(() => setRevealDesktop(true), BOOT_HOLD_MS);
     const hideTimer = window.setTimeout(
       () => setHideBoot(true),

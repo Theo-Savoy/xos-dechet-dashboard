@@ -319,6 +319,167 @@ describe("Launcher", () => {
     expect(screen.getByText(/⌘K/)).toBeTruthy();
   });
 
+  // ── Spinner reset on inline search abort ──
+
+  it("resets loading spinner when /log association search drops below 2 chars", async () => {
+    const user = userEvent.setup();
+    render(<Launcher accessToken="tok" onOpenApp={noop} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const logCmd = screen.getByText("/log").closest("[cmdk-item]") ||
+      screen.getByText("/log").closest("[role='option']");
+    if (logCmd) await user.click(logCmd);
+
+    // Hold fetch pending
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(() => new Promise(() => {}));
+
+    const recordSearch = screen.getByPlaceholderText("Rechercher un enregistrement...");
+    await user.type(recordSearch, "Acme");
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Spinner visible while fetch is in-flight
+    expect(screen.getByText("Recherche…")).toBeTruthy();
+
+    // Drop below 2 chars — should abort and clear spinner
+    await user.clear(recordSearch);
+    await user.type(recordSearch, "A");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Recherche…")).toBeNull();
+    });
+  });
+
+  it("resets loading spinner when /create account search drops below 2 chars", async () => {
+    const user = userEvent.setup();
+    render(<Launcher accessToken="tok" onOpenApp={noop} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const createCmd = screen.getByText("/create").closest("[cmdk-item]") ||
+      screen.getByText("/create").closest("[role='option']");
+    if (createCmd) await user.click(createCmd);
+
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(() => new Promise(() => {}));
+
+    const accountSearch = screen.getByPlaceholderText("Rechercher un compte...");
+    await user.type(accountSearch, "Acme");
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(screen.getByText("Recherche…")).toBeTruthy();
+
+    await user.clear(accountSearch);
+    await user.type(accountSearch, "A");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Recherche…")).toBeNull();
+    });
+  });
+
+  // ── Race conditions: inline search abort ──
+
+  it("aborts stale /log inline search when new query replaces it", async () => {
+    const user = userEvent.setup();
+    render(<Launcher accessToken="tok" onOpenApp={noop} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const logCmd = screen.getByText("/log").closest("[cmdk-item]") ||
+      screen.getByText("/log").closest("[role='option']");
+    if (logCmd) await user.click(logCmd);
+
+    expect(screen.getByText("Consigner une note d'appel")).toBeTruthy();
+
+    let resolveSlow: ((value: Response) => void) | null = null;
+    let resolveFast: ((value: Response) => void) | null = null;
+
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(() => {
+      if (!resolveSlow) {
+        return new Promise<Response>((r) => { resolveSlow = r; });
+      }
+      return new Promise<Response>((r) => { resolveFast = r; });
+    });
+
+    const recordSearch = screen.getByPlaceholderText("Rechercher un enregistrement...");
+    await user.type(recordSearch, "Slo");
+    await new Promise((r) => setTimeout(r, 300));
+
+    await user.clear(recordSearch);
+    await user.type(recordSearch, "Fas");
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(resolveFast).not.toBeNull();
+
+    resolveFast!(new Response(JSON.stringify({
+      error: null,
+      results: [{ type: "Account", id: "001FAST", name: "Fast Corp", detail: "", recordUrl: "" }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Fast Corp")).toBeTruthy();
+    });
+
+    resolveSlow!(new Response(JSON.stringify({
+      error: null,
+      results: [{ type: "Account", id: "001SLOW", name: "Slow Corp", detail: "", recordUrl: "" }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByText("Slow Corp")).toBeNull();
+    expect(screen.getByText("Fast Corp")).toBeTruthy();
+  });
+
+  it("aborts stale /create inline search when new account query replaces it", async () => {
+    const user = userEvent.setup();
+    render(<Launcher accessToken="tok" onOpenApp={noop} />);
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const createCmd = screen.getByText("/create").closest("[cmdk-item]") ||
+      screen.getByText("/create").closest("[role='option']");
+    if (createCmd) await user.click(createCmd);
+
+    expect(screen.getByText("Créer un contact express")).toBeTruthy();
+
+    let resolveSlow: ((value: Response) => void) | null = null;
+    let resolveFast: ((value: Response) => void) | null = null;
+
+    fetchSpy.mockReset();
+    fetchSpy.mockImplementation(() => {
+      if (!resolveSlow) {
+        return new Promise<Response>((r) => { resolveSlow = r; });
+      }
+      return new Promise<Response>((r) => { resolveFast = r; });
+    });
+
+    const accountSearch = screen.getByPlaceholderText("Rechercher un compte...");
+    await user.type(accountSearch, "Slo");
+    await new Promise((r) => setTimeout(r, 300));
+
+    await user.clear(accountSearch);
+    await user.type(accountSearch, "Fas");
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(resolveFast).not.toBeNull();
+
+    resolveFast!(new Response(JSON.stringify({
+      error: null,
+      results: [{ type: "Account", id: "001FAST", name: "Fast Account Co", detail: "", recordUrl: "" }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Fast Account Co")).toBeTruthy();
+    });
+
+    resolveSlow!(new Response(JSON.stringify({
+      error: null,
+      results: [{ type: "Account", id: "001SLOW", name: "Slow Account Co", detail: "", recordUrl: "" }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByText("Slow Account Co")).toBeNull();
+    expect(screen.getByText("Fast Account Co")).toBeTruthy();
+  });
+
   // ── Commands and Inline Forms ──
 
   describe("Commands and Inline Forms", () => {
@@ -356,7 +517,7 @@ describe("Launcher", () => {
     it("transitions to /log form and submits call notes successfully", async () => {
       const user = userEvent.setup();
       const localFetchSpy = vi.spyOn(globalThis, "fetch");
-      
+
       // Mock API call to /api/search for autocomplete inside form
       localFetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify({
@@ -364,7 +525,7 @@ describe("Launcher", () => {
           results: [{ type: "Account", id: "001XYZ", name: "Test Corp", detail: "", recordUrl: "" }]
         }), { status: 200, headers: { "Content-Type": "application/json" } })
       );
-      
+
       // Mock API call to /api/log for submission
       localFetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify({ error: null, success: true, taskId: "00T123" }), {
@@ -376,7 +537,7 @@ describe("Launcher", () => {
       render(<Launcher accessToken="tok" onOpenApp={noop} />);
 
       await user.keyboard("{Meta>}k{/Meta}");
-      
+
       // Select /log command
       const logCmd = screen.getByText("/log").closest("[cmdk-item]") ||
         screen.getByText("/log").closest("[role='option']");

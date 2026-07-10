@@ -61,6 +61,24 @@ describe("Desktop", () => {
     expect(screen.getByRole("dialog", { name: "Notes d’équipe" }).closest(".xos-rnd-window")?.className).not.toContain("xos-rnd-window--minimized");
   });
 
+  it("sets inert on minimized window dialog and removes inert after restore", async () => {
+    const user = userEvent.setup();
+    render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);
+
+    await user.click(screen.getByRole("button", { name: /Ouvrir Notes d/ }));
+    const dialog = await screen.findByRole("dialog", { name: /Notes d/ });
+
+    // Minimize
+    await user.click(screen.getByRole("button", { name: /Réduire Notes d/ }));
+    const winSection = dialog.closest(".xos-window");
+    expect(winSection).toBeTruthy();
+    expect(winSection!.hasAttribute("inert")).toBe(true);
+
+    // Restore from dock
+    await user.click(screen.getByRole("button", { name: /Restaurer Notes d/ }));
+    expect(winSection!.hasAttribute("inert")).toBe(false);
+  });
+
   it("toggles maximize and closes a window with its traffic-light controls", async () => {
     const user = userEvent.setup();
     render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);

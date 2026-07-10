@@ -59,7 +59,12 @@ export function WindowManager({ windows, dispatch }: WindowManagerProps) {
             size={size}
             style={{ zIndex: window.zIndex }}
           >
-            <section className="xos-window" role="dialog" aria-label={app.title}>
+            <section
+              className="xos-window"
+              role="dialog"
+              aria-label={app.title}
+              inert={window.minimized ? true : undefined}
+            >
               <header className="xos-window__titlebar">
                 <div className="xos-window__controls">
                   <button
