@@ -142,12 +142,7 @@
 .xos-logo {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-family: var(--xos-font-display);
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: var(--xos-text);
-  letter-spacing: 0.02em;
+  line-height: 0;
 }
 
 .xos-logo__img {
@@ -155,6 +150,6 @@
   flex-shrink: 0;
   height: 1.5rem;
   width: auto;
-  max-width: 5rem;
+  max-width: 5.5rem;
   object-fit: contain;
 }

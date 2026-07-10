@@ -47,15 +47,13 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
       <header className="xos-menubar">
         <span className="xos-logo">
           <img
-            src="/logo-xos.webp"
-            alt=""
-            aria-hidden="true"
+            src="/logo-xos.png"
+            alt="XOS"
             className="xos-logo__img"
             decoding="async"
-            width={170}
-            height={60}
+            width={880}
+            height={334}
           />
-          X OS
         </span>
         <span className="xos-menubar__session" title={userEmail}>
           <span className="xos-menubar__status" aria-hidden="true" />

@@ -60,15 +60,15 @@ textarea {
 }
 
 .xos-menubar .xos-logo {
-  font-size: 0.95rem;
+  line-height: 0;
 }
 
 .xos-menubar .xos-logo__img {
   display: block;
   flex-shrink: 0;
-  height: 1.35rem;
+  height: 1.5rem;
   width: auto;
-  max-width: 4.5rem;
+  max-width: 5.5rem;
   object-fit: contain;
 }
 
