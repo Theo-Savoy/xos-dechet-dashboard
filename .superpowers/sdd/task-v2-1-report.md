@@ -115,3 +115,36 @@ git diff --check                                 # succès
 
 - Migration `007` à appliquer en prod par le coordinateur avant utilisation de `scheduled_for` / `title` / `linkedin_url`.
 - Filtres relance avec `LIMIT 2000` : au-delà de 2000 contacts CRM correspondant aux filtres entreprise/contact, la troncature post-JS peut omettre des résultats — comportement documenté et aligné sur le plafond SOQL.
+
+## Correctifs post-revue (I1 / I2 / M3)
+
+### I1 — Presets v2.0 crashent FilterBuilder (`contact.fonctions` undefined)
+
+| Test ciblé | RED | GREEN |
+|---|---|---|
+| `src/crm/index.test.ts -t "fills missing v2.1 keys"` | `fonctions` absent → crash ChipGroup | `normalizeFilterTree()` fusionne avec `emptyFilterTree()`, ignore `duree_*` |
+| `CallManagerFixes.test.tsx -t "normalized v2.0 preset"` | FilterBuilder plante au chargement | `CallManagerApp.handleLoadPreset` normalise avant `setFilters` |
+
+### I2 — Mode dédup « Exclure » neutralisé
+
+| Test ciblé | RED | GREEN |
+|---|---|---|
+| `CallManagerFixes.test.tsx -t "Avertir mode"` | Tag masqué hors mode avertir | Tag « Déjà en séance » affiché dans les deux modes |
+| `CallManagerFixes.test.tsx -t "Exclure mode"` | Doublons cochés malgré Exclure | Décochés par défaut en Exclure, re-cochables à la main |
+
+### M3 — Secteurs texte libre hors picklist invisibles
+
+| Test ciblé | RED | GREEN |
+|---|---|---|
+| `CallManagerFixes.test.tsx -t "obsolete chips"` | Valeur hors liste invisible | Chips « obsolète » retirables au-dessus de la picklist |
+
+### Gate post-correctifs
+
+```bash
+npm test -- --run    # 17 files, 249 tests, 0 échec
+npx tsc --noEmit     # 0 erreur
+npx eslint .         # 1 warning toléré react-refresh/only-export-components
+npm run build        # succès
+git diff --check     # succès
+```
+
