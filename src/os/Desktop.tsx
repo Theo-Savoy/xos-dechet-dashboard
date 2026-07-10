@@ -1,0 +1,54 @@
+import { useEffect, useReducer } from "react";
+import { Dock } from "./Dock";
+import { appRegistry, type AppManifest } from "./registry";
+import { WindowManager } from "./WindowManager";
+import {
+  hydrateWindowState,
+  serializeWindowState,
+  windowReducer,
+} from "./windowState";
+import "./theme.css";
+import "./desktop.css";
+
+const STORAGE_KEY = "xos.window-manager.v1";
+
+type DesktopProps = {
+  userEmail: string;
+};
+
+export function Desktop({ userEmail }: DesktopProps) {
+  const [state, dispatch] = useReducer(windowReducer, undefined, () =>
+    hydrateWindowState(
+      typeof window === "undefined" ? null : window.localStorage.getItem(STORAGE_KEY),
+      appRegistry.map((app) => app.id),
+    ),
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEY, serializeWindowState(state));
+  }, [state]);
+
+  const openApp = (app: AppManifest) => {
+    dispatch({
+      type: "open",
+      appId: app.id,
+      defaultSize: app.defaultSize,
+    });
+  };
+
+  return (
+    <main className="xos-desktop">
+      <div className="xos-wallpaper" aria-hidden="true" />
+      <header className="xos-menubar">
+        <span className="xos-logo">X OS</span>
+        <span className="xos-menubar__session" title={userEmail}>
+          <span className="xos-menubar__status" aria-hidden="true" />
+          {userEmail}
+        </span>
+      </header>
+
+      <WindowManager windows={state.windows} dispatch={dispatch} />
+      <Dock apps={appRegistry} windows={state.windows} onOpen={openApp} />
+    </main>
+  );
+}

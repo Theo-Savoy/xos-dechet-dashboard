@@ -1,13 +1,10 @@
 import { LoginScreen } from "./lib/LoginScreen";
 import { useSession } from "./lib/useSession";
+import { Desktop } from "./os/Desktop";
 import type { Session } from "@supabase/supabase-js";
 
 function AppContent({ session }: { session: Session }) {
-  return (
-    <div>
-      <p>Connecté en tant que : {session.user.email}</p>
-    </div>
-  );
+  return <Desktop userEmail={session.user.email ?? "Utilisateur X OS"} />;
 }
 
 function App() {
