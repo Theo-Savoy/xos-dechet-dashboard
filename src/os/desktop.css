@@ -169,11 +169,13 @@ textarea {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 15px;
-  background: var(--xos-window-content-bg);
+  background: var(--xos-window-shell-bg);
   box-shadow:
     0 30px 80px rgba(0, 0, 0, 0.38),
     0 6px 18px rgba(0, 0, 0, 0.24),
     inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .xos-window__titlebar {
@@ -182,9 +184,7 @@ textarea {
   align-items: center;
   padding: 0 0.85rem;
   border-bottom: 1px solid var(--xos-border);
-  background: var(--xos-window-titlebar-bg);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  background: rgba(255, 255, 255, 0.035);
   cursor: grab;
   user-select: none;
 }

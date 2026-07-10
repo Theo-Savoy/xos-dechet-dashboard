@@ -33,14 +33,14 @@ Variantes accentuées/non accentuées fournies pour SOQL (ex. `%développement r
 
 ### 2. Fenêtres XOS — contenu opaque, titlebar verre
 
-| Aspect | Avant | Après |
+| Aspect | Avant (v2.1) | Après (v2.2 final) |
 |---|---|---|
-| `.xos-window` | `background: rgba(5,9,31,0.9)` + `backdrop-filter` sur toute la fenêtre | Fond opaque `--xos-window-content-bg` ; blur retiré du conteneur |
-| `.xos-window__titlebar` | `background: rgba(255,255,255,0.035)` sans blur propre | `--xos-window-titlebar-bg` translucide + `backdrop-filter: blur(24px)` |
-| `.xos-window__content` | Héritait la transparence | `background: var(--xos-window-content-bg)` (#0a1129, dérivé de rgb(5,9,31)) |
-| Variables | — | `--xos-window-content-bg`, `--xos-window-titlebar-bg` dans `theme.css` |
+| `.xos-window` | `background: rgba(5,9,31,0.9)` + `backdrop-filter: blur(24px)` sur toute la fenêtre | **Inchangé sur la coque** : `--xos-window-shell-bg` (= `rgba(5,9,31,0.9)`) + `backdrop-filter` — le verre reste actif sur la titlebar |
+| `.xos-window__titlebar` | `background: rgba(255,255,255,0.035)` (translucide, blur hérité du parent) | **Inchangé** : même fond léger ; le blur du parent `.xos-window` floute le wallpaper visible à travers |
+| `.xos-window__content` | Héritait la transparence (wallpaper visible, lisibilité faible) | `background: var(--xos-window-content-bg)` (#0a1129, 100 % opaque) — masque le fond, le blur parent ne s'applique pas visuellement au contenu |
+| Variables | — | `--xos-window-shell-bg` (coque translucide), `--xos-window-content-bg` (zone contenu) dans `theme.css` |
 
-Pas de changement DOM. `overflow: hidden` et `border-radius` conservés ; états focus/maximized inchangés côté structure.
+Pas de changement DOM. `overflow: hidden` et `border-radius` conservés. États **focus** (`.xos-rnd-window:focus-within .xos-window` → bordure plus claire) et **maximisé** (`.xos-rnd-window--maximized .xos-window` → `border-radius: 0`, pas de bordure) : aucune règle de fond modifiée, comportement identique.
 
 ## Commandes gate de sortie (GREEN final)
 
@@ -67,3 +67,19 @@ git diff --check                                 # succès
 
 - Les presets `pedagogie`, `sirh`, `recrutement`, `direction_generale` sont identifiés dans les données org mais non validés en usage réel — à ajuster si des intitulés fréquents manquent.
 - Le fond opaque `#0a1129` est une approximation du rendu perçu de `rgba(5,9,31,0.9)` sur le wallpaper ; affiner si le contraste titlebar/contenu semble trop marqué en prod.
+
+## Correctifs post-revue (I1 / M1 / M2)
+
+### I1 — Fond opaque sur `.xos-window` tuait le verre de la titlebar
+
+| Problème | Correctif |
+|---|---|
+| Première implémentation posait `--xos-window-content-bg` (opaque) sur `.xos-window` entier → `backdrop-filter` de la titlebar sans wallpaper visible derrière | Coque restaurée : `--xos-window-shell-bg` translucide + `backdrop-filter` sur `.xos-window` ; opacité 100 % uniquement sur `.xos-window__content` |
+
+### M1 — Double fond redondant
+
+Résolu par I1 : plus de `--xos-window-content-bg` sur le conteneur, seule la zone contenu porte le fond opaque.
+
+### M2 — Rapport avant/après inexact
+
+Tableau §2 mis à jour pour décrire le rendu réel (coque translucide + blur parent, contenu opaque isolé).
