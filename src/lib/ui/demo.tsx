@@ -3,15 +3,10 @@ import { Button } from "./Button";
 import { GlassCard } from "./GlassCard";
 import { Tag } from "./Tag";
 
-/**
- * Page de démo autonome des composants src/lib/ui — QA visuelle du lot 1.1.
- * Non branchée dans App.tsx ni dans un router : à monter manuellement
- * (ex. temporairement dans main.tsx) pour vérifier le rendu.
- */
+/** Page de démo des composants src/lib/ui, enregistrée comme app X OS. */
 export function UiDemo() {
   return (
-    <div style={{ minHeight: "100vh", padding: "3rem" }}>
-      <div className="xos-wallpaper" />
+    <div style={{ minHeight: "100%", padding: "3rem" }}>
 
       <header
         style={{

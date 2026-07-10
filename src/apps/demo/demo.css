@@ -1,0 +1,123 @@
+.demo-app {
+  min-height: 100%;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  color: var(--xos-text);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(139, 91, 250, 0.14), transparent 38%),
+    rgba(4, 8, 28, 0.6);
+}
+
+.demo-app__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.demo-app__heading h2 {
+  margin: 0.65rem 0 0;
+  font-size: clamp(1.65rem, 4vw, 2.35rem);
+  letter-spacing: -0.035em;
+}
+
+.demo-app__period {
+  color: var(--xos-text-muted);
+  font-family: var(--xos-font-numeric);
+}
+
+.demo-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.demo-metric {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+}
+
+.demo-metric > span,
+.demo-chart__label,
+.demo-note small {
+  color: var(--xos-text-muted);
+}
+
+.demo-metric strong {
+  font-size: clamp(1.45rem, 4vw, 2rem);
+}
+
+.demo-metric small {
+  width: fit-content;
+  color: var(--xos-alert);
+}
+
+.demo-chart {
+  height: 190px;
+  margin-top: 0.8rem;
+  padding: 1rem;
+}
+
+.demo-chart__label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.demo-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(0.45rem, 2vw, 1rem);
+  height: 125px;
+  padding-top: 1rem;
+}
+
+.demo-bars span {
+  flex: 1;
+  min-width: 0.5rem;
+  border-radius: 0.4rem 0.4rem 0.18rem 0.18rem;
+  background: linear-gradient(180deg, var(--xos-alert), var(--xos-accent));
+  box-shadow: 0 0 18px rgba(139, 91, 250, 0.2);
+}
+
+.demo-note-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.demo-note {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.demo-note__index {
+  color: var(--xos-accent);
+  font-size: 0.82rem;
+}
+
+.demo-note strong,
+.demo-note small {
+  display: block;
+}
+
+.demo-note small {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .demo-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-note {
+    grid-template-columns: auto 1fr;
+  }
+
+  .demo-note .xos-tag {
+    display: none;
+  }
+}
