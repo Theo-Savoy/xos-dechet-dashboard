@@ -80,6 +80,8 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
   if (employeeBands.length) conditions.push(`Account.${account.fields.employeeCount} IN (${escapedList(employeeBands)})`);
   const customerTypes = stringList(enterprise.type_client);
   if (customerTypes.length) conditions.push(`Account.${account.fields.customerType} IN (${escapedList(customerTypes)})`);
+  const tiers = stringList(enterprise.tiers);
+  if (tiers.length) conditions.push(`Account.${account.fields.tier} IN (${escapedList(tiers)})`);
   if (typeof enterprise.compte_principal === "string" && enterprise.compte_principal) {
     conditions.push(`Account.${account.fields.parentId} = '${escapeSOQL(enterprise.compte_principal)}'`);
   }

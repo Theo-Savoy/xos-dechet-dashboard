@@ -209,6 +209,7 @@ describe("call targeting copy and controls", () => {
     );
 
     expect(screen.getByText("Secteurs d'activité")).toBeTruthy();
+    expect(screen.getByText("Tier")).toBeTruthy();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Avertir" }).getAttribute("aria-pressed")).toBe("true");
@@ -306,6 +307,71 @@ describe("preview selection and enriched rows", () => {
     await user.type(screen.getByLabelText("Nom de la séance"), "Test");
     await user.click(screen.getByRole("button", { name: "Lancer la séance" }));
     expect(onCreate).toHaveBeenCalledWith("Test", [preview[0]], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it("caps selection to N contacts from the same company", async () => {
+    const user = userEvent.setup();
+    const sameCompanyPreview = [
+      {
+        sf_contact_id: "003000000000001",
+        sf_account_id: "001AAA",
+        contact_name: "Alice Martin",
+        account_name: "Acme",
+        phone: "0102030405",
+        title: "RF",
+        linkedin_url: null,
+      },
+      {
+        sf_contact_id: "003000000000002",
+        sf_account_id: "001AAA",
+        contact_name: "Bob Durand",
+        account_name: "Acme",
+        phone: null,
+        title: null,
+        linkedin_url: null,
+      },
+      {
+        sf_contact_id: "003000000000003",
+        sf_account_id: "001BBB",
+        contact_name: "Carla Petit",
+        account_name: "Beta",
+        phone: null,
+        title: null,
+        linkedin_url: null,
+      },
+    ];
+
+    render(
+      <NewSessionView
+        filters={emptyFilterTree()}
+        onFiltersChange={vi.fn()}
+        contactLimit={200}
+        onContactLimitChange={vi.fn()}
+        loading={false}
+        previewLoading={false}
+        error={null}
+        preview={sameCompanyPreview}
+        dedup={[]}
+        presets={[]}
+        presetsLoading={false}
+        savingPreset={false}
+        currentUserId="user-1"
+        onBack={vi.fn()}
+        onPreview={vi.fn()}
+        onLoadPreset={vi.fn()}
+        onSavePreset={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("3 sélectionnés / 3")).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Maximum de contacts par entreprise"), "1");
+    expect(screen.getByText("2 sélectionnés / 3")).toBeTruthy();
+
+    const bobRow = screen.getByText("Bob Durand").closest("li");
+    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
   });
 });
 

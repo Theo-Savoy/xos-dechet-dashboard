@@ -8,6 +8,7 @@ import {
   NIVEAU_DECISION_OPTIONS,
   RESULTAT_CALL_VALUES,
   SECTEUR_VALUES,
+  TIER_VALUES,
   TYPE_CLIENT_VALUES,
   type CallTargetPreset,
   type ContactLimit,
@@ -154,6 +155,12 @@ export function FilterBuilder({
             options={asOptions(TYPE_CLIENT_VALUES)}
             value={filters.entreprise.type_client}
             onChange={(type_client) => setEntreprise({ type_client })}
+          />
+          <ChipGroup
+            label="Tier"
+            options={asOptions(TIER_VALUES)}
+            value={filters.entreprise.tiers}
+            onChange={(tiers) => setEntreprise({ tiers })}
           />
           <div className="calls-fb-row">
             <TriState

@@ -61,6 +61,17 @@ assert.match(rhQuery, /Title IN \('RRH', 'HRBP', 'Cadre RH'\)/);
 assert.match(rhQuery, /Title LIKE '%drh%'/);
 assert.match(rhQuery, /Title IN \('CHRO'\)/);
 
+const tierQuery = buildTargetQuery(
+  { ...baseFilters, entreprise: { ...baseFilters.entreprise, tiers: ["A", "D"] } },
+  mapping,
+  null,
+);
+assert.match(
+  tierQuery,
+  new RegExp(`Account\\.${mapping.objects.account.fields.tier} IN \\('A', 'D'\\)`),
+);
+assert.deepEqual(mapping.objects.account.tiers, ["A", "B", "C", "D"]);
+
 const unknownPresetQuery = buildTargetQuery(
   { ...baseFilters, contact: { fonctions: ["preset_inexistant"] } },
   mapping,

@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
-import type { CallTargetPreset, ContactLimit, DedupEntry, FilterTree } from "../../crm";
+import {
+  MAX_PER_COMPANY_OPTIONS,
+  type CallTargetPreset,
+  type ContactLimit,
+  type DedupEntry,
+  type FilterTree,
+  type MaxPerCompany,
+} from "../../crm";
 import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
+import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
 import type { ContactPreview } from "./types";
 
 type NewSessionViewProps = {
@@ -57,19 +65,27 @@ export function NewSessionView({
   const [scheduledFor, setScheduledFor] = useState(todayLocalDate);
   const [dedupMode, setDedupMode] = useState<DedupMode>("avertir");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [maxPerCompany, setMaxPerCompany] = useState<MaxPerCompany | null>(null);
+  const [capHint, setCapHint] = useState<string | null>(null);
 
   const inSessionOf = useMemo(
     () => new Map(dedup.map((d) => [d.sf_contact_id, d.in_session_of])),
     [dedup],
   );
 
-  useEffect(() => {
+  const eligibleIds = useMemo(() => {
     const dedupSet = new Set(dedup.map((entry) => entry.sf_contact_id));
-    const ids = preview
-      .map((contact) => contact.sf_contact_id)
-      .filter((id) => dedupMode !== "exclure" || !dedupSet.has(id));
-    setSelectedIds(new Set(ids));
+    return new Set(
+      preview
+        .map((contact) => contact.sf_contact_id)
+        .filter((id) => dedupMode !== "exclure" || !dedupSet.has(id)),
+    );
   }, [preview, dedup, dedupMode]);
+
+  useEffect(() => {
+    setSelectedIds(selectIdsWithCompanyCap(preview, maxPerCompany, eligibleIds));
+    setCapHint(null);
+  }, [preview, eligibleIds, maxPerCompany]);
 
   const selectedContacts = useMemo(
     () => preview.filter((contact) => selectedIds.has(contact.sf_contact_id)),
@@ -79,14 +95,37 @@ export function NewSessionView({
   const toggleContact = (contactId: string) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (next.has(contactId)) next.delete(contactId);
-      else next.add(contactId);
+      if (next.has(contactId)) {
+        next.delete(contactId);
+        setCapHint(null);
+        return next;
+      }
+      if (!canSelectContact(preview, current, contactId, maxPerCompany)) {
+        setCapHint(
+          maxPerCompany
+            ? `Maximum ${maxPerCompany} contact${maxPerCompany > 1 ? "s" : ""} par entreprise.`
+            : null,
+        );
+        return current;
+      }
+      next.add(contactId);
+      setCapHint(null);
       return next;
     });
   };
 
-  const selectAll = () => setSelectedIds(new Set(preview.map((contact) => contact.sf_contact_id)));
-  const deselectAll = () => setSelectedIds(new Set());
+  const selectAll = () => {
+    setSelectedIds(selectIdsWithCompanyCap(preview, maxPerCompany, eligibleIds));
+    setCapHint(
+      maxPerCompany
+        ? `Sélection limitée à ${maxPerCompany} contact${maxPerCompany > 1 ? "s" : ""} par entreprise.`
+        : null,
+    );
+  };
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+    setCapHint(null);
+  };
 
   const handleCreate = () => {
     const name = sessionName.trim();
@@ -141,6 +180,25 @@ export function NewSessionView({
               <Tag>
                 {selectedContacts.length} sélectionné{selectedContacts.length > 1 ? "s" : ""} / {preview.length}
               </Tag>
+              <label className="calls-field calls-field--inline">
+                <span>Max / entreprise</span>
+                <select
+                  className="calls-select"
+                  value={maxPerCompany ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMaxPerCompany(value ? (Number(value) as MaxPerCompany) : null);
+                  }}
+                  aria-label="Maximum de contacts par entreprise"
+                >
+                  <option value="">Pas de limite</option>
+                  {MAX_PER_COMPANY_OPTIONS.map((limit) => (
+                    <option key={limit} value={limit}>
+                      {limit}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="calls-preview__actions">
                 <Button variant="secondary" onClick={selectAll}>
                   Tout sélectionner
@@ -150,16 +208,25 @@ export function NewSessionView({
                 </Button>
               </div>
             </div>
+            {capHint && (
+              <p className="calls-preview__cap-hint" role="status" aria-live="polite">
+                {capHint}
+              </p>
+            )}
             <ul className="calls-preview__list">
               {preview.map((contact) => {
                 const dup = inSessionOf.get(contact.sf_contact_id);
                 const checked = selectedIds.has(contact.sf_contact_id);
+                const blocked =
+                  !checked && !canSelectContact(preview, selectedIds, contact.sf_contact_id, maxPerCompany);
                 return (
                   <li key={contact.sf_contact_id} className={!checked ? "calls-preview__row--excluded" : undefined}>
                     <label className="calls-preview__select">
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={blocked}
+                        title={blocked ? (capHint ?? "Plafond entreprise atteint") : undefined}
                         onChange={() => toggleContact(contact.sf_contact_id)}
                       />
                     </label>

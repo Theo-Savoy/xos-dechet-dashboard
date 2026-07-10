@@ -103,6 +103,20 @@ describe("adapter exports", () => {
     expect(soql).toContain("LIMIT 200");
   });
 
+  it("buildTargetQuery adds Account tier filter", () => {
+    const soql = buildTargetQuery(
+      { ...baseFilters, entreprise: { ...baseFilters.entreprise, tiers: ["A", "B"] } },
+      mapping,
+      null,
+    );
+    expect(soql).toContain(`Account.${mapping.objects.account.fields.tier} IN ('A', 'B')`);
+  });
+
+  it("mapping exposes Account tier picklist A–D", () => {
+    expect(mapping.objects.account.tiers).toEqual(["A", "B", "C", "D"]);
+    expect(mapping.objects.account.fields.tier).toBe("Tier__c");
+  });
+
   it("buildTargetQuery fetches wide when relance predicates need JS filtering", () => {
     const soql = buildTargetQuery(
       { ...baseFilters, relance: { jamais_appele: true }, limit: 50 },

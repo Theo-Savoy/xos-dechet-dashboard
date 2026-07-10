@@ -14,6 +14,7 @@ describe("emptyFilterTree", () => {
     const tree = emptyFilterTree();
     expect(tree.entreprise.secteurs).toEqual([]);
     expect(tree.entreprise.effectifs).toEqual([]);
+    expect(tree.entreprise.tiers).toEqual([]);
     expect(tree.contact.fonctions).toEqual([]);
     expect(tree.relance.dernier_resultat).toEqual([]);
   });
@@ -39,6 +40,7 @@ describe("normalizeFilterTree", () => {
     });
 
     expect(normalized.contact.fonctions).toEqual([]);
+    expect(normalized.entreprise.tiers).toEqual([]);
     expect(normalized.entreprise.secteurs).toEqual(["Finance"]);
     expect(normalized.relance.jamais_appele).toBe(true);
     expect(normalized.relance).not.toHaveProperty("duree_min_sec");
@@ -50,6 +52,13 @@ describe("normalizeFilterTree", () => {
       entreprise: { secteurs: ["Finance", "Secteur inventé"] },
     });
     expect(normalized.entreprise.secteurs).toEqual(["Finance", "Secteur inventé"]);
+  });
+
+  it("preserves tier filter values", () => {
+    const normalized = normalizeFilterTree({
+      entreprise: { tiers: ["A", "C"] },
+    });
+    expect(normalized.entreprise.tiers).toEqual(["A", "C"]);
   });
 });
 

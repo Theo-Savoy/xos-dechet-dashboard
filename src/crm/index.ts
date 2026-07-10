@@ -16,6 +16,13 @@ export type EffectifTranche = (typeof EFFECTIF_TRANCHES)[number];
 export const TYPE_CLIENT_VALUES = ["Client inactif", "Client", "Prospect"] as const;
 export type TypeClient = (typeof TYPE_CLIENT_VALUES)[number];
 
+export const TIER_VALUES = ["A", "B", "C", "D"] as const;
+export type Tier = (typeof TIER_VALUES)[number];
+
+/** Options pour plafonner la sélection de contacts par entreprise (null = pas de limite). */
+export const MAX_PER_COMPANY_OPTIONS = [1, 2, 3, 5] as const;
+export type MaxPerCompany = (typeof MAX_PER_COMPANY_OPTIONS)[number];
+
 export const SECTEUR_VALUES = [
   "Secteur public",
   "Aéronautique et Défense",
@@ -116,6 +123,7 @@ export type FilterTree = {
     secteurs: Secteur[];
     effectifs: EffectifTranche[];
     type_client: TypeClient[];
+    tiers: Tier[];
     opp_ouverte: boolean | null;
     opp_perdue: boolean | null;
     compte_principal: string | null;
@@ -141,6 +149,7 @@ export function emptyFilterTree(): FilterTree {
       secteurs: [],
       effectifs: [],
       type_client: [],
+      tiers: [],
       opp_ouverte: null,
       opp_perdue: null,
       compte_principal: null,
@@ -209,6 +218,7 @@ export function normalizeFilterTree(raw: unknown): FilterTree {
       secteurs: stringArray(entreprise.secteurs) as Secteur[],
       effectifs: stringArray(entreprise.effectifs) as EffectifTranche[],
       type_client: stringArray(entreprise.type_client) as TypeClient[],
+      tiers: stringArray(entreprise.tiers) as Tier[],
       opp_ouverte: triStateOr(defaults.entreprise.opp_ouverte, entreprise.opp_ouverte),
       opp_perdue: triStateOr(defaults.entreprise.opp_perdue, entreprise.opp_perdue),
       compte_principal: nullableString(entreprise.compte_principal),

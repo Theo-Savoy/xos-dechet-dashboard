@@ -13,6 +13,7 @@ const mapping = {
         industry: "Industry",
         employeeCount: "Nombre_employes__c",
         customerType: "Type_de_client__c",
+        tier: "Tier__c",
         parentId: "ParentId",
         ownerId: "OwnerId",
       },
@@ -26,6 +27,7 @@ const mapping = {
         "5000 et plus",
       ],
       customerTypes: ["Client inactif", "Client", "Prospect"],
+      tiers: ["A", "B", "C", "D"],
       industries: [
         "Secteur public",
         "Aéronautique et Défense",
