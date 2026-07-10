@@ -39,11 +39,24 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
     });
   };
 
+  const hasMaximizedWindow = state.windows.some((w) => w.maximized && !w.minimized);
+
   return (
-    <main className="xos-desktop">
+    <main className={`xos-desktop ${hasMaximizedWindow ? "xos-desktop--has-maximized" : ""}`}>
       <div className="xos-wallpaper" aria-hidden="true" />
       <header className="xos-menubar">
-        <span className="xos-logo">X OS</span>
+        <span className="xos-logo">
+          <img
+            src="/logo-xos.webp"
+            alt=""
+            aria-hidden="true"
+            className="xos-logo__img"
+            decoding="async"
+            width={170}
+            height={60}
+          />
+          X OS
+        </span>
         <span className="xos-menubar__session" title={userEmail}>
           <span className="xos-menubar__status" aria-hidden="true" />
           {userEmail}

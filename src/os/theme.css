@@ -150,10 +150,11 @@
   letter-spacing: 0.02em;
 }
 
-.xos-logo::before {
-  content: "";
-  width: 1.5rem;
+.xos-logo__img {
+  display: block;
+  flex-shrink: 0;
   height: 1.5rem;
-  background: url("/logo-xos.webp") no-repeat center;
-  background-size: contain;
+  width: auto;
+  max-width: 5rem;
+  object-fit: contain;
 }

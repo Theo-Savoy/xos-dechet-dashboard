@@ -56,16 +56,20 @@ textarea {
   backdrop-filter: blur(22px) saturate(150%);
   -webkit-backdrop-filter: blur(22px) saturate(150%);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 380ms ease;
 }
 
 .xos-menubar .xos-logo {
   font-size: 0.95rem;
 }
 
-.xos-menubar .xos-logo::before {
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 0.35rem;
+.xos-menubar .xos-logo__img {
+  display: block;
+  flex-shrink: 0;
+  height: 1.35rem;
+  width: auto;
+  max-width: 4.5rem;
+  object-fit: contain;
 }
 
 .xos-menubar__session {
@@ -92,15 +96,16 @@ textarea {
 .xos-window-layer {
   position: absolute;
   inset: 48px 0 94px;
+  transition: inset 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .xos-rnd-window {
   overflow: visible;
   transition:
-    width 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    height 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 180ms ease;
+    width 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 460ms ease 120ms;
 }
 
 .xos-rnd-window--maximized {
@@ -110,15 +115,46 @@ textarea {
 }
 
 .xos-rnd-window--minimized {
-  transform: translate(calc(50vw - 50%), 80vh) scale(0.1) !important;
+  transform: translate(calc(50vw - 50%), 52vh) scale(0.22) !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  transition:
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 380ms ease 180ms !important;
 }
 
 /* Disable transitions while dragging or resizing to prevent input/drag lag */
 .xos-rnd-window.react-draggable-dragging,
 .xos-rnd-window.resizing {
   transition: none !important;
+}
+
+/* Fullscreen Mode Overrides */
+.xos-desktop--has-maximized .xos-menubar {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.xos-desktop--has-maximized .xos-dock {
+  transform: translate(-50%, calc(100% + 22px)) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.xos-desktop--has-maximized .xos-window-layer {
+  inset: 0 !important;
+}
+
+.xos-desktop--has-maximized .xos-rnd-window--maximized {
+  transform: translate(0px, 0px) !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.xos-desktop--has-maximized .xos-rnd-window--maximized .xos-window {
+  border-radius: 0 !important;
+  border: 0 !important;
 }
 
 .xos-rnd-window:focus-within .xos-window {
@@ -238,6 +274,7 @@ textarea {
   backdrop-filter: blur(25px) saturate(165%);
   -webkit-backdrop-filter: blur(25px) saturate(165%);
   transform: translateX(-50%);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 380ms ease;
 }
 
 .xos-dock__item {
