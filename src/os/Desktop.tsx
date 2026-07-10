@@ -7,6 +7,7 @@ import {
   serializeWindowState,
   windowReducer,
 } from "./windowState";
+import { Launcher } from "./Launcher";
 import "./theme.css";
 import "./desktop.css";
 
@@ -14,9 +15,10 @@ const STORAGE_KEY = "xos.window-manager.v1";
 
 type DesktopProps = {
   userEmail: string;
+  accessToken: string;
 };
 
-export function Desktop({ userEmail }: DesktopProps) {
+export function Desktop({ userEmail, accessToken }: DesktopProps) {
   const [state, dispatch] = useReducer(windowReducer, undefined, () =>
     hydrateWindowState(
       typeof window === "undefined" ? null : window.localStorage.getItem(STORAGE_KEY),
@@ -49,6 +51,7 @@ export function Desktop({ userEmail }: DesktopProps) {
 
       <WindowManager windows={state.windows} dispatch={dispatch} />
       <Dock apps={appRegistry} windows={state.windows} onOpen={openApp} />
+      <Launcher accessToken={accessToken} onOpenApp={openApp} />
     </main>
   );
 }

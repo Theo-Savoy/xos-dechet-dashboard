@@ -4,7 +4,12 @@ import { Desktop } from "./os/Desktop";
 import type { Session } from "@supabase/supabase-js";
 
 function AppContent({ session }: { session: Session }) {
-  return <Desktop userEmail={session.user.email ?? "Utilisateur X OS"} />;
+  return (
+    <Desktop
+      userEmail={session.user.email ?? "Utilisateur X OS"}
+      accessToken={session.access_token}
+    />
+  );
 }
 
 function App() {

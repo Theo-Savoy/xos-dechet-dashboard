@@ -2,8 +2,21 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Desktop } from "./Desktop";
+
+// Polyfill ResizeObserver (required by cmdk / Radix Dialog in jsdom)
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+// Mock supabase — Launcher no longer imports it, but the import chain may
+// pull in supabase.ts which throws if env vars are missing.
+vi.mock("../lib/supabase", () => ({
+  supabase: { auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) } },
+}));
 
 describe("Desktop", () => {
   beforeEach(() => {
@@ -26,7 +39,7 @@ describe("Desktop", () => {
 
   it("opens two dock applications in simultaneous windows", async () => {
     const user = userEvent.setup();
-    render(<Desktop userEmail="theo@xos-learning.fr" />);
+    render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);
 
     await user.click(screen.getByRole("button", { name: "Ouvrir Aperçu commercial" }));
     await user.click(screen.getByRole("button", { name: "Ouvrir Notes d’équipe" }));
@@ -37,7 +50,7 @@ describe("Desktop", () => {
 
   it("minimizes a window and restores it from the dock", async () => {
     const user = userEvent.setup();
-    render(<Desktop userEmail="theo@xos-learning.fr" />);
+    render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);
 
     const dockButton = screen.getByRole("button", { name: "Ouvrir Notes d’équipe" });
     await user.click(dockButton);
@@ -50,7 +63,7 @@ describe("Desktop", () => {
 
   it("toggles maximize and closes a window with its traffic-light controls", async () => {
     const user = userEvent.setup();
-    render(<Desktop userEmail="theo@xos-learning.fr" />);
+    render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);
 
     await user.click(screen.getByRole("button", { name: "Ouvrir Aperçu commercial" }));
     await user.click(await screen.findByRole("button", { name: "Agrandir Aperçu commercial" }));

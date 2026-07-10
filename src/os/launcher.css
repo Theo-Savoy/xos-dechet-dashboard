@@ -1,0 +1,137 @@
+/* X OS Launcher — Cmd+K command palette */
+
+.xos-launcher-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.xos-launcher {
+  position: fixed;
+  top: min(20vh, 180px);
+  left: 50%;
+  z-index: 20001;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(10, 14, 42, 0.92);
+  box-shadow:
+    0 40px 100px rgba(0, 0, 0, 0.5),
+    inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(32px) saturate(150%);
+  -webkit-backdrop-filter: blur(32px) saturate(150%);
+  overflow: hidden;
+}
+
+.xos-launcher__input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--xos-border);
+  background: transparent;
+  color: var(--xos-text);
+  font-size: 0.95rem;
+  font-family: var(--xos-font-display);
+  outline: none;
+}
+
+.xos-launcher__input::placeholder {
+  color: var(--xos-text-muted);
+}
+
+.xos-launcher__list {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 6px 0;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.xos-launcher__status {
+  padding: 18px 18px;
+  color: var(--xos-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.xos-launcher__status--error {
+  color: #ff8a80;
+}
+
+.xos-launcher__group [cmdk-group-heading] {
+  padding: 8px 18px 4px;
+  color: var(--xos-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.xos-launcher__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 80ms ease;
+}
+
+.xos-launcher__item[aria-selected="true"],
+.xos-launcher__item:hover {
+  background: rgba(139, 91, 250, 0.18);
+}
+
+.xos-launcher__item-name {
+  font-weight: 500;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.xos-launcher__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: rgba(139, 91, 250, 0.2);
+  flex-shrink: 0;
+}
+
+.xos-launcher__item-detail {
+  color: var(--xos-text-muted);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xos-launcher__footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--xos-border);
+  color: var(--xos-text-muted);
+  font-size: 0.68rem;
+}
+
+.xos-launcher__footer kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  font-family: var(--xos-font-numeric);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xos-launcher__item {
+    transition: none;
+  }
+}
