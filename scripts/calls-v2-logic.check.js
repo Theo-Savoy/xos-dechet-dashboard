@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import mapping from "../api/_crm/mapping.js";
-import { filterContactsForFollowUp, getFollowUpOutcomes } from "../api/calls.js";
-import { validatePresetInput } from "../api/presets.js";
+import { filterContactsForFollowUp, getFollowUpOutcomes, isValidEventStart } from "../api/calls.js";
+import { parsePresetId, validatePresetInput } from "../api/presets.js";
 
 const followUpOutcomes = getFollowUpOutcomes(mapping);
 assert.deepEqual(followUpOutcomes, [
@@ -45,5 +45,13 @@ assert.equal(valid.error, undefined);
 assert.equal(valid.name, "Relance Q3");
 assert.equal(valid.shared, true);
 assert.deepEqual(valid.filters.relance.dernier_resultat, followUpOutcomes);
+
+assert.equal(isValidEventStart("2026-07-10T14:30Z"), true);
+assert.equal(isValidEventStart("2026-07-10T14:30:00+02:00"), true);
+assert.equal(isValidEventStart("2026-02-30T10:00:00Z"), false);
+assert.equal(isValidEventStart("2026-07-10T25:00:00Z"), false);
+
+assert.equal(parsePresetId(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+assert.equal(parsePresetId(String(Number.MAX_SAFE_INTEGER) + "0"), null);
 
 console.log("calls-v2-logic.check.js: OK");

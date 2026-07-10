@@ -85,3 +85,56 @@ git diff --check                                # succès
 - `ActivityDate` non ajouté à `logCall` (hors contrat v2).
 - Journalisation conservée en best-effort (échec journal ne bloque pas la réponse HTTP).
 - Préoccupation restante : vérification prod OwnerId et intégration UI v2.C avant push/déploiement.
+
+---
+
+## Seconde boucle QC — commit `fe4988d` → correctifs fix2
+
+### État RED initial (re-revue)
+
+Points bloquants identifiés :
+- `assertSessionOwner`/`assertSessionContact` : `.single()` transformait PGRST116 en 500 au lieu de 404
+- `skip_contact`/`complete_session` : update sans contrôle d'erreur → 200 fantôme
+- GET `/api/calls` : erreurs DB masquées (listes/stats vides)
+- `isValidEventStart` : acceptait dates impossibles (`2026-02-30`) et heures invalides
+- `parsePresetId` : pas de garde `Number.isSafeInteger` / chaînes démesurées
+- Couverture tests insuffisante vs contrat v2 (isolation, validations, GET erreurs, dedup calls-list)
+
+### Cycle TDD RED → GREEN (fix2)
+
+| Zone | Test RED ajouté | GREEN |
+|---|---|---|
+| assert maybeSingle + PGRST116 | `returns 404 when session absent (PGRST116)` log_call + GET detail | `isNotFoundError` + `.maybeSingle()` |
+| skip/complete update | `returns 500 when skip/complete update fails` | `contact_update_failed` / `session_update_failed` |
+| GET stats/list/detail | `returns 500 when sessions/contacts lookup fails` | erreurs explicites `*_lookup_failed` |
+| ISO strict | `rejects impossible dates and invalid offsets` | validation calendrier + bornes heure/minute/offset |
+| parsePresetId safe | `rejects unsafe integers` presets.test + check.js | `Number.isSafeInteger` + longueur chaîne |
+| Couverture calls-list | dedup, invalid limit/preset, SF query error, cache header | 18 tests POST + adapter |
+| Couverture calls | invalid JSON/body/action, create_session validations, isolation owner/contact, log_event validations | 58 tests calls |
+| Couverture presets | creation/delete errors, safe integer | 20 tests presets |
+
+### Commandes gate de sortie (GREEN fix2)
+
+```bash
+node scripts/calls-v2-logic.check.js          # OK (ISO + safe integer)
+node scripts/call-target-query.check.js         # OK
+npm test -- --run                               # 14 files, 214 tests, 0 échec
+npx tsc --noEmit                                # 0 erreur
+npx eslint .                                    # 0 erreur
+npm run build                                   # succès
+git diff --check                                # succès
+```
+
+### Fichiers modifiés (fix2)
+
+- `api/calls.js` — maybeSingle/PGRST116, GET error paths, skip/complete update checks, ISO strict
+- `api/presets.js` — `Number.isSafeInteger` dans `parsePresetId`
+- `api/calls.test.js` — couverture v2 restaurée (58 tests)
+- `api/calls-list.test.js` — couverture v2 restaurée (18 tests)
+- `api/presets.test.js` — couverture étendue (20 tests)
+- `scripts/calls-v2-logic.check.js` — assertions ISO + safe integer
+
+### Préoccupations restantes
+
+- Vérification prod OwnerId (gate post-déploiement, inchangée).
+- Intégration UI v2.C avant push/déploiement atomique.

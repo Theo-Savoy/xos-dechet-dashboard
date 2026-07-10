@@ -37,11 +37,13 @@ export function validatePresetInput(body) {
 
 export function parsePresetId(value) {
   if (typeof value === "number") {
-    return Number.isInteger(value) && value >= 1 ? value : null;
+    return Number.isSafeInteger(value) && value >= 1 ? value : null;
   }
   if (typeof value === "string") {
     if (!/^[1-9]\d*$/.test(value)) return null;
-    return Number(value);
+    if (value.length > String(Number.MAX_SAFE_INTEGER).length) return null;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : null;
   }
   return null;
 }
