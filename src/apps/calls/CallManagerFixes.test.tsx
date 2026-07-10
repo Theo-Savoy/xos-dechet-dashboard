@@ -11,7 +11,7 @@ import { RecapView } from "./RecapView";
 import { RunnerView } from "./RunnerView";
 import { PicklistMultiSelect } from "./filterControls";
 import type { SessionContact, SessionDetail } from "./types";
-import { emptyFilterTree } from "../../crm";
+import { emptyFilterTree, normalizeFilterTree } from "../../crm";
 
 afterEach(() => {
   cleanup();
@@ -158,6 +158,24 @@ describe("PicklistMultiSelect", () => {
 
     expect(screen.getByRole("searchbox", { name: "Secteurs" }).getAttribute("placeholder")).toBe("Filtrer");
   });
+
+  it("shows legacy free-text values as removable obsolete chips", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PicklistMultiSelect
+        label="Secteurs"
+        options={[{ value: "Finance", label: "Finance" }]}
+        value={["Finance", "Secteur inventé"]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByText("Secteur inventé")).toBeTruthy();
+    expect(screen.getByText("(obsolète)")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Retirer Secteur inventé" }));
+    expect(onChange).toHaveBeenCalledWith(["Finance"]);
+  });
 });
 
 describe("call targeting copy and controls", () => {
@@ -215,6 +233,20 @@ describe("call targeting copy and controls", () => {
 
     await user.selectOptions(screen.getByLabelText("Preset"), "1");
     expect(screen.getByRole("button", { name: "Supprimer" })).toBeTruthy();
+  });
+
+  it("renders a normalized v2.0 preset without crashing on missing fonctions", () => {
+    const legacyPreset = normalizeFilterTree({
+      entreprise: { secteurs: ["Finance"] },
+      contact: { a_telephone: true, exclure_npa: true },
+      relance: { jamais_appele: true, duree_min_sec: 10, duree_max_sec: 90 },
+    });
+
+    render(<FilterBuilder {...filterBuilderProps} filters={legacyPreset} />);
+
+    expect(screen.getByLabelText("Finance")).toBeTruthy();
+    expect((screen.getByRole("checkbox", { name: /Jamais appelé/i }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByText("Durée min (sec)")).toBeNull();
   });
 });
 
@@ -274,6 +306,72 @@ describe("preview selection and enriched rows", () => {
     await user.type(screen.getByLabelText("Nom de la séance"), "Test");
     await user.click(screen.getByRole("button", { name: "Lancer la séance" }));
     expect(onCreate).toHaveBeenCalledWith("Test", [preview[0]], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+});
+
+describe("dedup modes in preview selection", () => {
+  const preview = [
+    {
+      sf_contact_id: "003000000000001",
+      sf_account_id: null,
+      contact_name: "Alice Martin",
+      account_name: "Acme",
+      phone: "0102030405",
+      title: "RF",
+      linkedin_url: null,
+    },
+    {
+      sf_contact_id: "003000000000002",
+      sf_account_id: null,
+      contact_name: "Bob Durand",
+      account_name: "Beta",
+      phone: null,
+      title: null,
+      linkedin_url: null,
+    },
+  ];
+  const dedup = [{ sf_contact_id: "003000000000001", in_session_of: "Paul" }];
+
+  const baseProps = {
+    filters: emptyFilterTree(),
+    onFiltersChange: vi.fn(),
+    contactLimit: 200 as const,
+    onContactLimitChange: vi.fn(),
+    loading: false,
+    previewLoading: false,
+    error: null,
+    preview,
+    dedup,
+    presets: [] as [],
+    presetsLoading: false,
+    savingPreset: false,
+    currentUserId: "user-1",
+    onBack: vi.fn(),
+    onPreview: vi.fn(),
+    onLoadPreset: vi.fn(),
+    onSavePreset: vi.fn(),
+    onDeletePreset: vi.fn(),
+    onCreate: vi.fn(),
+  };
+
+  it("keeps duplicates checked and tagged in Avertir mode", () => {
+    render(<NewSessionView {...baseProps} />);
+
+    expect(screen.getByText("Déjà en séance — Paul")).toBeTruthy();
+    const aliceRow = screen.getByText("Alice Martin").closest("li");
+    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText("2 sélectionnés / 2")).toBeTruthy();
+  });
+
+  it("unchecks duplicates by default but keeps the warning tag in Exclure mode", async () => {
+    const user = userEvent.setup();
+    render(<NewSessionView {...baseProps} />);
+
+    await user.click(screen.getByRole("button", { name: "Exclure" }));
+    expect(screen.getByText("Déjà en séance — Paul")).toBeTruthy();
+    const aliceRow = screen.getByText("Alice Martin").closest("li");
+    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByText("1 sélectionné / 2")).toBeTruthy();
   });
 });
 

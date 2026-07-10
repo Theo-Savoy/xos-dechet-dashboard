@@ -482,6 +482,20 @@
   color: var(--xos-text-muted);
 }
 
+.calls-picklist__obsolete {
+  margin-bottom: 0.35rem;
+}
+
+.calls-chip--obsolete {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+.calls-chip--obsolete small {
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
 .calls-chip-row {
   display: flex;
   flex-wrap: wrap;

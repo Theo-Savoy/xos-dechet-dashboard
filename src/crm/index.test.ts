@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyFilterTree, RELANCE_DEFAULT_RESULTATS, RESULTAT_CALL_VALUES } from "./index";
+import { emptyFilterTree, normalizeFilterTree, RELANCE_DEFAULT_RESULTATS, RESULTAT_CALL_VALUES } from "./index";
 
 describe("emptyFilterTree", () => {
   it("excludes NPA contacts by default", () => {
@@ -23,6 +23,33 @@ describe("emptyFilterTree", () => {
     tree.entreprise.secteurs = ["Finance", "Transports"];
     tree.relance.exclure_si_plus_de = { appels: 3, sur_jours: 30 };
     expect(JSON.parse(JSON.stringify(tree))).toEqual(tree);
+  });
+});
+
+describe("normalizeFilterTree", () => {
+  it("fills missing v2.1 keys from a v2.0 preset and drops obsolete duration fields", () => {
+    const normalized = normalizeFilterTree({
+      entreprise: { secteurs: ["Finance"] },
+      contact: { a_telephone: true, exclure_npa: true },
+      relance: {
+        jamais_appele: true,
+        duree_min_sec: 30,
+        duree_max_sec: 120,
+      },
+    });
+
+    expect(normalized.contact.fonctions).toEqual([]);
+    expect(normalized.entreprise.secteurs).toEqual(["Finance"]);
+    expect(normalized.relance.jamais_appele).toBe(true);
+    expect(normalized.relance).not.toHaveProperty("duree_min_sec");
+    expect(normalized.relance).not.toHaveProperty("duree_max_sec");
+  });
+
+  it("preserves free-text sectors from legacy presets", () => {
+    const normalized = normalizeFilterTree({
+      entreprise: { secteurs: ["Finance", "Secteur inventé"] },
+    });
+    expect(normalized.entreprise.secteurs).toEqual(["Finance", "Secteur inventé"]);
   });
 });
 

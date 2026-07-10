@@ -64,8 +64,12 @@ export function NewSessionView({
   );
 
   useEffect(() => {
-    setSelectedIds(new Set(preview.map((contact) => contact.sf_contact_id)));
-  }, [preview]);
+    const dedupSet = new Set(dedup.map((entry) => entry.sf_contact_id));
+    const ids = preview
+      .map((contact) => contact.sf_contact_id)
+      .filter((id) => dedupMode !== "exclure" || !dedupSet.has(id));
+    setSelectedIds(new Set(ids));
+  }, [preview, dedup, dedupMode]);
 
   const selectedContacts = useMemo(
     () => preview.filter((contact) => selectedIds.has(contact.sf_contact_id)),
@@ -170,7 +174,7 @@ export function NewSessionView({
                     ) : (
                       <span>—</span>
                     )}
-                    {dup && dedupMode === "avertir" && (
+                    {dup && (
                       <Tag variant="alert">Déjà en séance — {dup}</Tag>
                     )}
                   </li>

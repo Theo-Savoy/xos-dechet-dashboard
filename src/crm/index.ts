@@ -154,6 +154,74 @@ export function emptyFilterTree(): FilterTree {
   };
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function booleanOr(defaultValue: boolean, value: unknown): boolean {
+  return typeof value === "boolean" ? value : defaultValue;
+}
+
+function triStateOr(defaultValue: boolean | null, value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : value === null ? null : defaultValue;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function nullablePositiveInt(value: unknown): number | null {
+  return Number.isInteger(value) && (value as number) > 0 ? (value as number) : null;
+}
+
+function exclureSiPlusDe(value: unknown): { appels: number; sur_jours: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as { appels?: unknown; sur_jours?: unknown };
+  const appels = nullablePositiveInt(raw.appels);
+  const sur_jours = nullablePositiveInt(raw.sur_jours);
+  return appels && sur_jours ? { appels, sur_jours } : null;
+}
+
+/** Merge a stored preset (possibly pre-v2.1) onto the current FilterTree defaults. */
+export function normalizeFilterTree(raw: unknown): FilterTree {
+  const defaults = emptyFilterTree();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return defaults;
+  const source = raw as Record<string, unknown>;
+  const entreprise = (source.entreprise && typeof source.entreprise === "object" && !Array.isArray(source.entreprise)
+    ? source.entreprise
+    : {}) as Record<string, unknown>;
+  const contact = (source.contact && typeof source.contact === "object" && !Array.isArray(source.contact)
+    ? source.contact
+    : {}) as Record<string, unknown>;
+  const relance = (source.relance && typeof source.relance === "object" && !Array.isArray(source.relance)
+    ? source.relance
+    : {}) as Record<string, unknown>;
+
+  return {
+    entreprise: {
+      secteurs: stringArray(entreprise.secteurs) as Secteur[],
+      effectifs: stringArray(entreprise.effectifs) as EffectifTranche[],
+      type_client: stringArray(entreprise.type_client) as TypeClient[],
+      opp_ouverte: triStateOr(defaults.entreprise.opp_ouverte, entreprise.opp_ouverte),
+      opp_perdue: triStateOr(defaults.entreprise.opp_perdue, entreprise.opp_perdue),
+      compte_principal: nullableString(entreprise.compte_principal),
+    },
+    contact: {
+      a_telephone: booleanOr(defaults.contact.a_telephone, contact.a_telephone),
+      niveau_decision: stringArray(contact.niveau_decision) as NiveauDecision[],
+      exclure_npa: booleanOr(defaults.contact.exclure_npa, contact.exclure_npa),
+      fonctions: stringArray(contact.fonctions) as FonctionPresetId[],
+    },
+    relance: {
+      jamais_appele: triStateOr(defaults.relance.jamais_appele, relance.jamais_appele),
+      dernier_appel_avant_jours: nullablePositiveInt(relance.dernier_appel_avant_jours),
+      dernier_appel_dans_jours: nullablePositiveInt(relance.dernier_appel_dans_jours),
+      dernier_resultat: stringArray(relance.dernier_resultat) as ResultatCall[],
+      exclure_si_plus_de: exclureSiPlusDe(relance.exclure_si_plus_de),
+    },
+  };
+}
+
 export type DedupEntry = { sf_contact_id: string; in_session_of: string };
 
 export type CallTargetPreset = {

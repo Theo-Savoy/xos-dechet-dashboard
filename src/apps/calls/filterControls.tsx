@@ -106,6 +106,8 @@ export function PicklistMultiSelect<T extends string>({
   const [query, setQuery] = useState("");
   const inputId = useId();
   const normalizedQuery = query.trim().toLowerCase();
+  const optionValues = new Set(options.map((opt) => opt.value));
+  const obsoleteValues = value.filter((item) => !optionValues.has(item));
   const visible = normalizedQuery
     ? options.filter((opt) => opt.label.toLowerCase().includes(normalizedQuery))
     : options;
@@ -114,6 +116,8 @@ export function PicklistMultiSelect<T extends string>({
     onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
   };
 
+  const remove = (v: T) => onChange(value.filter((item) => item !== v));
+
   return (
     <div className="calls-fb-control">
       <div className="calls-fb-control__label">
@@ -121,6 +125,24 @@ export function PicklistMultiSelect<T extends string>({
         {hint && <small>{hint}</small>}
         {value.length > 1 && <span className="calls-fb-or">OU</span>}
       </div>
+      {obsoleteValues.length > 0 && (
+        <div className="calls-chip-row calls-picklist__obsolete">
+          {obsoleteValues.map((item) => (
+            <span key={item} className="calls-chip calls-chip--active calls-chip--obsolete">
+              {item}
+              <small> (obsolète)</small>
+              <button
+                type="button"
+                className="calls-chip__remove"
+                aria-label={`Retirer ${item}`}
+                onClick={() => remove(item)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <input
         id={inputId}
         type="search"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
-import { emptyFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree } from "../../crm";
+import { emptyFilterTree, normalizeFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree } from "../../crm";
 import {
   completeSession,
   createFollowUpSession,
@@ -163,7 +163,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   };
 
   const handleLoadPreset = (preset: CallTargetPreset) => {
-    setFilters(preset.filters);
+    setFilters(normalizeFilterTree(preset.filters));
     invalidatePreview();
   };
 
