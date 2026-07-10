@@ -39,7 +39,7 @@ export const appRegistry: AppManifest[] = [
           id: "ui-demo",
           title: "Design system",
           icon: "⌘",
-          component: lazy(() => import("../lib/ui/demo")),
+          component: lazy(() => import("../components/ui/demo")),
           defaultSize: { w: 800, h: 580 },
         },
       ]

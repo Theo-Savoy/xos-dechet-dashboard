@@ -38,6 +38,7 @@ function isPublic(pathname) {
   if (pathname.startsWith("/assets/")) return true;
   if (pathname.startsWith("/fonts/")) return true;
   if (pathname.startsWith("/favicon")) return true;
+  if (/\.(png|webp|svg|ico|jpe?g|gif)$/i.test(pathname)) return true;
   return false;
 }
 

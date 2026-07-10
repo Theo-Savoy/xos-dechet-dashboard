@@ -1,4 +1,4 @@
-import { GlassCard, Tag } from "../../lib/ui";
+import { GlassCard, Tag } from "../../components/ui";
 import "./demo.css";
 
 const metrics = [

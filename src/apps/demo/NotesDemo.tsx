@@ -1,4 +1,4 @@
-import { Button, GlassCard, Tag } from "../../lib/ui";
+import { Button, GlassCard, Tag } from "../../components/ui";
 import "./demo.css";
 
 const notes = [

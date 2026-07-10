@@ -1,9 +1,10 @@
+import logoXos from "../../assets/logo-xos.png";
 import "../../os/theme.css";
 import { Button } from "./Button";
 import { GlassCard } from "./GlassCard";
 import { Tag } from "./Tag";
 
-/** Page de démo des composants src/lib/ui, enregistrée comme app X OS. */
+/** Page de démo des composants UI X OS, enregistrée comme app en dev. */
 export function UiDemo() {
   return (
     <div style={{ minHeight: "100%", padding: "3rem" }}>
@@ -16,7 +17,15 @@ export function UiDemo() {
           marginBottom: "2.5rem",
         }}
       >
-        <span className="xos-logo">X OS</span>
+        <span className="xos-logo">
+          <img
+            src={logoXos}
+            alt="XOS"
+            className="xos-logo__img"
+            width={880}
+            height={334}
+          />
+        </span>
         <span className="xos-numeric" style={{ color: "var(--xos-text-muted)" }}>
           1 234,56 €
         </span>

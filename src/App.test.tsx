@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./lib/useSession", () => ({
+vi.mock("./auth/useSession", () => ({
   useSession: vi.fn(),
 }));
 
@@ -11,12 +11,12 @@ vi.mock("./os/Desktop", () => ({
   Desktop: () => <div data-testid="desktop" />,
 }));
 
-vi.mock("./lib/LoginScreen", () => ({
+vi.mock("./auth/LoginScreen", () => ({
   LoginScreen: () => <div data-testid="login-screen" />,
 }));
 
 import App from "./App";
-import { useSession } from "./lib/useSession";
+import { useSession } from "./auth/useSession";
 
 const mockUseSession = vi.mocked(useSession);
 

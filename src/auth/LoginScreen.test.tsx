@@ -8,7 +8,7 @@ const { signInWithOtp } = vi.hoisted(() => ({
   signInWithOtp: vi.fn().mockResolvedValue({ data: {}, error: null }),
 }));
 
-vi.mock("./supabase", () => ({
+vi.mock("../lib/supabase", () => ({
   supabase: {
     auth: { signInWithOtp },
   },

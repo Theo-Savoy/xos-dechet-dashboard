@@ -1,4 +1,5 @@
 import { useEffect, useReducer } from "react";
+import logoXos from "../assets/logo-xos.png";
 import { Dock } from "./Dock";
 import { appRegistry, type AppManifest } from "./registry";
 import { WindowManager } from "./WindowManager";
@@ -47,7 +48,7 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
       <header className="xos-menubar">
         <span className="xos-logo">
           <img
-            src="/logo-xos.png"
+            src={logoXos}
             alt="XOS"
             className="xos-logo__img"
             decoding="async"

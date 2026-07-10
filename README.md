@@ -1,30 +1,59 @@
-# XOS — Dashboard Opportunités Déchet
+# XOS — Portail & Dashboard Déchet
 
-Dashboard (Vercel, HTML + serverless Python) listant les opportunités Salesforce
-"déchet" : opp ouvertes avec CloseDate dépassée, sans activité, sans montant, etc.
+Monorepo Vercel : portail **X OS** (React/Vite) + dashboard déchet legacy (`dashboard.html`) + API serverless.
 
 ## Structure
-- `dashboard.html` — front (dark theme, filtres, tri, pagination), maintenu à la main
-- `api/refresh.py` — fonction serverless : SOQL Salesforce + scoring, source unique des données
-- `middleware.js` — Basic Auth (Edge Middleware) sur tout le site
-- `fetch_dechet_opps.py`, `compute_and_score.py` — scripts locaux de debug
 
-## Refresh
-Le front charge ses données via `GET /api/refresh` :
-- **Automatique quotidien** : la réponse est mise en cache par le CDN Vercel
-  pendant 24h (`s-maxage=86400`). Passé ce délai, la prochaine visite
-  redéclenche un fetch Salesforce. Pas de cron, pas de stockage.
-- **Bouton 🔄 Actualiser** : appel avec un query param cache-buster qui bypass
-  le CDN → données fraîches immédiates, gardées en `localStorage` pour survivre
-  au rechargement de la page.
+```
+├── api/                  # Fonctions serverless Vercel (Node + Python)
+├── public/
+│   ├── dashboard.html    # Dashboard déchet (vanilla JS, préservé tel quel)
+│   ├── fonts/            # Polices web (woff2) servies en prod
+│   └── logo-xos.png
+├── scripts/
+│   ├── audit/            # Scripts d'audit Salesforce
+│   ├── fetch_dechet_opps.py
+│   └── compute_and_score.py
+├── src/
+│   ├── auth/             # Connexion OTP + session Supabase
+│   ├── apps/             # Applications fenêtrées X OS
+│   ├── components/ui/    # Design system (Button, Tag, GlassCard…)
+│   ├── lib/              # Clients partagés (Supabase, types)
+│   └── os/               # Bureau virtuel (dock, fenêtres, launcher)
+├── supabase/migrations/
+└── middleware.js         # Auth hybride (JWT Supabase + Basic Auth legacy)
+```
+
+## Développement
+
+```bash
+npm install
+npm run dev      # SPA X OS sur http://localhost:5173
+npm test         # Vitest
+npm run build    # Build production
+```
+
+En dev, le registry expose aussi des apps de démo (aperçu, notes, design system).
+
+## Dashboard déchet
+
+Le front legacy charge ses données via `GET /api/refresh` (Python/Salesforce). Il est embarqué dans X OS via l'app **CRM Cleaner** (`iframe` → `/dashboard.html`).
+
+- Refresh automatique : cache CDN 24h
+- Bouton Actualiser : bypass cache + `localStorage`
 
 ## Authentification
-Tout le site (HTML + API) est derrière un Basic Auth géré par `middleware.js` :
-identifiant `xos`, mot de passe dans la variable d'environnement
-`DASHBOARD_PASSWORD`. Pour le changer :
-`vercel env rm DASHBOARD_PASSWORD production && vercel env add DASHBOARD_PASSWORD production`
-puis redéployer.
 
-Variables d'environnement requises (Vercel) : `SF_CLIENT_ID`, `SF_CLIENT_SECRET`,
-`SF_REFRESH_TOKEN`, `DASHBOARD_PASSWORD`, et optionnellement `SF_LOGIN_URL`,
-`SF_INSTANCE_URL`.
+- **X OS** : magic link Supabase (`@xos-learning.fr`), bridge SSO vers cookie `xos_auth`
+- **Legacy** : Basic Auth (`xos` / `DASHBOARD_PASSWORD`) pour accès direct au dashboard et API
+
+Variables Vercel : `SF_*`, `DASHBOARD_PASSWORD`, `SUPABASE_*`, `VITE_SUPABASE_*`.
+
+## Polices
+
+Seuls les fichiers `public/fonts/*.woff2` sont servis en production. Les sources OTF/webfont kit (Brockmann, Neue Montreal) restent hors dépôt — voir [docs/fonts.md](docs/fonts.md).
+
+## Documentation
+
+- [Plan d'implémentation X OS](docs/xos_implementation_plan.md)
+- [Plan portail](docs/xos_portal_plan.md)

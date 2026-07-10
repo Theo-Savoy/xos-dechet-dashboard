@@ -1,0 +1,24 @@
+.xos-app-loading,
+.xos-app-error {
+  padding: 2.5rem;
+  color: var(--xos-text, #f4f5fb);
+  text-align: center;
+}
+
+.xos-app-error p {
+  margin: 0;
+}
+
+.xos-app-error button {
+  margin-top: 1rem;
+  padding: 0.5rem 1.5rem;
+  border: 1px solid var(--xos-border, rgba(255, 255, 255, 0.08));
+  border-radius: 0.5rem;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.xos-app-error button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

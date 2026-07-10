@@ -7,7 +7,8 @@ dashboard_data.json
 __MACOSX/
 .claude/
 .commandcode/
-fonts/New Aeonik Trials/
+fonts/
 node_modules/
 dist/
 supabase/.temp/
+Logo_*.png

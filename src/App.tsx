@@ -1,7 +1,8 @@
-import { LoginScreen } from "./lib/LoginScreen";
-import { useSession } from "./lib/useSession";
+import { LoginScreen } from "./auth/LoginScreen";
+import { useSession } from "./auth/useSession";
 import { Desktop } from "./os/Desktop";
 import type { Session } from "@supabase/supabase-js";
+import "./app.css";
 
 function AppContent({ session }: { session: Session }) {
   return (
@@ -16,22 +17,14 @@ function App() {
   const { session, loading, bridgeError } = useSession();
 
   if (loading) {
-    return <div style={{ color: "#e6e6e6", padding: 40 }}>Chargement…</div>;
+    return <div className="xos-app-loading">Chargement…</div>;
   }
 
   if (bridgeError) {
     return (
-      <div style={{ color: "#e6e6e6", padding: 40, textAlign: "center" }}>
+      <div className="xos-app-error">
         <p>Impossible de préparer l'accès au CRM.</p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          style={{
-            marginTop: 16,
-            padding: "8px 24px",
-            cursor: "pointer",
-          }}
-        >
+        <button type="button" onClick={() => window.location.reload()}>
           Réessayer
         </button>
       </div>
