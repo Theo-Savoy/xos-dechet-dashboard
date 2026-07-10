@@ -89,10 +89,16 @@ export async function createSession(
   token: string,
   name: string,
   contacts: ContactPreview[],
+  scheduledFor?: string,
 ): Promise<{ session: SessionDetail; contacts: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
-    body: JSON.stringify({ action: "create_session", name, contacts }),
+    body: JSON.stringify({
+      action: "create_session",
+      name,
+      contacts,
+      ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
+    }),
   });
 }
 

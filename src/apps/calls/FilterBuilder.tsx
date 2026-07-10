@@ -1,20 +1,27 @@
 import { useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
+  CONTACT_LIMIT_OPTIONS,
+  CONTACT_LIST_UNLIMITED,
   EFFECTIF_TRANCHES,
+  FONCTION_PRESETS,
   NIVEAU_DECISION_OPTIONS,
   RESULTAT_CALL_VALUES,
+  SECTEUR_VALUES,
   TYPE_CLIENT_VALUES,
   type CallTargetPreset,
+  type ContactLimit,
   type FilterTree,
 } from "../../crm";
-import { asOptions, ChipGroup, TagInput, TriState } from "./filterControls";
+import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
 
 type FilterBuilderProps = {
   filters: FilterTree;
   onChange: (next: FilterTree) => void;
   previewCount: number | null;
   previewLoading: boolean;
+  contactLimit: ContactLimit;
+  onContactLimitChange: (limit: ContactLimit) => void;
   onPreview: () => void;
   presets: CallTargetPreset[];
   presetsLoading: boolean;
@@ -25,11 +32,17 @@ type FilterBuilderProps = {
   onDeletePreset: (id: number) => void;
 };
 
+function limitLabel(limit: ContactLimit): string {
+  return limit === CONTACT_LIST_UNLIMITED ? "Pas de limite (max 2000)" : String(limit);
+}
+
 export function FilterBuilder({
   filters,
   onChange,
   previewCount,
   previewLoading,
+  contactLimit,
+  onContactLimitChange,
   onPreview,
   presets,
   presetsLoading,
@@ -123,11 +136,12 @@ export function FilterBuilder({
       <details className="calls-fb-section" open>
         <summary>Entreprise</summary>
         <div className="calls-fb-section__body">
-          <TagInput
-            label="Secteurs d’activité"
+          <PicklistMultiSelect
+            label="Secteurs d'activité"
+            options={asOptions(SECTEUR_VALUES)}
             value={filters.entreprise.secteurs}
             onChange={(secteurs) => setEntreprise({ secteurs })}
-            placeholder="ex. Finance, Transports…"
+            searchPlaceholder="Filtrer les secteurs…"
           />
           <ChipGroup
             label="Effectifs"
@@ -184,6 +198,13 @@ export function FilterBuilder({
             options={NIVEAU_DECISION_OPTIONS}
             value={filters.contact.niveau_decision}
             onChange={(niveau_decision) => setContact({ niveau_decision })}
+          />
+          <ChipGroup
+            label="Fonction"
+            hint="Presets sur le poste (OR entre les cases cochées)"
+            options={FONCTION_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))}
+            value={filters.contact.fonctions}
+            onChange={(fonctions) => setContact({ fonctions })}
           />
           <label className="calls-checkbox">
             <input
@@ -282,36 +303,24 @@ export function FilterBuilder({
               />
             </label>
           </div>
-          <div className="calls-fb-row">
-            <label className="calls-field">
-              <span>Durée min (sec)</span>
-              <input
-                type="number"
-                min={0}
-                className="calls-input"
-                value={filters.relance.duree_min_sec ?? ""}
-                onChange={(e) =>
-                  setRelance({ duree_min_sec: e.target.value ? Number(e.target.value) : null })
-                }
-              />
-            </label>
-            <label className="calls-field">
-              <span>Durée max (sec)</span>
-              <input
-                type="number"
-                min={0}
-                className="calls-input"
-                value={filters.relance.duree_max_sec ?? ""}
-                onChange={(e) =>
-                  setRelance({ duree_max_sec: e.target.value ? Number(e.target.value) : null })
-                }
-              />
-            </label>
-          </div>
         </div>
       </details>
 
       <footer className="calls-fb-footer">
+        <label className="calls-field calls-field--inline">
+          <span>Contacts max</span>
+          <select
+            className="calls-select"
+            value={contactLimit}
+            onChange={(e) => onContactLimitChange(Number(e.target.value) as ContactLimit)}
+          >
+            {CONTACT_LIMIT_OPTIONS.map((limit) => (
+              <option key={limit} value={limit}>
+                {limitLabel(limit)}
+              </option>
+            ))}
+          </select>
+        </label>
         <Button onClick={onPreview} disabled={previewLoading}>
           {previewLoading ? "Recherche…" : "Aperçu de la liste"}
         </Button>

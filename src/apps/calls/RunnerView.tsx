@@ -69,9 +69,23 @@ export function RunnerView({
         <>
           <GlassCard className="calls-contact-card">
             <h3>{displayedContact.contact_name}</h3>
+            {displayedContact.title && (
+              <p className="calls-contact-card__title">{displayedContact.title}</p>
+            )}
             <p className="calls-contact-card__account">
               {displayedContact.account_name ?? "Compte inconnu"}
             </p>
+            {displayedContact.linkedin_url && (
+              <p>
+                <a
+                  href={displayedContact.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Profil LinkedIn
+                </a>
+              </p>
+            )}
             {displayedContact.phone ? (
               <div className="calls-contact-card__phone">
                 <a href={`tel:${displayedContact.phone}`} className="calls-phone-link xos-numeric">

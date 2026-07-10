@@ -14,6 +14,7 @@ describe("emptyFilterTree", () => {
     const tree = emptyFilterTree();
     expect(tree.entreprise.secteurs).toEqual([]);
     expect(tree.entreprise.effectifs).toEqual([]);
+    expect(tree.contact.fonctions).toEqual([]);
     expect(tree.relance.dernier_resultat).toEqual([]);
   });
 

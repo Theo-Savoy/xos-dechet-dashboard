@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
-import { emptyFilterTree, type CallTargetPreset, type DedupEntry, type FilterTree } from "../../crm";
+import { emptyFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree } from "../../crm";
 import {
   completeSession,
   createFollowUpSession,
@@ -42,6 +42,9 @@ function errorMessage(err: unknown): string {
     if (err.status === 401) return "Session expirée — reconnectez-vous.";
     if (err.status === 404) return "Séance introuvable.";
     if (err.code === "no_follow_up_contacts") return "Aucun contact ne nécessite de relance.";
+    if (err.code === "session_contacts_insert_failed") {
+      return "Échec d'enregistrement de la liste d'appels (base de données)";
+    }
     return `Erreur API (${err.code})`;
   }
   return "Une erreur est survenue.";
@@ -62,6 +65,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<FilterTree>(emptyFilterTree());
+  const [contactLimit, setContactLimit] = useState<ContactLimit>(200);
   const [preview, setPreview] = useState<ContactPreview[]>([]);
   const [dedup, setDedup] = useState<DedupEntry[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -170,7 +174,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setPreviewLoading(true);
     setNewError(null);
     try {
-      const data = await fetchContactList(token, filters);
+      const data = await fetchContactList(token, filters, { limit: contactLimit });
       if (previewRequest.current !== requestId) return;
       setPreview(data.contacts);
       setDedup(data.dedup);
@@ -210,12 +214,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
-  const handleCreate = async (name: string, contactList: ContactPreview[]) => {
+  const handleCreate = async (name: string, contactList: ContactPreview[], scheduledFor: string) => {
     if (!token) return;
     setCreateLoading(true);
     setNewError(null);
     try {
-      const data = await createSession(token, name, contactList);
+      const data = await createSession(token, name, contactList, scheduledFor);
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
@@ -352,6 +356,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onNewSession={() => {
             setView("new");
             setFilters(emptyFilterTree());
+            setContactLimit(200);
             setPreview([]);
             setDedup([]);
             setNewError(null);
@@ -365,6 +370,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         <NewSessionView
           filters={filters}
           onFiltersChange={handleFiltersChange}
+          contactLimit={contactLimit}
+          onContactLimitChange={setContactLimit}
           loading={createLoading}
           previewLoading={previewLoading}
           error={newError}
@@ -379,7 +386,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
-          onCreate={(name, list) => void handleCreate(name, list)}
+          onCreate={(name, list, scheduledFor) => void handleCreate(name, list, scheduledFor)}
         />
       )}
 

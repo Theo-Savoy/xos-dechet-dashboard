@@ -87,6 +87,66 @@ export function TriState({
   );
 }
 
+/** Liste searchable à cases à cocher pour picklists volumineuses. */
+export function PicklistMultiSelect<T extends string>({
+  label,
+  hint,
+  options,
+  value,
+  onChange,
+  searchPlaceholder = "Rechercher…",
+}: {
+  label: string;
+  hint?: string;
+  options: readonly { value: T; label: string }[];
+  value: T[];
+  onChange: (next: T[]) => void;
+  searchPlaceholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const inputId = useId();
+  const normalizedQuery = query.trim().toLowerCase();
+  const visible = normalizedQuery
+    ? options.filter((opt) => opt.label.toLowerCase().includes(normalizedQuery))
+    : options;
+
+  const toggle = (v: T) => {
+    onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  };
+
+  return (
+    <div className="calls-fb-control">
+      <div className="calls-fb-control__label">
+        <label htmlFor={inputId}>{label}</label>
+        {hint && <small>{hint}</small>}
+        {value.length > 1 && <span className="calls-fb-or">OU</span>}
+      </div>
+      <input
+        id={inputId}
+        type="search"
+        className="calls-input calls-picklist__search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={searchPlaceholder}
+        aria-label={label}
+      />
+      <div className="calls-picklist" role="group" aria-label={label}>
+        {visible.map((opt) => (
+          <label key={opt.value} className="calls-checkbox calls-checkbox--tight">
+            <input
+              type="checkbox"
+              checked={value.includes(opt.value)}
+              onChange={() => toggle(opt.value)}
+            />
+            {opt.label}
+          </label>
+        ))}
+        {visible.length === 0 && <p className="calls-picklist__empty">Aucun résultat.</p>}
+      </div>
+    </div>
+  );
+}
+
 /** Saisie libre de tags (ex : secteurs) — Entrée ou virgule pour ajouter, croix pour retirer. */
 export function TagInput({
   label,

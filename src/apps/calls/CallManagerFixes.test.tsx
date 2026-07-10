@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventPanel } from "./EventPanel";
@@ -9,7 +9,7 @@ import { FilterBuilder } from "./FilterBuilder";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
 import { RunnerView } from "./RunnerView";
-import { TagInput } from "./filterControls";
+import { PicklistMultiSelect } from "./filterControls";
 import type { SessionContact, SessionDetail } from "./types";
 import { emptyFilterTree } from "../../crm";
 
@@ -33,6 +33,8 @@ const alice = {
   contact_name: "Alice Martin",
   account_name: "Acme",
   phone: "0102030405",
+  title: "Responsable formation",
+  linkedin_url: "https://linkedin.com/in/alice",
   status: "called",
   outcome: "RDV planifié",
   comments: null,
@@ -99,6 +101,29 @@ describe("RunnerView", () => {
 
     expect(screen.getByRole("heading", { name: "RDV planifié — Alice Martin" })).toBeTruthy();
   });
+
+  it("shows title and LinkedIn on the contact card", () => {
+    const current = { ...bob, title: "RF", linkedin_url: "https://linkedin.com/in/bob" };
+    render(
+      <RunnerView
+        session={session}
+        contacts={[current]}
+        currentContact={current}
+        loading={false}
+        error={null}
+        awaitingEvent={null}
+        onBack={vi.fn()}
+        onLogAndNext={vi.fn()}
+        onLogEvent={vi.fn()}
+        onSkip={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("RF")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Profil LinkedIn" }).getAttribute("href")).toBe(
+      "https://linkedin.com/in/bob",
+    );
+  });
 });
 
 describe("RecapView", () => {
@@ -119,32 +144,44 @@ describe("RecapView", () => {
   });
 });
 
-describe("TagInput", () => {
-  it("associates its visible label with the editable input", () => {
-    render(<TagInput label="Secteurs" value={[]} onChange={vi.fn()} placeholder="Finance" />);
+describe("PicklistMultiSelect", () => {
+  it("associates its visible label with the searchable input", () => {
+    render(
+      <PicklistMultiSelect
+        label="Secteurs"
+        options={[{ value: "Finance", label: "Finance" }]}
+        value={[]}
+        onChange={vi.fn()}
+        searchPlaceholder="Filtrer"
+      />,
+    );
 
-    expect((screen.getByLabelText("Secteurs") as HTMLInputElement).placeholder).toBe("Finance");
+    expect(screen.getByRole("searchbox", { name: "Secteurs" }).getAttribute("placeholder")).toBe("Filtrer");
   });
 });
 
 describe("call targeting copy and controls", () => {
+  const filterBuilderProps = {
+    filters: emptyFilterTree(),
+    onChange: vi.fn(),
+    previewCount: null as number | null,
+    previewLoading: false,
+    contactLimit: 200 as const,
+    onContactLimitChange: vi.fn(),
+    onPreview: vi.fn(),
+    presets: [] as [],
+    presetsLoading: false,
+    savingPreset: false,
+    currentUserId: "user-1",
+    onLoadPreset: vi.fn(),
+    onSavePreset: vi.fn(),
+    onDeletePreset: vi.fn(),
+  };
+
   it("uses CRM-generic copy and exposes dedup toggle state", () => {
     render(
       <>
-        <FilterBuilder
-          filters={emptyFilterTree()}
-          onChange={vi.fn()}
-          previewCount={null}
-          previewLoading={false}
-          onPreview={vi.fn()}
-          presets={[]}
-          presetsLoading={false}
-          savingPreset={false}
-          currentUserId="user-1"
-          onLoadPreset={vi.fn()}
-          onSavePreset={vi.fn()}
-          onDeletePreset={vi.fn()}
-        />
+        <FilterBuilder {...filterBuilderProps} />
         <DedupBanner
           dedup={[{ sf_contact_id: "003000000000001", in_session_of: "Séance A" }]}
           mode="avertir"
@@ -153,31 +190,23 @@ describe("call targeting copy and controls", () => {
       </>,
     );
 
-    expect(screen.getByText("Secteurs d’activité")).toBeTruthy();
+    expect(screen.getByText("Secteurs d'activité")).toBeTruthy();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();
+    expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Avertir" }).getAttribute("aria-pressed")).toBe("true");
     expect(document.body.textContent).not.toContain("Sales" + "force");
+    expect(screen.queryByText("Durée min (sec)")).toBeNull();
   });
 
   it("only shows preset deletion to the current preset owner", async () => {
     const user = userEvent.setup();
     render(
       <FilterBuilder
-        filters={emptyFilterTree()}
-        onChange={vi.fn()}
-        previewCount={null}
-        previewLoading={false}
-        onPreview={vi.fn()}
+        {...filterBuilderProps}
         presets={[
           { id: 1, name: "Partagé à moi", filters: emptyFilterTree(), shared: true, owner: "user-1" },
           { id: 2, name: "Partagé par un collègue", filters: emptyFilterTree(), shared: true, owner: "user-2" },
         ]}
-        presetsLoading={false}
-        savingPreset={false}
-        currentUserId="user-1"
-        onLoadPreset={vi.fn()}
-        onSavePreset={vi.fn()}
-        onDeletePreset={vi.fn()}
       />,
     );
 
@@ -189,15 +218,76 @@ describe("call targeting copy and controls", () => {
   });
 });
 
+describe("preview selection and enriched rows", () => {
+  const preview = [
+    {
+      sf_contact_id: "003000000000001",
+      sf_account_id: null,
+      contact_name: "Alice Martin",
+      account_name: "Acme",
+      phone: "0102030405",
+      title: "RF",
+      linkedin_url: "https://linkedin.com/in/alice",
+    },
+    {
+      sf_contact_id: "003000000000002",
+      sf_account_id: null,
+      contact_name: "Bob Durand",
+      account_name: "Beta",
+      phone: null,
+      title: null,
+      linkedin_url: null,
+    },
+  ];
+
+  it("lets the user deselect contacts before launching a session", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(
+      <NewSessionView
+        filters={emptyFilterTree()}
+        onFiltersChange={vi.fn()}
+        contactLimit={200}
+        onContactLimitChange={vi.fn()}
+        loading={false}
+        previewLoading={false}
+        error={null}
+        preview={preview}
+        dedup={[]}
+        presets={[]}
+        presetsLoading={false}
+        savingPreset={false}
+        currentUserId="user-1"
+        onBack={vi.fn()}
+        onPreview={vi.fn()}
+        onLoadPreset={vi.fn()}
+        onSavePreset={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onCreate={onCreate}
+      />,
+    );
+
+    expect(screen.getByText("2 sélectionnés / 2")).toBeTruthy();
+    const bobRow = screen.getByText("Bob Durand").closest("li");
+    expect(bobRow).toBeTruthy();
+    await user.click(within(bobRow!).getByRole("checkbox"));
+    await user.type(screen.getByLabelText("Nom de la séance"), "Test");
+    await user.click(screen.getByRole("button", { name: "Lancer la séance" }));
+    expect(onCreate).toHaveBeenCalledWith("Test", [preview[0]], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+});
+
 describe("error announcements", () => {
   it("announces a new-session error to assistive technology", () => {
     render(
       <NewSessionView
         filters={emptyFilterTree()}
         onFiltersChange={vi.fn()}
+        contactLimit={200}
+        onContactLimitChange={vi.fn()}
         loading={false}
         previewLoading={false}
-        error="Une erreur est survenue."
+        error="Échec d'enregistrement de la liste d'appels (base de données)"
         preview={[]}
         dedup={[]}
         presets={[]}
@@ -213,6 +303,8 @@ describe("error announcements", () => {
       />,
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("Une erreur est survenue.");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Échec d'enregistrement de la liste d'appels (base de données)",
+    );
   });
 });

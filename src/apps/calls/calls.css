@@ -208,7 +208,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 0.75rem;
+}
+
+.calls-preview__actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .calls-preview__list {
@@ -221,11 +228,17 @@
 
 .calls-preview__list li {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 0.9fr;
+  grid-template-columns: auto 1.1fr 1fr 1fr 0.9fr auto auto;
   gap: 0.5rem;
   font-size: 0.85rem;
   padding: 0.4rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+
+.calls-preview__select {
+  display: flex;
+  align-items: center;
 }
 
 .calls-preview__list li span {
@@ -246,6 +259,12 @@
 .calls-contact-card__account {
   margin: 0 0 0.75rem;
   color: var(--xos-text-muted);
+}
+
+.calls-contact-card__title {
+  margin: 0 0 0.35rem;
+  color: var(--xos-text-muted);
+  font-size: 0.92rem;
 }
 
 .calls-contact-card__phone {
@@ -441,6 +460,26 @@
   border: 1px solid color-mix(in srgb, var(--xos-accent) 40%, transparent);
   border-radius: 999px;
   padding: 0.1rem 0.45rem;
+}
+
+.calls-picklist {
+  display: grid;
+  gap: 0.25rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.5rem;
+}
+
+.calls-picklist__search {
+  margin-bottom: 0.25rem;
+}
+
+.calls-picklist__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--xos-text-muted);
 }
 
 .calls-chip-row {

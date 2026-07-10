@@ -9,6 +9,7 @@ export type SessionSummary = {
   name: string;
   status: SessionStatus;
   created_at: string;
+  scheduled_for: string | null;
   total: number;
   called: number;
   skipped: number;
@@ -23,6 +24,8 @@ export type SessionContact = {
   contact_name: string;
   account_name: string | null;
   phone: string | null;
+  title: string | null;
+  linkedin_url: string | null;
   status: ContactStatus;
   outcome: ResultatCall | null;
   comments: string | null;
@@ -36,6 +39,7 @@ export type SessionDetail = {
   name: string;
   status: SessionStatus;
   created_at: string;
+  scheduled_for?: string | null;
 };
 
 export type ContactPreview = {
@@ -44,6 +48,10 @@ export type ContactPreview = {
   contact_name: string;
   account_name: string | null;
   phone: string | null;
+  title?: string | null;
+  linkedin_url?: string | null;
+  email?: string | null;
+  mobile_phone?: string | null;
   last_call_at?: string | null;
   call_count?: number;
 };

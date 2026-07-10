@@ -21,6 +21,14 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatScheduledDate(value: string): string {
+  return new Date(`${value}T12:00:00`).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function SessionsView({
   sessions,
   stats,
@@ -105,7 +113,11 @@ export function SessionsView({
                     {session.status === "active" ? "En cours" : "Terminée"}
                   </Tag>
                 </div>
-                <span className="calls-session-card__date">{formatDate(session.created_at)}</span>
+                <span className="calls-session-card__date">
+                  {session.scheduled_for
+                    ? `Séance du ${formatScheduledDate(session.scheduled_for)}`
+                    : formatDate(session.created_at)}
+                </span>
                 <ProgressBar called={session.called} total={session.total} />
                 {session.skipped > 0 && (
                   <small className="calls-session-card__skipped">
