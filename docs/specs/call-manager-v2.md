@@ -5,14 +5,14 @@
 ## Principe directeur : surcouche agnostique (réutilisabilité + juridique)
 
 Le produit est un **outil générique**, XOS n'en est qu'une **configuration**. Deux règles non négociables :
-1. **Adapter CRM** : toute logique Salesforce vit derrière une interface fine `src/crm/` (côté front) / `api/crm/` (côté serveur). Salesforce = une implémentation. Aucun nom de champ SF en dur ailleurs.
-2. **Mapping piloté par config** : les noms de champs / picklists / valeurs spécifiques à l'org vivent dans une **config par tenant** (table `crm_mapping`), pas dans le code. Le moteur lit le mapping pour construire les requêtes.
+1. **Adapter CRM** : toute logique Salesforce vit derrière une interface fine `src/crm/` (côté front) / `api/_crm/` (côté serveur). Salesforce = une implémentation. Aucun nom de champ SF en dur ailleurs.
+2. **Mapping piloté par config** : les noms de champs / picklists / valeurs spécifiques à l'org vivent dans un **module de config** (`api/_crm/mapping.js`), pas dispersés en dur dans le code. Le moteur lit le mapping pour construire les requêtes. *(Un jour multi-tenant → table `crm_mapping` ; YAGNI aujourd'hui, le seam est le même.)*
 
 **Hors périmètre v2** (YAGNI) : multi-CRM réel, multi-tenant complet, onboarding. Mais le code doit rester *prêt* pour ça (seam + config).
 
 ---
 
-## Schéma SF de référence (config XOS — va dans `crm_mapping`, pas en dur)
+## Schéma SF de référence (config XOS — va dans `api/_crm/mapping.js`, pas en dur)
 
 - **Account** : `Industry` (secteur, picklist ~40), `Nombre_employes__c` (tranches : `1 - 50`, `51 - 250`, `251 - 500`, `501 - 1000`, `1001 - 2000`, `2001 - 4999`, `5000 et plus`), `Type_de_client__c` (`Client inactif` / `Client` / `Prospect`), `ParentId` (compte principal → filiales).
 - **Contact** : `Phone`, `AccountId`, `Title` (Fonction, texte libre → catégorisation phase 2), `Niveau_de_d_cision__c` (`+`/`=`/`-`), `NPA__c` (booléen NE PAS APPELER → exclure).
@@ -22,20 +22,14 @@ Le produit est un **outil générique**, XOS n'en est qu'une **configuration**. 
 
 ---
 
-## Data model (migrations Supabase)
+## Mapping CRM — `api/_crm/mapping.js` (pas de table)
+
+Objet de config exporté, lu par l'adapter. Contient les noms d'API SF, les tranches d'effectifs, les valeurs de picklist, l'attribution de la config XOS ci-dessus. **Aucun nom de champ SF en dur ailleurs.** Le front récupère les listes de valeurs (secteurs, effectifs, résultats) via un endpoint de config si besoin, sinon en dur côté UI depuis un type partagé.
+
+## Data model (migration Supabase)
 
 ```sql
--- 005 : mapping CRM par tenant (config-driven, pas de champ en dur dans le code)
-create table public.crm_mapping (
-  id         bigint generated always as identity primary key,
-  crm        text not null default 'salesforce',
-  key        text not null,          -- ex: 'account.employees_field'
-  value      jsonb not null,         -- ex: {"api":"Nombre_employes__c","ranges":[...]}
-  unique(crm, key)
-);
--- seed avec la config XOS ci-dessus.
-
--- 006 : presets de ciblage sauvegardables
+-- 005 : presets de ciblage sauvegardables
 create table public.call_target_presets (
   id         bigint generated always as identity primary key,
   owner      uuid not null references public.profiles(id) on delete cascade,
@@ -81,7 +75,7 @@ RLS : select authenticated, write service_role (comme l'existant). `call_session
 
 ---
 
-## Adapter CRM — `api/crm/salesforce.js` (lot v2.A)
+## Adapter CRM — `api/_crm/salesforce.js` (lot v2.A)
 
 Interface (implémentée pour SF, extensible) :
 - `buildTargetQuery(filters, mapping, sfUserId)` → SOQL Contact avec sous-requêtes/jointures Account + agrégations Task (relance) + Opportunity (opp ouverte/perdue). Échappement SOQL, `LIMIT` borné.
@@ -89,7 +83,9 @@ Interface (implémentée pour SF, extensible) :
 - `logCall(token, { contactId, accountId, resultat, comments, durationSec, ownerId })` → crée Task (`TaskSubtype='Call'`, `Resultat_call__c`, `CallDurationInSeconds`, `WhoId`, `WhatId`, `Status='Achevée'`, **`OwnerId = ownerId`** — attribution niveau 1, `Subject='Appel — <resultat>'`, description + `[via X OS par {nom}]`).
 - `createEvent(token, { subject, startDateTime, durationMin, whoId, whatId, ownerId, invitees[] })` → crée Event (RDV planifié) avec le contact + invités additionnels.
 
-Le mapping (noms de champs) vient de `crm_mapping`, jamais en dur.
+Le mapping (noms de champs) vient de `api/_crm/mapping.js`, jamais en dur.
+
+**Vérification `OwnerId` (critère d'acceptation v2.B)** : avec le token d'intégration prod, insérer une Task de test avec `OwnerId` = un autre user → si succès, supprimer et valider niveau 1 ; si refus (partage/rôle), **fallback** : owner = intégration + mention « [via X OS par {nom}] » (comme v1), et le signaler.
 
 ---
 
@@ -123,7 +119,7 @@ Le mapping (noms de champs) vient de `crm_mapping`, jamais en dur.
 
 | Lot | Fichiers | Agent |
 |---|---|---|
-| **v2.A** Adapter + mapping + moteur SOQL | migration 005/006, `api/crm/salesforce.js`, `api/calls-list.js` (réécrit) | Command Code / DeepSeek |
+| **v2.A** Adapter + mapping + moteur SOQL | `api/_crm/mapping.js`, `api/_crm/salesforce.js`, migration `005_call_target_presets`, `api/calls-list.js` (réécrit) | Command Code / DeepSeek |
 | **v2.B** Log enrichi + Event + presets | `api/calls.js` (log_call v2, log_event), `api/presets.js` | Cursor |
 | **v2.C** UI builder + runner v2 | `src/apps/calls/**` (réécrit), `src/crm/` (types) | Antigravity/Cursor |
 | **v2.D** *(lot séparé, après)* Login Salesforce | voir `docs/xos_implementation_plan.md` Phase 8 | — |
