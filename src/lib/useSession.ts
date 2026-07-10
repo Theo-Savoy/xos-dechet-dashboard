@@ -5,36 +5,82 @@ import { supabase } from "./supabase";
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bridgeError, setBridgeError] = useState(false);
   const bridged = useRef(false);
+  const bridging = useRef(false);
+  const generation = useRef(0);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setLoading(false);
-      if (s && !bridged.current) {
-        bridged.current = true;
-        fetch("/api/sso-bridge", {
+    let cancelled = false;
+
+    async function bridge(s: Session, gen: number) {
+      if (bridged.current || bridging.current) return;
+      bridging.current = true;
+      try {
+        const res = await fetch("/api/sso-bridge", {
           method: "POST",
           headers: { Authorization: `Bearer ${s.access_token}` },
-        }).catch(() => {});
+        });
+        if (cancelled || generation.current !== gen) return;
+        if (!res.ok) {
+          setBridgeError(true);
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+        bridged.current = true;
+        setSession(s);
+        setBridgeError(false);
+        setLoading(false);
+      } catch {
+        if (cancelled || generation.current !== gen) return;
+        setBridgeError(true);
+        setSession(null);
+        setLoading(false);
+      } finally {
+        if (generation.current === gen) {
+          bridging.current = false;
+        }
       }
+    }
+
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (cancelled) return;
+      if (s) {
+        bridge(s, generation.current);
+      } else {
+        setSession(null);
+        setBridgeError(false);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (cancelled) return;
+      setBridgeError(true);
+      setSession(null);
+      setLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
+      if (cancelled) return;
       if (s && !bridged.current) {
-        bridged.current = true;
-        fetch("/api/sso-bridge", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${s.access_token}` },
-        }).catch(() => {});
+        bridge(s, generation.current);
+      } else if (!s) {
+        generation.current += 1;
+        bridged.current = false;
+        bridging.current = false;
+        setSession(null);
+        setBridgeError(false);
+        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  return { session, loading };
+  return { session, loading, bridgeError };
 }

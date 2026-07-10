@@ -19,27 +19,31 @@ export const appRegistry: AppManifest[] = [
     component: lazy(() => import("../apps/cleaner/CleanerApp")),
     defaultSize: { w: 1100, h: 540 },
   },
-  {
-    id: "overview-demo",
-    title: "Aperçu commercial",
-    icon: "◒",
-    component: lazy(() => import("../apps/demo/OverviewDemo")),
-    defaultSize: { w: 760, h: 520 },
-  },
-  {
-    id: "notes-demo",
-    title: "Notes d’équipe",
-    icon: "✦",
-    component: lazy(() => import("../apps/demo/NotesDemo")),
-    defaultSize: { w: 620, h: 460 },
-  },
-  {
-    id: "ui-demo",
-    title: "Design system",
-    icon: "⌘",
-    component: lazy(() => import("../lib/ui/demo")),
-    defaultSize: { w: 800, h: 580 },
-  },
+  ...(import.meta.env.DEV
+    ? [
+        {
+          id: "overview-demo",
+          title: "Aperçu commercial",
+          icon: "◒",
+          component: lazy(() => import("../apps/demo/OverviewDemo")),
+          defaultSize: { w: 760, h: 520 },
+        },
+        {
+          id: "notes-demo",
+          title: "Notes d’équipe",
+          icon: "✦",
+          component: lazy(() => import("../apps/demo/NotesDemo")),
+          defaultSize: { w: 620, h: 460 },
+        },
+        {
+          id: "ui-demo",
+          title: "Design system",
+          icon: "⌘",
+          component: lazy(() => import("../lib/ui/demo")),
+          defaultSize: { w: 800, h: 580 },
+        },
+      ]
+    : []),
 ];
 
 export function getAppManifest(appId: string): AppManifest | undefined {

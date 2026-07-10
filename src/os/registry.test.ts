@@ -2,13 +2,21 @@ import { describe, expect, it } from "vitest";
 import { appRegistry, getAppManifest } from "./registry";
 
 describe("appRegistry", () => {
-  it("registers the two fixture apps and the shared UI demo", () => {
-    expect(appRegistry.map((app) => app.id)).toEqual([
-      "cleaner",
-      "overview-demo",
-      "notes-demo",
-      "ui-demo",
-    ]);
+  it("always includes cleaner", () => {
+    expect(appRegistry.map((app) => app.id)).toContain("cleaner");
+  });
+
+  it("includes demo fixtures only in DEV mode", () => {
+    if (import.meta.env.DEV) {
+      expect(appRegistry.map((app) => app.id)).toEqual([
+        "cleaner",
+        "overview-demo",
+        "notes-demo",
+        "ui-demo",
+      ]);
+    } else {
+      expect(appRegistry.map((app) => app.id)).toEqual(["cleaner"]);
+    }
   });
 
   it("exposes unique ids and usable default window sizes", () => {
@@ -21,7 +29,7 @@ describe("appRegistry", () => {
   });
 
   it("finds a manifest by id", () => {
-    expect(getAppManifest("notes-demo")?.title).toBe("Notes d’équipe");
+    expect(getAppManifest("cleaner")?.title).toBe("CRM Cleaner");
     expect(getAppManifest("unknown")).toBeUndefined();
   });
 });
