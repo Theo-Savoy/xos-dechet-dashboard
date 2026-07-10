@@ -25,7 +25,7 @@ L'objectif est double :
 | **Déploiement & URL** | Projet Vercel renommé **xos**, domaine canonique actif : **`https://xos.hellotheo.fr`** (redirect URL Supabase à configurer). L'ancien alias **`https://xos-dechet-repo.vercel.app`** reste actif pour assurer la transition. *(⚠️ Ne jamais utiliser xos.vercel.app qui appartient à un autre site).* | Zéro migration d'env vars, iframe same-origin, branding propre pour le lancement. |
 | **Tests des écritures SF** | Org de production avec précautions : enregistrements de test créés puis nettoyés ; chaque spec d'agent est relue sous cet angle (pas de sandbox disponible). | Pratique actuelle d'update.js, discipline vérifiée à la gate QC. |
 | **Basic Auth legacy** | Coexistence connexion Supabase par lien magique + Basic Auth pendant les phases 0–2, puis **extinction du Basic Auth** une fois l'équipe basculée sur le lien magique Supabase. | Un secret partagé de moins à terme. |
-| **Intégration Slack + Agent** | **Chat custom** X OS + **Slack API** (DM user↔bot) pour persistance/miroir mobile. **Cerveau = agent Hermes sur VPS Théo** (mémoire + skills multi-user, connexion aux outils commerciaux). X OS/Vercel = UI + proxy JWT vers Hermes + transport Slack. Pas d'iframe Slack ; pas d'app Navigateur générique. | Slack refuse l'embarquement. Hermes centralise l'intelligence et les use cases métier ; X OS reste le bureau de travail. |
+| **Intégration Slack + Agent** | **Chat custom** X OS + **Slack API** (DM user↔bot) pour persistance/miroir mobile. **Cerveau = Hermes, une app Slack** installée dans le workspace (mémoire + skills multi-user, infra opaque côté Théo). X OS/Vercel = UI + **transport Slack uniquement** ; **jamais d'appel direct à Hermes** (tout passe par Slack). Pas d'iframe Slack ; pas d'app Navigateur générique. | Slack refuse l'embarquement. Hermes centralise l'intelligence via sa propre app Slack ; X OS reste le bureau de travail. |
 
 ### Réalités des données Salesforce (vérifiées avec Théo)
 - Les activités (appels, RDV) **sont loggées** en Tasks/Events → le Pulse hebdo est faisable.
@@ -67,7 +67,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   │   ├── weekly/      Weekly Perf
 │   │   ├── calls/       Call Manager (séances de prospection)
 │   │   ├── arena/       Gamification
-│   │   ├── agent/       Chat Agent XOS (UI custom → proxy Hermes VPS + Slack API)
+│   │   ├── agent/       Chat Agent XOS (UI custom → Slack API ; Hermes = app Slack)
 │   │   └── hub/         Paramètres & statut
 │   ├── auth/            login OTP, session, bridge SSO
 │   ├── components/ui/   design system partagé
@@ -78,7 +78,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   ├── refresh.py       ✅ inchangé        ├── update.js  ✅ inchangé
 │   ├── search.js        Launcher (SOSL)    ├── log.js     /log & /create
 │   ├── perf.js          Weekly Perf        ├── calls.js   Call Manager
-│   ├── chat.js          Proxy Hermes + historique  ├── slack/   oauth, events
+│   ├── chat.js          Transport Slack + historique  ├── slack/   oauth, events
 │   ├── arena/*.js       challenges         └── status.js  Hub (limits SF)
 ├── middleware.js        auth edge : session Supabase OU Basic Auth legacy
 └── supabase/migrations/ schéma Postgres
@@ -157,16 +157,16 @@ Rendre la saisie CRM et la prospection ludiques grâce au challenge d'équipe.
 *   **Compte** : profil connecté, mapping vers le user Salesforce, déconnexion.
 
 ### 7. 🤖 Agent XOS (Chat + Slack + Hermes) — *Nouveau — Phase 7*
-Assistant conversationnel : **go-to quotidien** de l'équipe. X OS est l'interface ; **Hermes sur VPS** est le cerveau ; Slack est le fil de messages partagé (dont mobile).
+Assistant conversationnel : **go-to quotidien** de l'équipe. X OS est l'interface ; **Hermes (une app Slack)** est le cerveau ; Slack est le fil de messages partagé (dont mobile).
 *   **Ce que ce n'est pas** : iframe Slack, app Navigateur générique, ni LLM embarqué dans le repo Vercel.
 *   **Parcours utilisateur** :
     1. Connexion X OS (magic link `@xos-learning.fr`).
     2. Première visite : **Connecter Slack** (OAuth) → `profiles.slack_user_id`.
-    3. App **Agent** : DM privé user ↔ bot ; chaque message part vers Hermes avec l'identité du commercial pour charger **sa** mémoire et **ses** skills.
+    3. App **Agent** : DM privé user ↔ bot Hermes ; Hermes reçoit le message côté Slack et l'identifie par son `slack_user_id` pour charger **sa** mémoire et **ses** skills.
 *   **Architecture** :
     *   **Front** (`src/apps/agent/`) : UI messagerie.
-    *   **Vercel** (`api/chat`, `api/slack/`) : auth JWT, transport Slack, **proxy sécurisé** vers Hermes.
-    *   **Hermes (VPS)** : agent multi-user — configuration **mémoire par commercial** + **skills** (Salesforce, log d'appel, Cleaner, recherche, etc.) pour coller aux process terrain.
+    *   **Vercel** (`api/chat`, `api/slack/`) : auth JWT + **transport Slack uniquement** (poster/lire les DM, webhook events) ; jamais d'appel direct à Hermes.
+    *   **Hermes (app Slack)** : agent multi-user — **mémoire par commercial** + **skills** (Salesforce, log d'appel, Cleaner, recherche, etc.) configurés côté Hermes ; reçoit les DM via sa propre intégration Slack.
     *   **Slack** : persistance et sync du fil ; reprise dans l'app Slack native.
 *   **Bénéfice** : un seul assistant qui connaît le contexte de chaque commercial et agit sur les vrais outils, sans quitter X OS.
 
@@ -182,7 +182,7 @@ graph TD
     C --> D[Phase 4: Call Manager]
     D --> E[Phase 5: Arena]
     E --> F[Phase 6: Business Review]
-    F --> G[Phase 7: Agent XOS — chat Slack + Hermes VPS]
+    F --> G[Phase 7: Agent XOS — chat Slack + Hermes app Slack]
 ```
 
 Le détail des lots, l'assignation aux agents (via Orca) et les critères de vérification par lot sont dans **`docs/xos_implementation_plan.md`**.
@@ -194,4 +194,4 @@ Le détail des lots, l'assignation aux agents (via Orca) et les critères de vé
 2. **Définitions des métriques** (Pulse, entonnoir) dépendantes de la discipline de saisie réelle : audits SOQL préalables + validation Théo avant chaque UI de dashboard.
 3. **Polices** : Brockmann (webfont) + Neue Montreal (OTF→woff2) livrées ; ⚠️ Aeonik en version TRIAL seulement → exclue de la prod.
 4. **Quotas API Salesforce** : les nouveaux endpoints sont cachés (15 min) et le Hub affiche la consommation.
-5. **Slack + Hermes** : workspace unique ; rate limits Slack ; disponibilité VPS ↔ Vercel ; skills et mémoire gérés côté Hermes, pas dans le repo X OS.
+5. **Slack + Hermes** : workspace unique ; rate limits Slack ; **Hermes = app Slack** (skills et mémoire gérés côté Hermes, pas dans le repo X OS) ; X OS ne parle qu'à Slack.
