@@ -16,15 +16,15 @@ L'objectif est double :
 |---|---|---|
 | **Stack front** | **Vite + React + TypeScript**, SPA statique. Pas de Next.js. | Composants réutilisables entre apps, état réactif partagé, et garde-fous mécaniques (tsc, ESLint) pour le contrôle qualité du travail des agents d'implémentation. L'API existe déjà en serverless, un framework fullstack n'apporte rien. |
 | **Dashboard déchet actuel** | **Préservé tel quel** (`dashboard.html` + `api/refresh.py` + `api/update.js` intouchés), embarqué en **iframe** dans la fenêtre "CRM Cleaner". Migration React ultérieure, app par app, jamais big-bang. | Zéro risque de régression sur la seule app en production. La préservation ne contraint pas la stack du reste du portail. |
-| **Authentification** | **Supabase Auth + Google SSO**, restreint au domaine Google Workspace de l'entreprise. Comptes individuels, sessions JWT, révocation immédiate. | Un mot de passe partagé est inacceptable pour une app qui écrit dans Salesforce, affiche la perf individuelle et gamifie l'équipe. |
+| **Authentification** | **Supabase Auth + magic link email**, restreint au domaine `xos-learning.fr` par trigger SQL à l'inscription. Comptes individuels, sessions JWT persistantes par device, révocation immédiate. *(Google SSO abandonné le 2026-07-10 : Théo n'est pas admin Workspace du client.)* | Un mot de passe partagé est inacceptable pour une app qui écrit dans Salesforce, affiche la perf individuelle et gamifie l'équipe. |
 | **Persistance** | **Supabase Postgres** : profils (mapping ↔ user Salesforce), challenges/scores Arena, configuration, journal d'actions. | Le journal actuel en Blob immuable est déjà un contournement des limites de Vercel Blob (pas de read-modify-write sûr). Arena et la config exigent requêtes, transactions et concurrence propres. |
 | **Écritures Salesforce** | Via l'**utilisateur d'intégration** côté serveur (comme aujourd'hui), chaque action **attribuée à la personne connectée** dans le journal Postgres. | Upgrade possible plus tard vers OAuth SF par user (actions sous le nom de chacun dans SF) sans rien casser. |
 | **API** | Endpoints serverless Vercel conservés et étendus (nouveaux endpoints en Node, protégés par vérification du JWT Supabase). | Continuité, pas de réécriture. |
 | **Périmètre** | **Tout le plan, phasé** : socle → Launcher → Weekly Perf → Lead Tracker → Arena. | Architecture dimensionnée pour l'ensemble dès le départ. |
 | **Cible d'affichage** | Desktop-first (métaphore bureau). Mobile : consultation dégradée non prioritaire. | Le public est l'équipe commerciale au poste de travail. |
-| **Déploiement & URL** | Même projet Vercel (xos-dechet-repo), nouveau sous-domaine **`xos.hellotheo.fr`** (CNAME + domaine ajouté au projet + redirect URL Supabase). L'URL Vercel actuelle reste valide pendant la transition. | Zéro migration d'env vars, iframe same-origin, branding propre pour le lancement. |
+| **Déploiement & URL** | Projet Vercel renommé **xos**, domaine canonique actif : **`https://xos.hellotheo.fr`** (redirect URL Supabase à configurer). L'ancien alias **`https://xos-dechet-repo.vercel.app`** reste actif pour assurer la transition. *(⚠️ Ne jamais utiliser xos.vercel.app qui appartient à un autre site).* | Zéro migration d'env vars, iframe same-origin, branding propre pour le lancement. |
 | **Tests des écritures SF** | Org de production avec précautions : enregistrements de test créés puis nettoyés ; chaque spec d'agent est relue sous cet angle (pas de sandbox disponible). | Pratique actuelle d'update.js, discipline vérifiée à la gate QC. |
-| **Basic Auth legacy** | Coexistence SSO + Basic Auth pendant les phases 0–2, puis **extinction du Basic Auth** une fois l'équipe basculée sur Google SSO. | Un secret partagé de moins à terme. |
+| **Basic Auth legacy** | Coexistence connexion Supabase par lien magique + Basic Auth pendant les phases 0–2, puis **extinction du Basic Auth** une fois l'équipe basculée sur le lien magique Supabase. | Un secret partagé de moins à terme. |
 
 ### Réalités des données Salesforce (vérifiées avec Théo)
 - Les activités (appels, RDV) **sont loggées** en Tasks/Events → le Pulse hebdo est faisable.
@@ -102,7 +102,7 @@ Chaque app est enregistrée dans `src/os/registry.ts`. Une app ne touche jamais 
 - RLS : lecture pour tout utilisateur authentifié ; écritures uniquement via service role (endpoints serverless).
 
 **Auth de bout en bout** :
-1. SPA : Supabase Auth (Google SSO, domaine restreint) ; pas de session → écran de login.
+1. SPA : Supabase Auth (lien magique email, domaine restreint) ; pas de session → écran de login.
 2. Endpoints Node : vérification du JWT Supabase (header Authorization) avant toute action ; l'identité vérifiée alimente `action_journal.actor`.
 3. `middleware.js` : accepte **soit** une session Supabase valide (cookie) **soit** le Basic Auth legacy — l'iframe Cleaner et l'accès direct historique à `/dashboard.html` continuent de fonctionner pendant toute la transition.
 
