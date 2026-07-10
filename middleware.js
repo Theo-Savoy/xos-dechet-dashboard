@@ -21,7 +21,7 @@ const LOGIN_HTML = `<!doctype html><html lang="fr"><meta charset="utf-8">
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;color:#555">
 <div style="flex:1;height:1px;background:#2a2f3a"></div><span>ou</span><div style="flex:1;height:1px;background:#2a2f3a"></div>
 </div>
-<a href="/" style="display:block;padding:10px;border-radius:8px;background:#fff;color:#333;text-decoration:none;font-weight:600;font-size:14px">Se connecter avec Google</a>
+<a href="/" style="display:block;padding:10px;border-radius:8px;background:#fff;color:#333;text-decoration:none;font-weight:600;font-size:14px">Connexion par lien magique</a>
 <p style="margin-top:16px;font-size:12px;color:#555">Comptes <strong>@xos-learning.fr</strong> uniquement</p>
 </div></body></html>`;
 
