@@ -24,9 +24,8 @@ export type SessionContact = {
   account_name: string | null;
   phone: string | null;
   status: ContactStatus;
-  resultat: ResultatCall | null;
+  outcome: ResultatCall | null;
   comments: string | null;
-  duration_sec: number | null;
   sf_task_id: string | null;
   sf_event_id: string | null;
   called_at: string | null;

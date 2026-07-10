@@ -5,6 +5,7 @@ type RecapViewProps = {
   session: SessionDetail;
   contacts: SessionContact[];
   followUpLoading: boolean;
+  error: string | null;
   onBack: () => void;
   onCreateFollowUp: () => void;
 };
@@ -13,12 +14,13 @@ export function RecapView({
   session,
   contacts,
   followUpLoading,
+  error,
   onBack,
   onCreateFollowUp,
 }: RecapViewProps) {
   const called = contacts.filter((c) => c.status === "called");
   const skipped = contacts.filter((c) => c.status === "skipped");
-  const rdv = called.filter((c) => c.resultat === "RDV planifié");
+  const rdv = called.filter((c) => c.outcome === "RDV planifié");
 
   return (
     <div className="calls-view">
@@ -54,6 +56,8 @@ export function RecapView({
         </GlassCard>
       </div>
 
+      {error && <p role="alert" aria-live="assertive" className="calls-error">{error}</p>}
+
       {called.length > 0 && (
         <GlassCard className="calls-recap-list">
           <h3>Appels enregistrés</h3>
@@ -61,8 +65,8 @@ export function RecapView({
             {called.map((contact) => (
               <li key={contact.id}>
                 <strong>{contact.contact_name}</strong>
-                <Tag variant={contact.resultat === "RDV planifié" ? "alert" : "accent"}>
-                  {contact.resultat ?? "—"}
+                <Tag variant={contact.outcome === "RDV planifié" ? "alert" : "accent"}>
+                  {contact.outcome ?? "—"}
                 </Tag>
                 {contact.comments && <span>{contact.comments}</span>}
               </li>

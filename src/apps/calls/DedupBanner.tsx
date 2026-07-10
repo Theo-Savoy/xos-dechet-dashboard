@@ -26,6 +26,7 @@ export function DedupBanner({ dedup, mode, onModeChange }: DedupBannerProps) {
           type="button"
           className={`calls-tristate__opt${mode === "avertir" ? " calls-tristate__opt--active" : ""}`}
           onClick={() => onModeChange("avertir")}
+          aria-pressed={mode === "avertir"}
         >
           Avertir
         </button>
@@ -33,6 +34,7 @@ export function DedupBanner({ dedup, mode, onModeChange }: DedupBannerProps) {
           type="button"
           className={`calls-tristate__opt${mode === "exclure" ? " calls-tristate__opt--active" : ""}`}
           onClick={() => onModeChange("exclure")}
+          aria-pressed={mode === "exclure"}
         >
           Exclure
         </button>

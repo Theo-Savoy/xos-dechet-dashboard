@@ -12,7 +12,7 @@ type RunnerViewProps = {
   currentContact: SessionContact | null;
   loading: boolean;
   error: string | null;
-  awaitingEvent: boolean;
+  awaitingEvent: SessionContact | null;
   onBack: () => void;
   onLogAndNext: (resultat: ResultatCall, comments: string, durationSec: number | null) => void;
   onLogEvent: (start: string, durationMin: number, invitees: string[]) => void;
@@ -43,6 +43,7 @@ export function RunnerView({
 
   const called = contacts.filter((c) => c.status === "called").length;
   const total = contacts.length;
+  const displayedContact = awaitingEvent ?? currentContact;
 
   return (
     <div className="calls-view calls-view--runner">
@@ -60,25 +61,25 @@ export function RunnerView({
 
       {error && (
         <GlassCard className="calls-error">
-          <p>{error}</p>
+          <p role="alert" aria-live="assertive">{error}</p>
         </GlassCard>
       )}
 
-      {currentContact ? (
+      {displayedContact ? (
         <>
           <GlassCard className="calls-contact-card">
-            <h3>{currentContact.contact_name}</h3>
+            <h3>{displayedContact.contact_name}</h3>
             <p className="calls-contact-card__account">
-              {currentContact.account_name ?? "Compte inconnu"}
+              {displayedContact.account_name ?? "Compte inconnu"}
             </p>
-            {currentContact.phone ? (
+            {displayedContact.phone ? (
               <div className="calls-contact-card__phone">
-                <a href={`tel:${currentContact.phone}`} className="calls-phone-link xos-numeric">
-                  {currentContact.phone}
+                <a href={`tel:${displayedContact.phone}`} className="calls-phone-link xos-numeric">
+                  {displayedContact.phone}
                 </a>
                 <Button
                   variant="secondary"
-                  onClick={() => window.open(`tel:${currentContact.phone}`, "_self")}
+                  onClick={() => window.open(`tel:${displayedContact.phone}`, "_self")}
                 >
                   Appeler
                 </Button>
@@ -90,7 +91,7 @@ export function RunnerView({
 
           {awaitingEvent ? (
             <EventPanel
-              contactName={currentContact.contact_name}
+              contactName={awaitingEvent.contact_name}
               loading={loading}
               onSubmit={onLogEvent}
             />

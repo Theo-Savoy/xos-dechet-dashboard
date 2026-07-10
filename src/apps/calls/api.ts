@@ -104,6 +104,10 @@ export async function logCall(
   comments: string,
   durationSec: number | null,
 ): Promise<{ needs_event?: boolean }> {
+  if (durationSec !== null && (!Number.isInteger(durationSec) || durationSec < 0)) {
+    throw new Error("La durée doit être un entier positif ou nul.");
+  }
+
   return apiFetch(token, "/api/calls", {
     method: "POST",
     body: JSON.stringify({
@@ -112,7 +116,7 @@ export async function logCall(
       contact_id: contactId,
       resultat,
       comments,
-      duration_sec: durationSec,
+      ...(durationSec === null ? {} : { duration_sec: durationSec }),
     }),
   });
 }

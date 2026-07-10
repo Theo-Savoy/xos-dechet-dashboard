@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 
 /** Transforme une liste de valeurs simples en options {value, label}. */
 export function asOptions<T extends string>(values: readonly T[]): { value: T; label: string }[] {
@@ -102,6 +102,7 @@ export function TagInput({
   placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const inputId = useId();
 
   const commit = () => {
     const v = draft.trim();
@@ -121,7 +122,7 @@ export function TagInput({
   return (
     <div className="calls-fb-control">
       <div className="calls-fb-control__label">
-        <span>{label}</span>
+        <label htmlFor={inputId}>{label}</label>
         {hint && <small>{hint}</small>}
         {value.length > 1 && <span className="calls-fb-or">OU</span>}
       </div>
@@ -140,6 +141,7 @@ export function TagInput({
           </span>
         ))}
         <input
+          id={inputId}
           type="text"
           className="calls-taginput__field"
           value={draft}

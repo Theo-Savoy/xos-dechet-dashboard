@@ -16,6 +16,7 @@ type NewSessionViewProps = {
   presets: CallTargetPreset[];
   presetsLoading: boolean;
   savingPreset: boolean;
+  currentUserId: string;
   onBack: () => void;
   onPreview: () => void;
   onLoadPreset: (preset: CallTargetPreset) => void;
@@ -35,6 +36,7 @@ export function NewSessionView({
   presets,
   presetsLoading,
   savingPreset,
+  currentUserId,
   onBack,
   onPreview,
   onLoadPreset,
@@ -86,6 +88,7 @@ export function NewSessionView({
         presets={presets}
         presetsLoading={presetsLoading}
         savingPreset={savingPreset}
+        currentUserId={currentUserId}
         onLoadPreset={onLoadPreset}
         onSavePreset={onSavePreset}
         onDeletePreset={onDeletePreset}
@@ -93,7 +96,7 @@ export function NewSessionView({
 
       {error && (
         <GlassCard className="calls-error">
-          <p>{error}</p>
+          <p role="alert" aria-live="assertive">{error}</p>
         </GlassCard>
       )}
 

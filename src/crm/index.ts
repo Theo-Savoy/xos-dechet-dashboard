@@ -71,7 +71,7 @@ export function emptyFilterTree(): FilterTree {
       compte_principal: null,
     },
     contact: {
-      a_telephone: false,
+      a_telephone: true,
       niveau_decision: [],
       exclure_npa: true,
     },
@@ -94,4 +94,5 @@ export type CallTargetPreset = {
   name: string;
   filters: FilterTree;
   shared: boolean;
+  owner: string;
 };

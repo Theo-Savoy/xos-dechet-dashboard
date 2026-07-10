@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
 import { emptyFilterTree, type CallTargetPreset, type DedupEntry, type FilterTree } from "../../crm";
 import {
@@ -41,6 +41,7 @@ function errorMessage(err: unknown): string {
   if (err instanceof CallsApiError) {
     if (err.status === 401) return "Session expirée — reconnectez-vous.";
     if (err.status === 404) return "Séance introuvable.";
+    if (err.code === "no_follow_up_contacts") return "Aucun contact ne nécessite de relance.";
     return `Erreur API (${err.code})`;
   }
   return "Une erreur est survenue.";
@@ -64,6 +65,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [preview, setPreview] = useState<ContactPreview[]>([]);
   const [dedup, setDedup] = useState<DedupEntry[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const previewRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
 
@@ -144,23 +146,44 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   }, [params?.session_id, token, openSession]);
 
+  const invalidatePreview = () => {
+    previewRequest.current += 1;
+    setPreview([]);
+    setDedup([]);
+    setPreviewLoading(false);
+  };
+
+  const handleFiltersChange = (next: FilterTree) => {
+    setFilters(next);
+    invalidatePreview();
+  };
+
+  const handleLoadPreset = (preset: CallTargetPreset) => {
+    setFilters(preset.filters);
+    invalidatePreview();
+  };
+
   const handlePreview = async () => {
     if (!token) return;
+    const requestId = previewRequest.current + 1;
+    previewRequest.current = requestId;
     setPreviewLoading(true);
     setNewError(null);
     try {
       const data = await fetchContactList(token, filters);
+      if (previewRequest.current !== requestId) return;
       setPreview(data.contacts);
       setDedup(data.dedup);
       if (data.contacts.length === 0) {
         setNewError("Aucun contact ne correspond aux filtres.");
       }
     } catch (err) {
+      if (previewRequest.current !== requestId) return;
       setNewError(errorMessage(err));
       setPreview([]);
       setDedup([]);
     } finally {
-      setPreviewLoading(false);
+      if (previewRequest.current === requestId) setPreviewLoading(false);
     }
   };
 
@@ -341,7 +364,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       {view === "new" && (
         <NewSessionView
           filters={filters}
-          onFiltersChange={setFilters}
+          onFiltersChange={handleFiltersChange}
           loading={createLoading}
           previewLoading={previewLoading}
           error={newError}
@@ -350,9 +373,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           presets={presets}
           presetsLoading={presetsLoading}
           savingPreset={savingPreset}
+          currentUserId={session.user.id}
           onBack={goToSessions}
           onPreview={() => void handlePreview()}
-          onLoadPreset={(preset) => setFilters(preset.filters)}
+          onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
           onCreate={(name, list) => void handleCreate(name, list)}
@@ -366,7 +390,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           currentContact={findNextPending(contacts)}
           loading={runnerLoading}
           error={runnerError}
-          awaitingEvent={awaitingEvent !== null}
+          awaitingEvent={awaitingEvent}
           onBack={goToSessions}
           onLogAndNext={(resultat, comments, durationSec) =>
             void handleLogAndNext(resultat, comments, durationSec)
@@ -383,6 +407,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           session={activeSession}
           contacts={contacts}
           followUpLoading={followUpLoading}
+          error={runnerError}
           onBack={goToSessions}
           onCreateFollowUp={() => void handleCreateFollowUp()}
         />

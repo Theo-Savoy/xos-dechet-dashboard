@@ -19,6 +19,7 @@ type FilterBuilderProps = {
   presets: CallTargetPreset[];
   presetsLoading: boolean;
   savingPreset: boolean;
+  currentUserId: string;
   onLoadPreset: (preset: CallTargetPreset) => void;
   onSavePreset: (name: string, shared: boolean) => void;
   onDeletePreset: (id: number) => void;
@@ -33,6 +34,7 @@ export function FilterBuilder({
   presets,
   presetsLoading,
   savingPreset,
+  currentUserId,
   onLoadPreset,
   onSavePreset,
   onDeletePreset,
@@ -55,6 +57,7 @@ export function FilterBuilder({
     setPresetName("");
     setPresetShared(false);
   };
+  const selectedPreset = presets.find((preset) => String(preset.id) === selectedPresetId);
 
   return (
     <GlassCard className="calls-filterbuilder">
@@ -80,7 +83,7 @@ export function FilterBuilder({
             ))}
           </select>
         </label>
-        {selectedPresetId && (
+        {selectedPreset?.owner === currentUserId && (
           <Button
             variant="secondary"
             onClick={() => {
@@ -121,8 +124,7 @@ export function FilterBuilder({
         <summary>Entreprise</summary>
         <div className="calls-fb-section__body">
           <TagInput
-            label="Secteurs"
-            hint="Industry"
+            label="Secteurs d’activité"
             value={filters.entreprise.secteurs}
             onChange={(secteurs) => setEntreprise({ secteurs })}
             placeholder="ex. Finance, Transports…"
@@ -152,7 +154,7 @@ export function FilterBuilder({
             />
           </div>
           <label className="calls-field">
-            <span>Compte principal (ID Salesforce, cible le groupe)</span>
+            <span>Compte principal (ID CRM, cible le groupe)</span>
             <input
               type="text"
               className="calls-input"

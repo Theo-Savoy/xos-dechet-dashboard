@@ -6,6 +6,10 @@ describe("emptyFilterTree", () => {
     expect(emptyFilterTree().contact.exclure_npa).toBe(true);
   });
 
+  it("requires a telephone number by default", () => {
+    expect(emptyFilterTree().contact.a_telephone).toBe(true);
+  });
+
   it("has no active OU-lists by default", () => {
     const tree = emptyFilterTree();
     expect(tree.entreprise.secteurs).toEqual([]);

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRegistry, getAppManifest } from "../../os/registry";
 
 const mockSession = {
-  user: { email: "theo@xos-learning.fr" },
+  user: { id: "user-1", email: "theo@xos-learning.fr" },
   access_token: "test-token-abc",
 };
 
@@ -131,5 +131,138 @@ describe("CallManagerApp component", () => {
 
     expect(screen.getByText("Composer une liste")).toBeTruthy();
     expect(screen.getByText("Aperçu de la liste")).toBeTruthy();
+  });
+
+  it("invalidates the preview and ignores an older preview response", async () => {
+    const user = userEvent.setup();
+    let resolveFirst!: (response: Response) => void;
+    let resolveSecond!: (response: Response) => void;
+    const first = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<Response>((resolve) => {
+      resolveSecond = resolve;
+    });
+    let previewRequest = 0;
+
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/calls") {
+        return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
+      }
+      if (url === "/api/calls?stats=1") {
+        return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
+      }
+      if (url === "/api/presets") {
+        return Promise.resolve(new Response(JSON.stringify({ presets: [] }), { status: 200 }));
+      }
+      if (url === "/api/calls-list") {
+        previewRequest += 1;
+        return previewRequest === 1 ? first : second;
+      }
+      return Promise.resolve(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
+    });
+
+    render(<CallManagerApp />);
+    await user.click(await screen.findByText("Nouvelle séance"));
+    await user.click(screen.getByText("Aperçu de la liste"));
+    await user.click(screen.getByLabelText("A un numéro de téléphone"));
+    await user.click(screen.getByText("Aperçu de la liste"));
+
+    resolveSecond(
+      new Response(
+        JSON.stringify({
+          contacts: [{ contact_name: "Contact récent" }],
+          dedup: [],
+        }),
+        { status: 200 },
+      ),
+    );
+    await screen.findByText("Contact récent");
+
+    resolveFirst(
+      new Response(
+        JSON.stringify({
+          contacts: [{ contact_name: "Contact obsolète" }],
+          dedup: [],
+        }),
+        { status: 200 },
+      ),
+    );
+    await waitFor(() => expect(screen.getByText("Contact récent")).toBeTruthy());
+
+    expect(screen.queryByText("Contact obsolète")).toBeNull();
+  });
+
+  it("keeps the last RDV contact visible until its Event is logged", async () => {
+    const user = userEvent.setup();
+    const pendingContact = {
+      id: 101,
+      position: 0,
+      sf_contact_id: "003000000000001AAA",
+      sf_account_id: "001000000000001AAA",
+      contact_name: "Alice Martin",
+      account_name: "Acme",
+      phone: "0102030405",
+      status: "pending",
+      outcome: null,
+      comments: null,
+      sf_task_id: null,
+      sf_event_id: null,
+      called_at: null,
+    };
+    const calledContact = {
+      ...pendingContact,
+      status: "called",
+      outcome: "RDV planifié",
+      sf_task_id: "00T000000000001AAA",
+      called_at: "2026-07-10T20:00:00Z",
+    };
+    const activeSession = {
+      id: 1,
+      name: "Dernier contact",
+      status: "active",
+      created_at: "2026-07-10T10:00:00Z",
+    };
+    const detailResponses = [
+      { session: activeSession, contacts: [pendingContact] },
+      { session: activeSession, contacts: [calledContact] },
+      { session: activeSession, contacts: [calledContact] },
+      { session: { ...activeSession, status: "completed" }, contacts: [calledContact] },
+    ];
+    const postedActions: string[] = [];
+
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/calls?stats=1") {
+        return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
+      }
+      if (url === "/api/calls?session_id=1") {
+        const detail = detailResponses.shift();
+        return Promise.resolve(new Response(JSON.stringify(detail), { status: 200 }));
+      }
+      if (url === "/api/calls" && init?.method === "POST") {
+        const action = JSON.parse(String(init.body)).action as string;
+        postedActions.push(action);
+        const response = action === "log_call" ? { ok: true, needs_event: true } : { ok: true };
+        return Promise.resolve(new Response(JSON.stringify(response), { status: 200 }));
+      }
+      if (url === "/api/calls") {
+        return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
+    });
+
+    render(<CallManagerApp params={{ session_id: "1" }} />);
+    await screen.findByRole("heading", { name: "Dernier contact" });
+    await user.selectOptions(screen.getByLabelText("Résultat"), "RDV planifié");
+    await user.click(screen.getByRole("button", { name: "Logguer & suivant" }));
+
+    await screen.findByRole("heading", { name: "RDV planifié — Alice Martin" });
+    expect(postedActions).toEqual(["log_call"]);
+
+    await user.click(screen.getByRole("button", { name: "Enregistrer le RDV & suivant" }));
+    await screen.findByText("Terminée");
+    expect(postedActions).toEqual(["log_call", "log_event", "complete_session"]);
   });
 });
