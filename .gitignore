@@ -8,3 +8,5 @@ __MACOSX/
 .claude/
 .commandcode/
 fonts/New Aeonik Trials/
+node_modules/
+dist/
