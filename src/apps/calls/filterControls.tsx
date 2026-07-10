@@ -105,12 +105,18 @@ export function PicklistMultiSelect<T extends string>({
 }) {
   const [query, setQuery] = useState("");
   const inputId = useId();
+  const listId = useId();
   const normalizedQuery = query.trim().toLowerCase();
-  const optionValues = new Set(options.map((opt) => opt.value));
+  const optionByValue = new Map(options.map((opt) => [opt.value, opt]));
+  const optionValues = new Set(optionByValue.keys());
   const obsoleteValues = value.filter((item) => !optionValues.has(item));
+  const selectedKnown = value.filter((item) => optionValues.has(item));
   const visible = normalizedQuery
     ? options.filter((opt) => opt.label.toLowerCase().includes(normalizedQuery))
-    : options;
+    : [
+        ...options.filter((opt) => value.includes(opt.value)),
+        ...options.filter((opt) => !value.includes(opt.value)),
+      ];
 
   const toggle = (v: T) => {
     onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
@@ -123,10 +129,29 @@ export function PicklistMultiSelect<T extends string>({
       <div className="calls-fb-control__label">
         <label htmlFor={inputId}>{label}</label>
         {hint && <small>{hint}</small>}
+        {value.length > 0 && (
+          <small className="calls-fb-control__count">
+            {value.length} sélectionné{value.length > 1 ? "s" : ""}
+          </small>
+        )}
         {value.length > 1 && <span className="calls-fb-or">OU</span>}
       </div>
-      {obsoleteValues.length > 0 && (
-        <div className="calls-chip-row calls-picklist__obsolete">
+
+      {(selectedKnown.length > 0 || obsoleteValues.length > 0) && (
+        <div className="calls-chip-row calls-picklist__selected">
+          {selectedKnown.map((item) => (
+            <span key={item} className="calls-chip calls-chip--active">
+              {optionByValue.get(item)?.label ?? item}
+              <button
+                type="button"
+                className="calls-chip__remove"
+                aria-label={`Retirer ${item}`}
+                onClick={() => remove(item)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
           {obsoleteValues.map((item) => (
             <span key={item} className="calls-chip calls-chip--active calls-chip--obsolete">
               {item}
@@ -143,27 +168,48 @@ export function PicklistMultiSelect<T extends string>({
           ))}
         </div>
       )}
-      <input
-        id={inputId}
-        type="search"
-        className="calls-input calls-picklist__search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={searchPlaceholder}
-        aria-label={label}
-      />
-      <div className="calls-picklist" role="group" aria-label={label}>
-        {visible.map((opt) => (
-          <label key={opt.value} className="calls-checkbox calls-checkbox--tight">
-            <input
-              type="checkbox"
-              checked={value.includes(opt.value)}
-              onChange={() => toggle(opt.value)}
-            />
-            {opt.label}
-          </label>
-        ))}
-        {visible.length === 0 && <p className="calls-picklist__empty">Aucun résultat.</p>}
+
+      <div className="calls-picklist-panel">
+        <div className="calls-picklist-panel__toolbar">
+          <input
+            id={inputId}
+            type="search"
+            className="calls-input calls-picklist__search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={label}
+            aria-controls={listId}
+          />
+          {value.length > 0 && (
+            <button
+              type="button"
+              className="calls-picklist__clear"
+              onClick={() => onChange([])}
+            >
+              Tout effacer
+            </button>
+          )}
+        </div>
+        <div id={listId} className="calls-picklist" role="group" aria-label={label}>
+          {visible.map((opt) => {
+            const checked = value.includes(opt.value);
+            return (
+              <label
+                key={opt.value}
+                className={`calls-checkbox calls-checkbox--tight calls-picklist__option${checked ? " calls-picklist__option--checked" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(opt.value)}
+                />
+                <span className="calls-checkbox__label">{opt.label}</span>
+              </label>
+            );
+          })}
+          {visible.length === 0 && <p className="calls-picklist__empty">Aucun résultat.</p>}
+        </div>
       </div>
     </div>
   );

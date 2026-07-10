@@ -91,10 +91,7 @@ export function RunnerView({
                 <a href={`tel:${displayedContact.phone}`} className="calls-phone-link xos-numeric">
                   {displayedContact.phone}
                 </a>
-                <Button
-                  variant="secondary"
-                  onClick={() => window.open(`tel:${displayedContact.phone}`, "_self")}
-                >
+                <Button onClick={() => window.open(`tel:${displayedContact.phone}`, "_self")}>
                   Appeler
                 </Button>
               </div>

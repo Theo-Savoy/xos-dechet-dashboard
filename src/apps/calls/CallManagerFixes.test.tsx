@@ -173,8 +173,28 @@ describe("PicklistMultiSelect", () => {
 
     expect(screen.getByText("Secteur inventé")).toBeTruthy();
     expect(screen.getByText("(obsolète)")).toBeTruthy();
+    expect(screen.getByText("2 sélectionnés")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Retirer Secteur inventé" }));
     expect(onChange).toHaveBeenCalledWith(["Finance"]);
+  });
+
+  it("clears all selected values from the toolbar action", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PicklistMultiSelect
+        label="Secteurs"
+        options={[
+          { value: "Finance", label: "Finance" },
+          { value: "Transports", label: "Transports" },
+        ]}
+        value={["Finance", "Transports"]}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Tout effacer" }));
+    expect(onChange).toHaveBeenCalledWith([]);
   });
 });
 

@@ -85,8 +85,10 @@ export function SessionsView({
       )}
 
       {!loading && !error && sessions.length === 0 && (
-        <GlassCard className="calls-empty">
-          <p>Aucune séance pour le moment.</p>
+        <GlassCard className="calls-empty calls-empty--hero">
+          <Tag variant="accent">Prêt à prospecter</Tag>
+          <h3>Aucune séance pour le moment</h3>
+          <p>Composez une liste ciblée, lancez une séance et journalisez vos appels au fil de l&apos;eau.</p>
           <Button onClick={onNewSession}>Créer une première séance</Button>
         </GlassCard>
       )}

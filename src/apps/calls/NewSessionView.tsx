@@ -214,6 +214,15 @@ export function NewSessionView({
               </p>
             )}
             <ul className="calls-preview__list">
+              <li className="calls-preview__list-header" aria-hidden="true">
+                <span />
+                <span>Contact</span>
+                <span>Poste</span>
+                <span>Entreprise</span>
+                <span>Téléphone</span>
+                <span>LinkedIn</span>
+                <span />
+              </li>
               {preview.map((contact) => {
                 const dup = inSessionOf.get(contact.sf_contact_id);
                 const checked = selectedIds.has(contact.sf_contact_id);
@@ -221,13 +230,14 @@ export function NewSessionView({
                   !checked && !canSelectContact(preview, selectedIds, contact.sf_contact_id, maxPerCompany);
                 return (
                   <li key={contact.sf_contact_id} className={!checked ? "calls-preview__row--excluded" : undefined}>
-                    <label className="calls-preview__select">
+                    <label className="calls-preview__select calls-checkbox calls-checkbox--tight">
                       <input
                         type="checkbox"
                         checked={checked}
                         disabled={blocked}
                         title={blocked ? (capHint ?? "Plafond entreprise atteint") : undefined}
                         onChange={() => toggleContact(contact.sf_contact_id)}
+                        aria-label={`Sélectionner ${contact.contact_name}`}
                       />
                     </label>
                     <strong>{contact.contact_name}</strong>
