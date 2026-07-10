@@ -19,6 +19,13 @@ export const appRegistry: AppManifest[] = [
     component: lazy(() => import("../apps/cleaner/CleanerApp")),
     defaultSize: { w: 1100, h: 540 },
   },
+  {
+    id: "calls",
+    title: "Call Manager",
+    icon: "☎",
+    component: lazy(() => import("../apps/calls/CallManagerApp")),
+    defaultSize: { w: 960, h: 620 },
+  },
   ...(import.meta.env.DEV
     ? [
         {

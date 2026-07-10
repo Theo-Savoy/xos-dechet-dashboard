@@ -1,0 +1,310 @@
+.calls-app {
+  min-height: 100%;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  color: var(--xos-text);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(139, 91, 250, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 100%, rgba(59, 130, 246, 0.08), transparent 38%),
+    rgba(4, 8, 28, 0.65);
+  overflow-y: auto;
+}
+
+.calls-view {
+  display: grid;
+  gap: 1rem;
+}
+
+.calls-view__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.calls-view__header h2 {
+  margin: 0.5rem 0 0;
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.calls-view__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.calls-stats,
+.calls-recap-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.calls-stat {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+}
+
+.calls-stat > span {
+  color: var(--xos-text-muted);
+  font-size: 0.8rem;
+}
+
+.calls-stat strong {
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+}
+
+.calls-state {
+  color: var(--xos-text-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+.calls-error,
+.calls-empty {
+  display: grid;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 1.25rem;
+}
+
+.calls-error p,
+.calls-empty p {
+  margin: 0;
+  color: var(--xos-text-muted);
+}
+
+.calls-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.calls-session-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.calls-session-card:hover,
+.calls-session-card:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+
+.calls-session-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.calls-session-card__date {
+  color: var(--xos-text-muted);
+  font-size: 0.82rem;
+}
+
+.calls-session-card__skipped {
+  color: var(--xos-text-muted);
+  font-size: 0.78rem;
+}
+
+.calls-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.calls-progress__track {
+  flex: 1;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.calls-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--xos-accent), color-mix(in srgb, var(--xos-accent) 70%, white));
+  transition: width 0.25s ease;
+}
+
+.calls-progress__label {
+  font-size: 0.8rem;
+  color: var(--xos-text-muted);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.calls-filters,
+.calls-preview,
+.calls-name-form,
+.calls-contact-card,
+.calls-log-form,
+.calls-recap-list {
+  padding: 1rem;
+}
+
+.calls-filters h3,
+.calls-preview h3,
+.calls-log-form h3,
+.calls-recap-list h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+.calls-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.calls-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.calls-field > span {
+  font-size: 0.82rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-input,
+.calls-select,
+.calls-textarea {
+  font-family: var(--xos-font-display);
+  font-size: 0.9rem;
+  color: var(--xos-text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--xos-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.calls-input:focus,
+.calls-select:focus,
+.calls-textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--xos-accent) 50%, transparent);
+  outline-offset: 1px;
+}
+
+.calls-textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.calls-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.calls-preview__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.calls-preview__list li {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.calls-preview__list li span {
+  color: var(--xos-text-muted);
+}
+
+.calls-preview__more {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-contact-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.35rem;
+}
+
+.calls-contact-card__account {
+  margin: 0 0 0.75rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-contact-card__phone {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.calls-phone-link {
+  font-size: 1.1rem;
+  color: var(--xos-accent);
+  text-decoration: none;
+}
+
+.calls-phone-link:hover {
+  text-decoration: underline;
+}
+
+.calls-contact-card__no-phone {
+  color: var(--xos-text-muted);
+  font-style: italic;
+}
+
+.calls-runner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.calls-recap-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.calls-recap-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+}
+
+.calls-recap-list li span {
+  color: var(--xos-text-muted);
+  flex: 1 1 100%;
+  margin-left: 0;
+}
+
+@media (max-width: 720px) {
+  .calls-stats,
+  .calls-recap-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calls-preview__list li {
+    grid-template-columns: 1fr;
+  }
+}
