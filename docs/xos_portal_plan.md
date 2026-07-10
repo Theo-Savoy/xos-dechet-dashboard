@@ -213,7 +213,7 @@ Le portail est développé comme un **socle générique réutilisable** (propri�
 | Charte graphique (couleurs, fenêtres, typo) | `src/os/theme.css` (tokens `--xos-*`, ~120 usages dans le code) |
 | Assets de marque (polices Brockmann / Neue Montreal, logo, wallpaper) | `public/fonts/`, `src/assets/` — **polices sous licence XOS, ne suivent pas le socle** |
 | Credentials (SF OAuth, Supabase) | Variables d'env Vercel (globales, pas par tenant) |
-| Résidus connus à extraire le jour venu | URL d'instance SF en fallback dans `salesforce.js` ; palette hors-charte de `auth/login.css` ; ~16 valeurs de charte en dur dans `boot.css`/`desktop.css` |
+| Résidus connus à extraire le jour venu | URL d'instance SF en fallback dans `salesforce.js` ; ~16 valeurs de charte en dur dans `boot.css`/`desktop.css` *(login.css aligné tokens `--xos-*` — 2026-07-10)* |
 
 Tout le reste — bureau virtuel, window manager, moteur de ciblage, runner de séances, presets, dédup, journal — est **cœur de produit, agnostique**.
 

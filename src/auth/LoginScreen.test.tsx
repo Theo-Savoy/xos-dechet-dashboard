@@ -14,10 +14,13 @@ vi.mock("../lib/supabase", () => ({
   },
 }));
 
-import { LoginScreen } from "./LoginScreen";
+import { LoginScreen, SALESFORCE_AUTH_START } from "./LoginScreen";
 
 describe("LoginScreen — email normalization", () => {
-  beforeEach(() => signInWithOtp.mockClear());
+  beforeEach(() => {
+    signInWithOtp.mockClear();
+    window.history.replaceState({}, "", "/");
+  });
   afterEach(cleanup);
 
   it("normalizes uppercase email with spaces to lowercased trimmed email", async () => {
@@ -55,5 +58,50 @@ describe("LoginScreen — email normalization", () => {
     expect(
       screen.getByText(/Seules les adresses @xos-learning\.fr sont autorisées/),
     ).toBeTruthy();
+  });
+});
+
+describe("LoginScreen — dual auth layout", () => {
+  beforeEach(() => {
+    signInWithOtp.mockClear();
+    window.history.replaceState({}, "", "/");
+  });
+  afterEach(cleanup);
+
+  it("exposes Salesforce login alongside the magic-link form", () => {
+    render(<LoginScreen />);
+
+    expect(
+      screen.getByRole("button", { name: "Se connecter avec Salesforce" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Recevoir un lien de connexion" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("separator", { name: "ou" })).toBeTruthy();
+  });
+
+  it("starts Salesforce OAuth via the reserved auth endpoint", async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn();
+    vi.stubGlobal("location", {
+      ...window.location,
+      assign,
+      origin: window.location.origin,
+      search: "",
+    });
+
+    render(<LoginScreen />);
+    await user.click(
+      screen.getByRole("button", { name: "Se connecter avec Salesforce" }),
+    );
+
+    expect(assign).toHaveBeenCalledWith(SALESFORCE_AUTH_START);
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces auth_error query messages for the OAuth callback path", () => {
+    window.history.replaceState({}, "", "/?auth_error=oauth_denied");
+    render(<LoginScreen />);
+    expect(screen.getByRole("alert").textContent).toContain("annulée");
   });
 });

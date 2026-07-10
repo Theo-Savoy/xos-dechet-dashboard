@@ -44,7 +44,7 @@ Le front legacy charge ses données via `GET /api/refresh` (Python/Salesforce). 
 
 ## Authentification
 
-- **X OS** : magic link Supabase (`@xos-learning.fr`), bridge SSO vers cookie `xos_auth`
+- **X OS** : écran de login dual-option — **Salesforce OAuth** (Phase 8.1 à brancher ; UI prête) **ou** magic link Supabase (`@xos-learning.fr`), puis bridge SSO vers cookie `xos_auth`
 - **Legacy** : Basic Auth (`xos` / `DASHBOARD_PASSWORD`) pour accès direct au dashboard et API
 
 Variables Vercel : `SF_*`, `DASHBOARD_PASSWORD`, `SUPABASE_*`, `VITE_SUPABASE_*`.

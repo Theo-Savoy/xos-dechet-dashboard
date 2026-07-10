@@ -122,6 +122,6 @@ Le mapping (noms de champs) vient de `api/_crm/mapping.js`, jamais en dur.
 | **v2.A** Adapter + mapping + moteur SOQL | `api/_crm/mapping.js`, `api/_crm/salesforce.js`, migration `005_call_target_presets`, `api/calls-list.js` (réécrit) | Command Code / DeepSeek |
 | **v2.B** Log enrichi + Event + presets | `api/calls.js` (log_call v2, log_event), `api/presets.js` | Cursor |
 | **v2.C** UI builder + runner v2 | `src/apps/calls/**` (réécrit), `src/crm/` (types) | Antigravity/Cursor |
-| **v2.D** *(lot séparé, après)* Login Salesforce | voir `docs/xos_implementation_plan.md` Phase 8 | — |
+| **v2.D** *(lot séparé)* Login Salesforce | voir `docs/xos_implementation_plan.md` Phase 8 — **UI dual-option livrée** (`src/auth/`) ; OAuth backend (8.1) à brancher | — |
 
 Auto-map `sf_user_id` par email : backfill + à chaque login (trigger/edge).
