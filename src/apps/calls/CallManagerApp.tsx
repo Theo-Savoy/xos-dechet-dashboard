@@ -25,6 +25,7 @@ import {
 import { resolveContextContactId } from "./runnerContext";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
+import { RecallQueueView } from "./RecallQueueView";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
 import type {
@@ -39,7 +40,7 @@ import type {
 } from "./types";
 import "./calls.css";
 
-type View = "sessions" | "new" | "runner" | "recap";
+type View = "sessions" | "new" | "runner" | "recap" | "recalls";
 
 function findNextPending(contacts: SessionContact[]): SessionContact | null {
   return contacts.find((c) => c.status === "pending") ?? null;
@@ -109,6 +110,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [contextLoading, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
+  const [focusedRecall, setFocusedRecall] = useState<RecallInboxItem | null>(null);
 
   const loadSessions = useCallback(async () => {
     if (!token) return;
@@ -386,6 +388,85 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     void loadContactContext(activeSession.id, targetId);
   }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
 
+  useEffect(() => {
+    if (view !== "recalls" || !focusedRecall) {
+      if (view !== "recalls") return;
+      setContactContext(null);
+      setContextContactId(null);
+      return;
+    }
+    void loadContactContext(focusedRecall.session_id, focusedRecall.id);
+  }, [view, focusedRecall?.session_id, focusedRecall?.id, loadContactContext]);
+
+  const openRecalls = useCallback(async () => {
+    if (!token) return;
+    setRunnerError(null);
+    setFocusedRecall(null);
+    setContactContext(null);
+    setContextContactId(null);
+    setRecallsLoading(true);
+    setView("recalls");
+    try {
+      setRecalls(await fetchRecalls(token));
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRecallsLoading(false);
+    }
+  }, [token]);
+
+  const refreshRecallsQueue = async () => {
+    if (!token) return [];
+    const list = await fetchRecalls(token);
+    setRecalls(list);
+    return list;
+  };
+
+  const handleRecallLogAndNext = async (item: RecallInboxItem, payload: LogPayload) => {
+    if (!token) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      const result = await logCall(token, item.session_id, item.id, payload.resultat, {
+        comments: payload.comments,
+        recallAt: payload.recallAt,
+        doNotCall: payload.doNotCall,
+      });
+      if (result.needs_event) {
+        setRunnerError("Finalisez le RDV depuis la fiche pour enregistrer l'événement.");
+      }
+      await refreshRecallsQueue();
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleRecallLogRdvAndNext = async (
+    item: RecallInboxItem,
+    payload: LogPayload,
+    event: { start: string; durationMin: number; invitees: string[] },
+  ) => {
+    if (!token) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      const result = await logCall(token, item.session_id, item.id, "RDV planifié", {
+        comments: payload.comments,
+        doNotCall: payload.doNotCall,
+      });
+      if (result.needs_event) {
+        await logEvent(token, item.session_id, item.id, event.start, event.durationMin, event.invitees);
+      }
+      await refreshRecallsQueue();
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
   const handleLogAndNext = async (contactId: number, payload: LogPayload) => {
     if (!token || !activeSession) return;
 
@@ -490,12 +571,16 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         payload.name,
       );
       await loadSessions();
-      if (result.target_session && payload.name && !payload.targetSessionId) {
+      if (result.target_session) {
         setFocusedContactId(null);
         setAwaitingEvent(null);
-        setActiveSession(result.target_session);
-        setContacts(result.contacts ?? []);
-        setView("runner");
+        if (result.contacts && result.contacts.length > 0) {
+          setActiveSession(result.target_session);
+          setContacts(result.contacts);
+          setView("runner");
+        } else {
+          await openSession(result.target_session.id);
+        }
         return;
       }
       setFocusedContactId(null);
@@ -569,6 +654,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setDedup([]);
     setNewError(null);
     setAwaitingEvent(null);
+    setFocusedRecall(null);
     void loadSessions();
   };
 
@@ -604,6 +690,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             void loadPresets();
           }}
           onOpenSession={(id, contactId) => void openSession(id, contactId)}
+          onOpenRecalls={() => void openRecalls()}
           onUpdateSession={handleUpdateSession}
           onDeleteSession={handleDeleteSession}
         />
@@ -646,6 +733,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           contacts={contacts}
           hubSessions={sessions}
           currentContact={findNextPending(contacts)}
+          focusedContactId={focusedContactId}
           loading={runnerLoading}
           error={runnerError}
           awaitingEvent={awaitingEvent}
@@ -663,6 +751,23 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           }
           onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
+        />
+      )}
+
+      {view === "recalls" && (
+        <RecallQueueView
+          recalls={recalls}
+          loading={runnerLoading || recallsLoading}
+          error={runnerError}
+          contactContext={contactContext}
+          contextContactId={contextContactId}
+          contextLoading={contextLoading}
+          onBack={goToSessions}
+          onFocusContact={setFocusedRecall}
+          onLogAndNext={(item, payload) => void handleRecallLogAndNext(item, payload)}
+          onLogRdvAndNext={(item, payload, event) =>
+            void handleRecallLogRdvAndNext(item, payload, event)
+          }
         />
       )}
 

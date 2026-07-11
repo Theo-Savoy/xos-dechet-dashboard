@@ -303,8 +303,8 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "Appel décroché" }));
     expect(screen.getByLabelText(/Planifier un rappel/i)).toBeTruthy();
     await user.click(screen.getByLabelText(/Planifier un rappel/i));
-    expect(screen.getByLabelText("Date de rappel")).toBeTruthy();
-    expect(screen.getByLabelText("Définir la date de rappel dans X jours")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Délai de rappel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /\+3 j/i })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
     expect(onLogAndNext).toHaveBeenCalledWith(
       current.id,
@@ -315,7 +315,7 @@ describe("RunnerView", () => {
     );
   });
 
-  it("creates a continuation session #2 from pending contacts", async () => {
+  it("opens continuation session panel from Non contacté with date", async () => {
     const user = userEvent.setup();
     const onDeferContacts = vi.fn();
     const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
@@ -331,7 +331,12 @@ describe("RunnerView", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Créer séance #2/i }));
+    expect(screen.queryByRole("button", { name: /Créer séance #2/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Sélectionner les à faire/i }));
+    await user.click(screen.getByRole("button", { name: "Non contacté" }));
+    expect(screen.getByText(/Non contacté → Prospection Lyon #2/i)).toBeTruthy();
+    expect(screen.getByLabelText("Date de la séance")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Créer Prospection Lyon #2/i }));
     expect(onDeferContacts).toHaveBeenCalledWith(
       [2, 3],
       expect.objectContaining({
@@ -347,6 +352,7 @@ describe("RunnerView", () => {
     render(
       <RunnerView
         {...runnerProps}
+        session={{ ...session, name: "Séance test" }}
         contacts={[current]}
         currentContact={current}
         awaitingEvent={null}
@@ -355,8 +361,51 @@ describe("RunnerView", () => {
 
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByRole("button", { name: "Non contacté" }));
-    expect(screen.getByText(/Associer à une séance existante/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Créer une séance de relance" })).toBeTruthy();
+    expect(screen.getByText(/Non contacté → Séance test #2/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Créer Séance test #2/i })).toBeTruthy();
+  });
+
+  it("advances focus after Logguer & suivant when parent clears focusedContactId", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
+    const pendingB = {
+      ...bob,
+      id: 3,
+      contact_name: "Claire",
+      status: "pending" as const,
+      outcome: null,
+    };
+    const { rerender } = render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[pendingA, pendingB]}
+        currentContact={pendingA}
+        focusedContactId={2}
+        awaitingEvent={null}
+        onLogAndNext={onLogAndNext}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    expect(screen.getByRole("heading", { level: 3, name: "Bob Durand" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
+    expect(onLogAndNext).toHaveBeenCalledWith(2, expect.any(Object));
+
+    const calledA = { ...pendingA, status: "called" as const, outcome: "Appel non décroché" as const };
+    rerender(
+      <RunnerView
+        {...runnerProps}
+        contacts={[calledA, pendingB]}
+        currentContact={pendingB}
+        focusedContactId={null}
+        awaitingEvent={null}
+        onLogAndNext={onLogAndNext}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 3, name: "Claire" })).toBeTruthy();
+    expect(screen.queryByText(/Contact déjà traité/i)).toBeNull();
   });
 });
 
@@ -419,6 +468,7 @@ describe("SessionsView hub filters", () => {
         onRefresh={vi.fn()}
         onNewSession={vi.fn()}
         onOpenSession={vi.fn()}
+        onOpenRecalls={vi.fn()}
         onUpdateSession={vi.fn()}
         onDeleteSession={vi.fn()}
       />,
@@ -436,9 +486,9 @@ describe("SessionsView hub filters", () => {
     expect(screen.getByText("Déjà faite")).toBeTruthy();
   });
 
-  it("shows the recalls inbox from the hub", async () => {
+  it("opens the recalls queue from the hub", async () => {
     const user = userEvent.setup();
-    const onOpenSession = vi.fn();
+    const onOpenRecalls = vi.fn();
     render(
       <SessionsView
         sessions={[]}
@@ -464,17 +514,15 @@ describe("SessionsView hub filters", () => {
         error={null}
         onRefresh={vi.fn()}
         onNewSession={vi.fn()}
-        onOpenSession={onOpenSession}
+        onOpenSession={vi.fn()}
+        onOpenRecalls={onOpenRecalls}
         onUpdateSession={vi.fn()}
         onDeleteSession={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: /Rappels/i }));
-    expect(screen.getByText("Alice Martin")).toBeTruthy();
-    expect(screen.getByText(/En retard/i)).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /Alice Martin/i }));
-    expect(onOpenSession).toHaveBeenCalledWith(9, 55);
+    expect(onOpenRecalls).toHaveBeenCalled();
   });
 });
 

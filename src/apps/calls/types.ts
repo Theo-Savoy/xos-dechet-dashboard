@@ -40,6 +40,9 @@ export type RecallInboxItem = {
   phone: string | null;
   email?: string | null;
   title?: string | null;
+  linkedin_url?: string | null;
+  sf_contact_id?: string | null;
+  sf_account_id?: string | null;
   recall_at: string;
   outcome: ResultatCall | null;
   attempt_count?: number;

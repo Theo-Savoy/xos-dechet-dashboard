@@ -691,6 +691,13 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.calls-recall__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .calls-recall__title {
   margin: 0;
   font-size: 0.82rem;
@@ -698,21 +705,58 @@
   color: var(--xos-text-muted);
 }
 
+.calls-recall__summary {
+  font-size: 0.82rem;
+  color: var(--xos-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.calls-recall__body {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.calls-recall__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.calls-recall__chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 90%, transparent);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--xos-text);
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.calls-recall__chip--active,
+.calls-recall__chip:hover {
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 18%, transparent);
+}
+
 .calls-recall__fields {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 0.75rem;
-  align-items: end;
+  align-items: start;
 }
 
 .calls-recall__shortcut {
   display: grid;
   gap: 0.35rem;
+  align-content: start;
 }
 
 .calls-recall__shortcut > span {
   font-size: 0.82rem;
   color: var(--xos-text-muted);
+  line-height: 1.2;
 }
 
 .calls-recall__shortcut small {
@@ -1283,18 +1327,17 @@
   gap: 0.75rem;
   align-items: center;
   text-align: left;
-  padding: 0.7rem 0.75rem;
+  padding: 0.7rem 0.8rem;
   border: 1px solid transparent;
-  border-radius: 0.65rem;
+  border-radius: 0.55rem;
   background: rgba(255, 255, 255, 0.03);
   color: inherit;
   cursor: pointer;
-  font: inherit;
 }
 
 .calls-recalls__row:hover {
-  border-color: color-mix(in srgb, var(--xos-accent) 35%, transparent);
-  background: color-mix(in srgb, var(--xos-accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--xos-border) 80%, transparent);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .calls-recalls__when,
@@ -1315,11 +1358,42 @@
 .calls-recalls__who small,
 .calls-recalls__when small {
   color: var(--xos-text-muted);
-  font-size: 0.78rem;
 }
 
 .calls-recalls__meta {
   justify-items: end;
+}
+
+.calls-recall-queue__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.calls-recall-queue__filters .calls-list-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.calls-recall-queue__origin {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.calls-view--recalls .calls-contact-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.calls-context-inline {
+  margin-top: 0.75rem;
 }
 
 @media (max-width: 720px) {

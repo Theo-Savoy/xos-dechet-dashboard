@@ -38,6 +38,7 @@ type RunnerViewProps = {
   contacts: SessionContact[];
   hubSessions: SessionSummary[];
   currentContact: SessionContact | null;
+  focusedContactId?: number | null;
   loading: boolean;
   error: string | null;
   awaitingEvent: SessionContact | null;
@@ -128,13 +129,20 @@ function ResultButtons({
   );
 }
 
+const RECALL_PRESETS: { days: number; label: string }[] = [
+  { days: 0, label: "Aujourd'hui" },
+  { days: 1, label: "+1 j" },
+  { days: 3, label: "+3 j" },
+  { days: 7, label: "+7 j" },
+  { days: 14, label: "+14 j" },
+];
+
 function RecallFields({
   resultat,
   scheduleRecall,
   onScheduleRecallChange,
   recallAt,
   onRecallAtChange,
-  defaultRecallDays,
   onDefaultRecallDaysChange,
 }: {
   resultat: ResultatCall;
@@ -142,15 +150,29 @@ function RecallFields({
   onScheduleRecallChange: (value: boolean) => void;
   recallAt: string;
   onRecallAtChange: (value: string) => void;
-  defaultRecallDays: number;
   onDefaultRecallDaysChange: (days: number) => void;
 }) {
+  const [customOpen, setCustomOpen] = useState(false);
   const autoRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat);
   if (!RECALL_ELIGIBLE_RESULTATS.includes(resultat)) return null;
 
+  const activePreset = RECALL_PRESETS.find((preset) => addDaysIso(preset.days) === recallAt)?.days;
+  const showPicker = customOpen || activePreset == null;
+
+  const pickPreset = (days: number) => {
+    setCustomOpen(false);
+    onDefaultRecallDaysChange(days);
+    onRecallAtChange(addDaysIso(days));
+  };
+
   return (
     <div className="calls-recall" role="group" aria-label="Rappel">
-      <p className="calls-recall__title">Rappel</p>
+      <div className="calls-recall__head">
+        <p className="calls-recall__title">Rappel</p>
+        {(autoRecall || scheduleRecall) && (
+          <span className="calls-recall__summary">{formatIsoDateFr(recallAt)}</span>
+        )}
+      </div>
       {!autoRecall && (
         <label className="calls-checkbox calls-checkbox--tight">
           <input
@@ -162,21 +184,38 @@ function RecallFields({
         </label>
       )}
       {(autoRecall || scheduleRecall) && (
-        <div className="calls-recall__fields">
-          <DatePicker label="Date de rappel" value={recallAt} onChange={onRecallAtChange} />
-          <label className="calls-recall__shortcut">
-            <span>Ou dans (jours)</span>
-            <input
-              type="number"
-              min={0}
-              max={90}
-              className="calls-input"
-              value={defaultRecallDays}
-              onChange={(e) => onDefaultRecallDaysChange(Number(e.target.value) || 0)}
-              aria-label="Définir la date de rappel dans X jours"
+        <div className="calls-recall__body">
+          <div className="calls-recall__presets" role="group" aria-label="Délai de rappel">
+            {RECALL_PRESETS.map((preset) => (
+              <button
+                key={preset.days}
+                type="button"
+                className={`calls-recall__chip${activePreset === preset.days ? " calls-recall__chip--active" : ""}`}
+                aria-pressed={activePreset === preset.days}
+                onClick={() => pickPreset(preset.days)}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`calls-recall__chip${showPicker && activePreset == null ? " calls-recall__chip--active" : ""}`}
+              aria-pressed={showPicker && activePreset == null}
+              onClick={() => setCustomOpen(true)}
+            >
+              Date…
+            </button>
+          </div>
+          {showPicker && (
+            <DatePicker
+              label="Date de rappel"
+              value={recallAt}
+              onChange={(next) => {
+                setCustomOpen(true);
+                onRecallAtChange(next);
+              }}
             />
-            <small>Raccourci — calcule la date de rappel à partir d&apos;aujourd&apos;hui</small>
-          </label>
+          )}
         </div>
       )}
     </div>
@@ -188,6 +227,7 @@ export function RunnerView({
   contacts,
   hubSessions,
   currentContact,
+  focusedContactId = null,
   loading,
   error,
   awaitingEvent,
@@ -303,15 +343,21 @@ export function RunnerView({
     if (awaitingEvent) setMode("detail");
   }, [awaitingEvent?.id]);
 
+  // Keep local focus in sync with parent. After "Logguer & suivant", parent clears
+  // focusedContactId and currentContact becomes the next pending row.
   useEffect(() => {
-    if (focusedId != null && contacts.some((c) => c.id === focusedId)) return;
+    if (focusedContactId != null) {
+      setFocusedId(focusedContactId);
+      return;
+    }
     if (currentContact) setFocusedId(currentContact.id);
-  }, [currentContact?.id, contacts, focusedId]);
+    else setFocusedId(null);
+  }, [focusedContactId, currentContact?.id]);
 
   useEffect(() => {
-    if (focusedId != null && contacts.some((c) => c.id === focusedId && c.status !== "pending")) {
-      setMode("detail");
-    }
+    if (focusedId == null) return;
+    const focused = contacts.find((c) => c.id === focusedId);
+    if (focused && focused.status !== "pending") setMode("detail");
   }, [focusedId, contacts]);
 
   useEffect(() => {
@@ -423,20 +469,13 @@ export function RunnerView({
     onDeferContacts(deferIds, {
       scheduledFor: deferDate,
       targetSessionId: deferTargetId,
+      name: deferTargetId ? null : nextContinuationName(session.name),
     });
     setDeferIds(null);
     setSelectedIds(new Set());
   };
 
-  const createContinuationSession = (ids: number[]) => {
-    if (ids.length === 0) return;
-    onDeferContacts(ids, {
-      scheduledFor: todayParisIso(),
-      targetSessionId: null,
-      name: nextContinuationName(session.name),
-    });
-    setSelectedIds(new Set());
-  };
+  const continuationLabel = nextContinuationName(session.name);
 
   const handleBulkRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
     if (!singleSelectedId) return;
@@ -554,7 +593,6 @@ export function RunnerView({
                     onScheduleRecallChange={setBulkScheduleRecall}
                     recallAt={bulkRecallAt}
                     onRecallAtChange={setBulkRecallAt}
-                    defaultRecallDays={defaultRecallDays}
                     onDefaultRecallDaysChange={handleDefaultRecallDays}
                   />
                 )}
@@ -595,16 +633,9 @@ export function RunnerView({
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => createContinuationSession(pendingSelected)}
-                    disabled={loading}
-                    title={`Créer « ${nextContinuationName(session.name)} » avec la sélection`}
-                  >
-                    Créer séance #2
-                  </Button>
-                  <Button
-                    variant="secondary"
                     onClick={() => openDefer(pendingSelected)}
                     disabled={loading}
+                    title={`Reporter vers « ${continuationLabel} »`}
                   >
                     Non contacté
                   </Button>
@@ -614,14 +645,15 @@ export function RunnerView({
           )}
 
           {deferIds && (
-            <div className="calls-defer-panel" role="region" aria-label="Reporter en follow-up">
+            <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
               <strong>
-                Non contacté — {deferIds.length} contact{deferIds.length > 1 ? "s" : ""}
+                Non contacté → {continuationLabel}
               </strong>
               <p className="calls-defer-panel__empty">
-                Associer à une séance existante à cette date, ou en créer une nouvelle.
+                Choisissez la date de la séance suivante
+                {deferIds.length > 1 ? ` (${deferIds.length} contacts)` : ""}.
               </p>
-              <DatePicker label="Date de follow-up" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
+              <DatePicker label="Date de la séance" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
               {deferCandidates.length > 0 ? (
                 <ul className="calls-defer-panel__candidates">
                   {deferCandidates.map((candidate) => (
@@ -641,7 +673,9 @@ export function RunnerView({
                   ))}
                 </ul>
               ) : (
-                <p className="calls-defer-panel__empty">Aucune séance active à cette date.</p>
+                <p className="calls-defer-panel__empty">
+                  Nouvelle séance « {continuationLabel} » le {formatIsoDateFr(deferDate)}.
+                </p>
               )}
               <div className="calls-runner-actions">
                 <Button
@@ -652,11 +686,11 @@ export function RunnerView({
                     ? "Enregistrement…"
                     : deferTargetId
                       ? "Associer à la séance"
-                      : "Créer une séance de relance"}
+                      : `Créer ${continuationLabel}`}
                 </Button>
                 {deferTargetId != null && (
                   <Button variant="secondary" onClick={() => setDeferTargetId(null)} disabled={loading}>
-                    Créer plutôt une nouvelle
+                    Créer plutôt {continuationLabel}
                   </Button>
                 )}
                 <Button variant="secondary" onClick={() => setDeferIds(null)} disabled={loading}>
@@ -678,14 +712,6 @@ export function RunnerView({
                   {allPendingSelected
                     ? "Tout désélectionner"
                     : `Sélectionner les à faire (${pendingContacts.length})`}
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={loading || pendingContacts.length === 0}
-                  onClick={() => createContinuationSession(pendingContacts.map((c) => c.id))}
-                  title={`Créer « ${nextContinuationName(session.name)} » avec tous les contacts sans statut`}
-                >
-                  Créer séance #2
                 </Button>
               </div>
             </div>
@@ -953,7 +979,6 @@ export function RunnerView({
                   onScheduleRecallChange={setScheduleRecall}
                   recallAt={recallAt}
                   onRecallAtChange={setRecallAt}
-                  defaultRecallDays={defaultRecallDays}
                   onDefaultRecallDaysChange={handleDefaultRecallDays}
                 />
               )}
@@ -996,7 +1021,7 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title="Reporter vers une séance de follow-up (sans incrémenter le compteur)"
+                    title={`Reporter vers « ${continuationLabel} »`}
                   >
                     Non contacté
                   </Button>
@@ -1009,7 +1034,7 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title="Reporter vers une séance de follow-up (sans incrémenter le compteur)"
+                    title={`Reporter vers « ${continuationLabel} »`}
                   >
                     Non contacté
                   </Button>
@@ -1017,9 +1042,12 @@ export function RunnerView({
               )}
 
               {deferIds && mode === "detail" && (
-                <div className="calls-defer-panel" role="region" aria-label="Reporter en follow-up">
-                  <strong>Non contacté — follow-up</strong>
-                  <DatePicker label="Date de follow-up" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
+                <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
+                  <strong>Non contacté → {continuationLabel}</strong>
+                  <p className="calls-defer-panel__empty">
+                    Choisissez la date de la séance suivante.
+                  </p>
+                  <DatePicker label="Date de la séance" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
                   {deferCandidates.length > 0 ? (
                     <ul className="calls-defer-panel__candidates">
                       {deferCandidates.map((candidate) => (
@@ -1039,11 +1067,13 @@ export function RunnerView({
                       ))}
                     </ul>
                   ) : (
-                    <p className="calls-defer-panel__empty">Aucune séance active à cette date.</p>
+                    <p className="calls-defer-panel__empty">
+                      Nouvelle séance « {continuationLabel} » le {formatIsoDateFr(deferDate)}.
+                    </p>
                   )}
                   <div className="calls-runner-actions">
                     <Button onClick={confirmDefer} disabled={loading}>
-                      {deferTargetId ? "Associer à la séance" : "Créer une séance de relance"}
+                      {deferTargetId ? "Associer à la séance" : `Créer ${continuationLabel}`}
                     </Button>
                     <Button variant="secondary" onClick={() => setDeferIds(null)} disabled={loading}>
                       Annuler

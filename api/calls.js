@@ -318,7 +318,7 @@ export async function GET(request) {
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     const { data: rows, error: recallsError } = await client
       .from("call_session_contacts")
-      .select("id, session_id, contact_name, account_name, phone, email, title, recall_at, outcome, attempt_count, status")
+      .select("id, session_id, sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, recall_at, outcome, attempt_count, status")
       .in("session_id", sessions.map((session) => session.id))
       .not("recall_at", "is", null)
       .order("recall_at", { ascending: true });
@@ -334,11 +334,14 @@ export async function GET(request) {
           session_id: row.session_id,
           session_name: session?.name ?? "Séance",
           session_status: session?.status ?? "active",
+          sf_contact_id: row.sf_contact_id,
+          sf_account_id: row.sf_account_id,
           contact_name: row.contact_name,
           account_name: row.account_name,
           phone: row.phone,
           email: row.email,
           title: row.title,
+          linkedin_url: row.linkedin_url,
           recall_at: row.recall_at,
           outcome: row.outcome,
           attempt_count: row.attempt_count,
