@@ -92,12 +92,7 @@ describe("LoginScreen — dual auth layout", () => {
 
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: SALESFORCE_PROVIDER,
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          prompt: "consent",
-        },
-      },
+      options: { redirectTo: window.location.origin },
     });
   });
 
