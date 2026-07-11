@@ -407,6 +407,49 @@ describe("RunnerView", () => {
     expect(screen.getByRole("heading", { level: 3, name: "Claire" })).toBeTruthy();
     expect(screen.queryByText(/Contact déjà traité/i)).toBeNull();
   });
+
+  it("stays in list mode after bulk logging from the session list", async () => {
+    const user = userEvent.setup();
+    const onLogMany = vi.fn();
+    const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
+    const pendingB = {
+      ...bob,
+      id: 3,
+      contact_name: "Claire",
+      status: "pending" as const,
+      outcome: null,
+    };
+    const { rerender } = render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[pendingA, pendingB]}
+        currentContact={pendingA}
+        awaitingEvent={null}
+        onLogMany={onLogMany}
+      />,
+    );
+
+    expect(screen.getByText("Liste de la séance")).toBeTruthy();
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByRole("button", { name: /Consigner pour 1/i }));
+    expect(onLogMany).toHaveBeenCalled();
+
+    const calledA = { ...pendingA, status: "called" as const, outcome: "Appel non décroché" as const };
+    rerender(
+      <RunnerView
+        {...runnerProps}
+        contacts={[calledA, pendingB]}
+        currentContact={pendingB}
+        focusedContactId={null}
+        awaitingEvent={null}
+        onLogMany={onLogMany}
+      />,
+    );
+
+    expect(screen.getByText("Liste de la séance")).toBeTruthy();
+    expect(screen.queryByText("Journaliser l'appel")).toBeNull();
+    expect(screen.getByText("Appel non décroché")).toBeTruthy();
+  });
 });
 
 describe("RecapView", () => {

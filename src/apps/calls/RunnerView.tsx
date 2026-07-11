@@ -389,22 +389,25 @@ export function RunnerView({
     if (awaitingEvent) setMode("detail");
   }, [awaitingEvent?.id]);
 
-  // Keep local focus in sync with parent. After "Logguer & suivant", parent clears
-  // focusedContactId and currentContact becomes the next pending row.
+  // Keep local focus in sync with parent. After "Logguer & suivant" in fiche mode,
+  // parent clears focusedContactId and currentContact becomes the next pending row.
   useEffect(() => {
     if (focusedContactId != null) {
       setFocusedId(focusedContactId);
       return;
     }
-    if (currentContact) setFocusedId(currentContact.id);
-    else setFocusedId(null);
-  }, [focusedContactId, currentContact?.id]);
-
-  useEffect(() => {
-    if (focusedId == null) return;
-    const focused = contacts.find((c) => c.id === focusedId);
-    if (focused && focused.status !== "pending") setMode("detail");
-  }, [focusedId, contacts]);
+    if (mode === "detail") {
+      if (currentContact) setFocusedId(currentContact.id);
+      else setFocusedId(null);
+      return;
+    }
+    // List mode: refresh row state only — do not follow the next pending contact.
+    setFocusedId((id) => {
+      if (id == null) return null;
+      const focused = contacts.find((c) => c.id === id);
+      return focused?.status === "pending" ? id : null;
+    });
+  }, [focusedContactId, currentContact?.id, mode, contacts]);
 
   useEffect(() => {
     setResultat(RESULTAT_OPTIONS[0].value);
