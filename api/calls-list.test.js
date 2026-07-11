@@ -95,7 +95,7 @@ describe("adapter exports", () => {
   it("buildTargetQuery uses mapping field names for v2 filter tree", () => {
     const soql = buildTargetQuery(baseFilters, mapping, "005000000000001AAA");
     expect(soql).toContain(`Account.${mapping.objects.account.fields.industry} IN ('Finance')`);
-    expect(soql).toContain(`${mapping.objects.contact.fields.phone} != null`);
+    expect(soql).toContain(`${mapping.objects.contact.fields.mobilePhone} != null`);
     expect(soql).toContain(`${mapping.objects.contact.fields.doNotCall} = false`);
     expect(soql).toContain(`${mapping.objects.contact.fields.title}`);
     expect(soql).toContain(`${mapping.objects.contact.fields.linkedin}`);

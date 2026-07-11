@@ -68,7 +68,8 @@ function normalizeContacts(records) {
         sf_account_id: record.Account?.[account.id] ?? record[contact.accountId] ?? null,
         contact_name: record[contact.name] || "",
         account_name: record.Account?.[account.name] ?? null,
-        phone: record[contact.phone] ?? null,
+        // Prefer mobile for dialing — filter "a_telephone" means has MobilePhone.
+        phone: record[contact.mobilePhone] ?? record[contact.phone] ?? null,
         title: record[contact.title] ?? null,
         linkedin_url: record[contact.linkedin] ?? null,
         email: record[contact.email] ?? null,

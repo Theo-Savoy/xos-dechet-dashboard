@@ -248,7 +248,7 @@ export function FilterBuilder({
               checked={filters.contact.a_telephone}
               onChange={(e) => setContact({ a_telephone: e.target.checked })}
             />
-            A un numéro de téléphone
+            A un numéro de mobile
           </label>
           <ChipGroup
             label="Niveau de décision"

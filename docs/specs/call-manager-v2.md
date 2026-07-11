@@ -16,7 +16,7 @@ Le produit est un **outil générique**, XOS n'en est qu'une **configuration**. 
 
 - **Account** : `Industry` (secteur, picklist ~40), `Nombre_employes__c` (tranches : `1 - 50`, `51 - 250`, `251 - 500`, `501 - 1000`, `1001 - 2000`, `2001 - 4999`, `5000 et plus`), `Type_de_client__c` (`Client inactif` / `Client` / `Prospect`), `ParentId` (compte principal → filiales).
 - **Contact** : `Phone`, `AccountId`, `Title` (Fonction, texte libre → catégorisation phase 2), `Niveau_de_d_cision__c` (`+`/`=`/`-`), `NPA__c` (booléen NE PAS APPELER → exclure).
-- **Task (appels)** : `Subject` contient « Appel » ou `TaskSubtype='Call'` ; `Resultat_call__c` ∈ {`Appel non décroché`, `Message répondeur`, `Appel décroché`, `Appel argumenté`, `RDV planifié`} ; `CallDurationInSeconds` ; `WhoId` (contact) ; `ActivityDate` ; `Status='Achevée'` ; `OwnerId`.
+- **Task (appels)** : `Subject` contient « Appel » ou `TaskSubtype='Call'` ; `Resultat_call__c` ∈ {`Appel non décroché`, `Message répondeur`, `Appel décroché`, `Appel argumenté`, `RDV planifié`} ; `WhoId` (contact) ; `ActivityDate` ; `Status='Completed'` (valeur API ; libellé FR « Achevée ») ; `OwnerId`.
 - **Opportunity** : `IsClosed`, `IsWon`, `StageName` (« Fermée / Perdue », « Fermée / Gagnée »…), `AccountId`.
 - **User** : `Email` == email de login → auto-map `profiles.sf_user_id`.
 
@@ -80,7 +80,7 @@ RLS : select authenticated, write service_role (comme l'existant). `call_session
 Interface (implémentée pour SF, extensible) :
 - `buildTargetQuery(filters, mapping, sfUserId)` → SOQL Contact avec sous-requêtes/jointures Account + agrégations Task (relance) + Opportunity (opp ouverte/perdue). Échappement SOQL, `LIMIT` borné.
 - `searchContacts(token, soql)` → records.
-- `logCall(token, { contactId, accountId, resultat, comments, durationSec, ownerId })` → crée Task (`TaskSubtype='Call'`, `Resultat_call__c`, `CallDurationInSeconds`, `WhoId`, `WhatId`, `Status='Achevée'`, **`OwnerId = ownerId`** — attribution niveau 1, `Subject='Appel — <resultat>'`, description + `[via X OS par {nom}]`).
+- `logCall(token, { contactId, accountId, resultat, comments, durationSec, ownerId })` → crée Task (`TaskSubtype='Call'`, `Resultat_call__c`, `WhoId`, `WhatId`, `Status='Completed'`, `ActivityDate=aujourd'hui (Paris)`, **`OwnerId = ownerId`** — attribution niveau 1, `Subject='Appel — <resultat>'`, description + `[via X OS par {nom}]`).
 - `createEvent(token, { subject, startDateTime, durationMin, whoId, whatId, ownerId, invitees[] })` → crée Event (RDV planifié) avec le contact + invités additionnels.
 
 Le mapping (noms de champs) vient de `api/_crm/mapping.js`, jamais en dur.

@@ -166,7 +166,7 @@ describe("CallManagerApp component", () => {
     render(<CallManagerApp />);
     await user.click(await screen.findByText("Nouvelle séance"));
     await user.click(screen.getByText("Aperçu de la liste"));
-    await user.click(screen.getByLabelText("A un numéro de téléphone"));
+    await user.click(screen.getByLabelText("A un numéro de mobile"));
     await user.click(screen.getByText("Aperçu de la liste"));
 
     resolveSecond(
@@ -237,6 +237,18 @@ describe("CallManagerApp component", () => {
       if (url === "/api/calls?stats=1") {
         return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       }
+      if (url.startsWith("/api/calls?session_id=1&context_contact_id=")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              session: activeSession,
+              contacts: [pendingContact],
+              context: { contact_record_url: null, account_record_url: null, tasks: [], opportunities: [] },
+            }),
+            { status: 200 },
+          ),
+        );
+      }
       if (url === "/api/calls?session_id=1") {
         const detail = detailResponses.shift();
         return Promise.resolve(new Response(JSON.stringify(detail), { status: 200 }));
@@ -255,7 +267,8 @@ describe("CallManagerApp component", () => {
 
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Dernier contact" });
-    await user.selectOptions(screen.getByLabelText("Résultat"), "RDV planifié");
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "RDV planifié" }));
     await user.click(screen.getByRole("button", { name: "Logguer & suivant" }));
 
     await screen.findByRole("heading", { name: "RDV planifié — Alice Martin" });

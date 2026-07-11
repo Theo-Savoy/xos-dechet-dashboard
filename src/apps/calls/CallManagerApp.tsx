@@ -7,6 +7,7 @@ import {
   createPreset,
   createSession,
   deletePreset,
+  fetchContactContext,
   fetchContactList,
   fetchPresets,
   fetchSession,
@@ -19,16 +20,16 @@ import {
 } from "./api";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
-import { RunnerView } from "./RunnerView";
+import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
 import type {
   CallStats,
+  ContactContext,
   ContactPreview,
   SessionContact,
   SessionDetail,
   SessionSummary,
 } from "./types";
-import type { ResultatCall } from "../../crm";
 import "./calls.css";
 
 type View = "sessions" | "new" | "runner" | "recap";
@@ -44,6 +45,12 @@ function errorMessage(err: unknown): string {
     if (err.code === "no_follow_up_contacts") return "Aucun contact ne nécessite de relance.";
     if (err.code === "session_contacts_insert_failed") {
       return "Échec d'enregistrement de la liste d'appels (base de données)";
+    }
+    if (err.code === "sf_write_error" || err.code === "sf_auth_error" || err.code === "sf_query_error") {
+      const hint = err.details?.trim();
+      return hint
+        ? `Salesforce a refusé l'opération : ${hint.slice(0, 220)}`
+        : "Salesforce a refusé l'enregistrement.";
     }
     return `Erreur API (${err.code})`;
   }
@@ -83,6 +90,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [runnerError, setRunnerError] = useState<string | null>(null);
   const [awaitingEvent, setAwaitingEvent] = useState<SessionContact | null>(null);
   const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [contactContext, setContactContext] = useState<ContactContext | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
 
   const loadSessions = useCallback(async () => {
     if (!token) return;
@@ -249,24 +259,47 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
-  const handleLogAndNext = async (
-    resultat: ResultatCall,
-    comments: string,
-    durationSec: number | null,
-  ) => {
+  const loadContactContext = useCallback(
+    async (sessionId: number, contactId: number) => {
+      if (!token) return;
+      setContextLoading(true);
+      try {
+        setContactContext(await fetchContactContext(token, sessionId, contactId));
+      } catch {
+        setContactContext(null);
+      } finally {
+        setContextLoading(false);
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (view !== "runner" || !activeSession) return;
+    const targetId = awaitingEvent?.id ?? focusedContactId ?? findNextPending(contacts)?.id;
+    if (!targetId) {
+      setContactContext(null);
+      return;
+    }
+    void loadContactContext(activeSession.id, targetId);
+  }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
+
+  const handleLogAndNext = async (contactId: number, payload: LogPayload) => {
     if (!token || !activeSession) return;
-    const current = findNextPending(contacts);
-    if (!current) return;
 
     setRunnerLoading(true);
     setRunnerError(null);
     try {
-      const result = await logCall(token, activeSession.id, current.id, resultat, comments, durationSec);
+      const result = await logCall(token, activeSession.id, contactId, payload.resultat, {
+        comments: payload.comments,
+        recallAt: payload.recallAt,
+        doNotCall: payload.doNotCall,
+      });
       if (result.needs_event) {
         const refreshed = await fetchSession(token, activeSession.id);
-        const updatedCurrent = refreshed.contacts.find((c) => c.id === current.id) ?? current;
+        const updatedCurrent = refreshed.contacts.find((c) => c.id === contactId);
         setContacts(refreshed.contacts);
-        setAwaitingEvent(updatedCurrent);
+        setAwaitingEvent(updatedCurrent ?? null);
       } else {
         await advanceOrComplete(activeSession.id);
       }
@@ -292,18 +325,63 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
-  const handleSkip = async () => {
+  const handleSkip = async (contactId: number) => {
     if (!token || !activeSession) return;
-    const current = findNextPending(contacts);
-    if (!current) return;
 
     setRunnerLoading(true);
     setRunnerError(null);
     try {
-      await skipContact(token, activeSession.id, current.id);
+      await skipContact(token, activeSession.id, contactId);
       await advanceOrComplete(activeSession.id);
     } catch (err) {
       setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleSkipMany = async (contactIds: number[]) => {
+    if (!token || !activeSession || contactIds.length === 0) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      for (const contactId of contactIds) {
+        await skipContact(token, activeSession.id, contactId);
+      }
+      await advanceOrComplete(activeSession.id);
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleLogMany = async (contactIds: number[], payload: LogPayload) => {
+    if (!token || !activeSession || contactIds.length === 0) return;
+    if (payload.resultat === "RDV planifié") {
+      setRunnerError("Le RDV se planifie contact par contact (fiche individuelle).");
+      return;
+    }
+
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      for (const contactId of contactIds) {
+        await logCall(token, activeSession.id, contactId, payload.resultat, {
+          comments: payload.comments,
+          recallAt: payload.recallAt,
+          doNotCall: payload.doNotCall,
+        });
+      }
+      await advanceOrComplete(activeSession.id);
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+      try {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+      } catch {
+        /* keep current list */
+      }
     } finally {
       setRunnerLoading(false);
     }
@@ -398,14 +476,17 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           loading={runnerLoading}
           error={runnerError}
           awaitingEvent={awaitingEvent}
+          contactContext={contactContext}
+          contextLoading={contextLoading}
           onBack={goToSessions}
-          onLogAndNext={(resultat, comments, durationSec) =>
-            void handleLogAndNext(resultat, comments, durationSec)
-          }
+          onFocusContact={setFocusedContactId}
+          onLogAndNext={(contactId, payload) => void handleLogAndNext(contactId, payload)}
           onLogEvent={(start, durationMin, invitees) =>
             void handleLogEvent(start, durationMin, invitees)
           }
-          onSkip={() => void handleSkip()}
+          onSkip={(contactId) => void handleSkip(contactId)}
+          onSkipMany={(ids) => void handleSkipMany(ids)}
+          onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
         />
       )}
 

@@ -118,6 +118,11 @@ export type ResultatCall = (typeof RESULTAT_CALL_VALUES)[number];
 /** Défaut relance « follow-up » : les résultats qui justifient un rappel. */
 export const RELANCE_DEFAULT_RESULTATS: ResultatCall[] = ["Appel non décroché", "Message répondeur"];
 
+/** Résultats qui comptent dans le pipe « décroché » du cockpit. */
+export const PIPE_DECROCHE: ResultatCall[] = ["Appel décroché", "Appel argumenté", "RDV planifié"];
+
+export const DEFAULT_RECALL_DAYS = 3;
+
 export type FilterTree = {
   entreprise: {
     secteurs: Secteur[];

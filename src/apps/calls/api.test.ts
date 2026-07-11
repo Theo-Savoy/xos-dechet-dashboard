@@ -1,42 +1,48 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { logCall } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("logCall", () => {
-  it("omits duration_sec when the optional UI duration is null", async () => {
-    const fetchMock = vi.fn<typeof fetch>(() =>
-      Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-    );
+  it("sends resultat with optional recall and do_not_call flags", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await logCall("token", 12, 34, "Appel décroché", "Notes", null);
+    await logCall("token", 12, 34, "Appel non décroché", {
+      comments: "Notes",
+      recallAt: "2026-07-14",
+      doNotCall: false,
+    });
 
     const firstCall = fetchMock.mock.calls[0];
-    expect(firstCall).toBeDefined();
+    expect(JSON.parse(String(firstCall?.[1]?.body))).toMatchObject({
+      action: "log_call",
+      resultat: "Appel non décroché",
+      comments: "Notes",
+      recall_at: "2026-07-14",
+    });
     expect(JSON.parse(String(firstCall?.[1]?.body))).not.toHaveProperty("duration_sec");
+    expect(JSON.parse(String(firstCall?.[1]?.body))).not.toHaveProperty("do_not_call");
   });
 
-  it("preserves a supplied non-negative integer duration", async () => {
-    const fetchMock = vi.fn<typeof fetch>(() =>
-      Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-    );
+  it("includes do_not_call when requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await logCall("token", 12, 34, "Appel décroché", "Notes", 0);
-
-    const firstCall = fetchMock.mock.calls[0];
-    expect(firstCall).toBeDefined();
-    expect(JSON.parse(String(firstCall?.[1]?.body))).toMatchObject({ duration_sec: 0 });
-  });
-
-  it("rejects a supplied duration that is not a non-negative integer", async () => {
-    vi.stubGlobal("fetch", vi.fn());
-
-    await expect(logCall("token", 12, 34, "Appel décroché", "Notes", 1.5)).rejects.toThrow(
-      "durée doit être un entier positif ou nul",
-    );
+    await logCall("token", 12, 34, "Appel non décroché", { doNotCall: true });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      do_not_call: true,
+    });
   });
 });

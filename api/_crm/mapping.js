@@ -241,7 +241,8 @@ const mapping = {
         activityDate: "ActivityDate",
       },
       subtypeValue: "Call",
-      statusValue: "Achevée",
+      // Standard Task.Status API value (UI label may be "Achevée" in FR orgs).
+      statusValue: "Completed",
       results: [
         "Appel non décroché",
         "Message répondeur",
@@ -258,10 +259,14 @@ const mapping = {
     opportunity: {
       name: "Opportunity",
       fields: {
+        id: "Id",
+        name: "Name",
         accountId: "AccountId",
         isClosed: "IsClosed",
         isWon: "IsWon",
         stageName: "StageName",
+        amount: "Amount",
+        closeDate: "CloseDate",
       },
       closedLostStage: "Fermée / Perdue",
     },

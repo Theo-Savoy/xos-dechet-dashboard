@@ -6,7 +6,7 @@ describe("emptyFilterTree", () => {
     expect(emptyFilterTree().contact.exclure_npa).toBe(true);
   });
 
-  it("requires a telephone number by default", () => {
+  it("requires a mobile number by default", () => {
     expect(emptyFilterTree().contact.a_telephone).toBe(true);
   });
 

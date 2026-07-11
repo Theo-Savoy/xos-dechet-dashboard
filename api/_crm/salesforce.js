@@ -99,7 +99,7 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
     }
   }
 
-  if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.phone} != null`);
+  if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
   if (contactFilters.exclure_npa !== false) conditions.push(`${contact.fields.doNotCall} = false`);
   const decisionLevels = stringList(contactFilters.niveau_decision);
   if (decisionLevels.length) conditions.push(`${contact.fields.decisionLevel} IN (${escapedList(decisionLevels)})`);
@@ -220,21 +220,131 @@ async function createSObject(token, objectName, fields) {
   return { record: await response.json() };
 }
 
+/** YYYY-MM-DD in Europe/Paris — required for Tasks to show in SF activity timelines. */
+export function parisToday() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+}
+
 export async function logCall(token, { contactId, accountId, resultat, comments = "", durationSec = 0, ownerId, actorName = "Utilisateur Inconnu" }, mapping = defaultMapping) {
   const task = mapping.objects.task;
   const fields = task.fields;
   const call = {
     [fields.subtype]: task.subtypeValue,
     [fields.result]: resultat,
-    [fields.duration]: durationSec,
     [fields.whoId]: contactId,
     [fields.status]: task.statusValue,
+    [fields.activityDate]: parisToday(),
     [fields.subject]: `Appel — ${resultat}`,
     [fields.description]: `${comments}\n\n[via X OS par ${actorName}]`,
+    Priority: "Normal",
   };
+  // Duration is optional / unused in the cockpit — omit zero to avoid noisy SF fields.
+  if (Number.isFinite(durationSec) && durationSec > 0) {
+    call[fields.duration] = durationSec;
+  }
   if (accountId) call[fields.whatId] = accountId;
   if (ownerId) call[fields.ownerId] = ownerId;
   return createSObject(token, task.name, call);
+}
+
+export function buildLightningUrl(objectType, recordId) {
+  if (!objectType || !recordId) return null;
+  return `${instanceUrl()}/lightning/r/${objectType}/${recordId}/view`;
+}
+
+/** Live Task history + open/closed opportunities for the runner cockpit. */
+export async function fetchContactContext(token, { contactId, accountId }, mapping = defaultMapping) {
+  const contact = mapping.objects.contact;
+  const account = mapping.objects.account;
+  const task = mapping.objects.task;
+  const opportunity = mapping.objects.opportunity;
+  const tf = task.fields;
+  const of = opportunity.fields;
+
+  const taskSoql = [
+    `SELECT ${[tf.id, tf.activityDate, tf.result, tf.subject, tf.description].join(", ")}`,
+    `FROM ${task.name}`,
+    `WHERE ${tf.whoId} = '${escapeSOQL(contactId)}'`,
+    `AND ${tf.subtype} = '${escapeSOQL(task.subtypeValue)}'`,
+    `ORDER BY ${tf.activityDate} DESC NULLS LAST`,
+    `LIMIT 15`,
+  ].join(" ");
+
+  const tasksResult = await searchContacts(token, taskSoql);
+  if (tasksResult.error) return { error: tasksResult.error };
+
+  let opportunities = [];
+  if (accountId) {
+    const oppSoql = [
+      `SELECT ${[of.id, of.name, of.stageName, of.isClosed, of.isWon, of.amount, of.closeDate].join(", ")}`,
+      `FROM ${opportunity.name}`,
+      `WHERE ${of.accountId} = '${escapeSOQL(accountId)}'`,
+      `ORDER BY ${of.isClosed} ASC, ${of.closeDate} DESC NULLS LAST`,
+      `LIMIT 10`,
+    ].join(" ");
+    const oppResult = await searchContacts(token, oppSoql);
+    if (oppResult.error) return { error: oppResult.error };
+    opportunities = (oppResult.records || []).map((record) => ({
+      id: record[of.id],
+      name: record[of.name] || "",
+      stage_name: record[of.stageName] || null,
+      is_closed: Boolean(record[of.isClosed]),
+      is_won: Boolean(record[of.isWon]),
+      amount: typeof record[of.amount] === "number" ? record[of.amount] : null,
+      close_date: record[of.closeDate] || null,
+      record_url: buildLightningUrl(opportunity.name, record[of.id]),
+    }));
+  }
+
+  return {
+    contact_record_url: buildLightningUrl(contact.name, contactId),
+    account_record_url: accountId ? buildLightningUrl(account.name, accountId) : null,
+    tasks: (tasksResult.records || []).map((record) => ({
+      id: record[tf.id],
+      activity_date: record[tf.activityDate] || null,
+      result: record[tf.result] || null,
+      subject: record[tf.subject] || null,
+      description: record[tf.description] || null,
+      record_url: buildLightningUrl(task.name, record[tf.id]),
+    })),
+    opportunities,
+  };
+}
+
+export async function updateContactDoNotCall(token, contactId, value, mapping = defaultMapping) {
+  const contact = mapping.objects.contact;
+  const response = await fetch(
+    `${instanceUrl()}/services/data/v67.0/sobjects/${contact.name}/${encodeURIComponent(contactId)}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ [contact.fields.doNotCall]: Boolean(value) }),
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  if (!response.ok) return { error: "sf_write_error", message: (await response.text()).slice(0, 500) };
+  return { ok: true };
+}
+
+/** Future-dated Task so the commercial sees the recall in SF. */
+export async function createRecallTask(
+  token,
+  { contactId, accountId, recallAt, ownerId, actorName = "Utilisateur Inconnu" },
+  mapping = defaultMapping,
+) {
+  const task = mapping.objects.task;
+  const fields = task.fields;
+  const payload = {
+    [fields.subtype]: task.subtypeValue,
+    [fields.whoId]: contactId,
+    [fields.status]: task.statusValue,
+    [fields.activityDate]: recallAt,
+    [fields.subject]: `Rappel — à rappeler le ${recallAt}`,
+    [fields.description]: `Rappel planifié depuis X OS Call Manager.\n\n[via X OS par ${actorName}]`,
+  };
+  if (accountId) payload[fields.whatId] = accountId;
+  if (ownerId) payload[fields.ownerId] = ownerId;
+  return createSObject(token, task.name, payload);
 }
 
 export async function createEvent(token, { subject, startDateTime, durationMin, whoId, whatId, ownerId, invitees = [] }, mapping = defaultMapping) {

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { verifyJWT } from "./_auth.js";
 import mapping from "./_crm/mapping.js";
-import { createEvent, fetchSFToken, logCall } from "./_crm/salesforce.js";
+import { buildLightningUrl, createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
 
 const SF_ID = /^[a-zA-Z0-9]{15,18}$/;
 const VALID_RESULTS = mapping.objects.task.results;
@@ -165,7 +165,7 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     sf_account_id: contact.sf_account_id || null,
     contact_name: contact.contact_name.trim(),
     account_name: contact.account_name || null,
-    phone: contact.phone || null,
+    phone: contact.mobile_phone || contact.phone || null,
     title: contact.title || null,
     linkedin_url: contact.linkedin_url || null,
     status: "pending",
@@ -182,7 +182,15 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     return { error: "session_contacts_insert_failed", status: 500 };
   }
 
-  return { session, contacts: insertedContacts };
+  return { session, contacts: enrichSessionContacts(insertedContacts) };
+}
+
+function enrichSessionContacts(contacts) {
+  return (contacts || []).map((contact) => ({
+    ...contact,
+    sf_contact_url: buildLightningUrl("Contact", contact.sf_contact_id),
+    sf_account_url: contact.sf_account_id ? buildLightningUrl("Account", contact.sf_account_id) : null,
+  }));
 }
 
 function getParisDateRange() {
@@ -315,7 +323,7 @@ export async function GET(request) {
 
     const { data: contacts, error: contactsError } = await client
       .from("call_session_contacts")
-      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at")
+      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, do_not_call")
       .eq("session_id", sessionId)
       .order("position", { ascending: true });
 
@@ -324,8 +332,34 @@ export async function GET(request) {
     }
 
     const { owner, ...sessionData } = session;
+    const contextContactId = url.searchParams.get("context_contact_id");
+    let context = null;
+    if (contextContactId) {
+      const row = (contacts || []).find((c) => String(c.id) === String(contextContactId));
+      if (!row) {
+        return new Response(JSON.stringify({ error: "contact_not_in_session" }), { status: 404, headers });
+      }
+      const tokenResult = await fetchSFToken();
+      if (tokenResult.error) {
+        return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
+      }
+      const ctx = await fetchContactContext(
+        tokenResult.accessToken,
+        { contactId: row.sf_contact_id, accountId: row.sf_account_id },
+        mapping,
+      );
+      if (ctx.error) {
+        return new Response(JSON.stringify({ error: ctx.error }), { status: 502, headers });
+      }
+      context = ctx;
+    }
+
     return new Response(
-      JSON.stringify({ session: sessionData, contacts: contacts || [] }),
+      JSON.stringify({
+        session: sessionData,
+        contacts: enrichSessionContacts(contacts),
+        ...(context ? { context } : {}),
+      }),
       { status: 200, headers },
     );
   }
@@ -448,7 +482,7 @@ export async function POST(request) {
   }
 
   if (action === "log_call") {
-    const { session_id, contact_id, resultat, comments, duration_sec } = body;
+    const { session_id, contact_id, resultat, comments, duration_sec, recall_at, do_not_call } = body;
 
     if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
       return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
@@ -464,6 +498,14 @@ export async function POST(request) {
     }
     if (duration_sec !== undefined && (!Number.isInteger(duration_sec) || duration_sec < 0)) {
       return new Response(JSON.stringify({ error: "invalid_duration_sec" }), { status: 400, headers });
+    }
+    if (recall_at !== undefined && recall_at !== null) {
+      if (typeof recall_at !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(recall_at)) {
+        return new Response(JSON.stringify({ error: "invalid_recall_at" }), { status: 400, headers });
+      }
+    }
+    if (do_not_call !== undefined && typeof do_not_call !== "boolean") {
+      return new Response(JSON.stringify({ error: "invalid_do_not_call" }), { status: 400, headers });
     }
 
     const sessionCheck = await assertSessionOwner(client, session_id, user.id);
@@ -510,6 +552,26 @@ export async function POST(request) {
     }
 
     const taskId = sfResult.record?.id;
+    const wantsRecall = typeof recall_at === "string" && recall_at;
+    let recallTaskId = null;
+    if (wantsRecall && do_not_call !== true) {
+      const recall = await createRecallTask(
+        tokenResult.accessToken,
+        {
+          contactId: contact.sf_contact_id,
+          accountId: contact.sf_account_id,
+          recallAt: recall_at,
+          ownerId: profileResult.sfUserId || undefined,
+          actorName: actorName(user, profileResult),
+        },
+        mapping,
+      );
+      if (!recall.error) recallTaskId = recall.record?.id || null;
+    }
+
+    if (do_not_call === true) {
+      await updateContactDoNotCall(tokenResult.accessToken, contact.sf_contact_id, true, mapping);
+    }
 
     const { error: updateError } = await client
       .from("call_session_contacts")
@@ -519,6 +581,8 @@ export async function POST(request) {
         comments: callComments || null,
         sf_task_id: taskId,
         called_at: new Date().toISOString(),
+        recall_at: wantsRecall && do_not_call !== true ? recall_at : null,
+        do_not_call: do_not_call === true,
       })
       .eq("id", contact_id);
 
@@ -532,7 +596,13 @@ export async function POST(request) {
     await journalAction({
       actorId: user.id,
       actionType: "call_session_log",
-      changes: { resultat, comments: callComments, duration_sec: duration_sec ?? 0 },
+      changes: {
+        resultat,
+        comments: callComments,
+        recall_at: wantsRecall ? recall_at : null,
+        do_not_call: do_not_call === true,
+        recall_task_id: recallTaskId,
+      },
       targets: [{ id: contact.sf_contact_id, type: "Contact", session_contact_id: contact_id, session_id }],
       result: { success: true, taskId },
     });

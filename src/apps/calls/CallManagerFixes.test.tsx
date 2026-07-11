@@ -83,45 +83,95 @@ describe("EventPanel", () => {
 });
 
 describe("RunnerView", () => {
+  const runnerProps = {
+    session,
+    loading: false,
+    error: null as string | null,
+    contactContext: null,
+    contextLoading: false,
+    onBack: vi.fn(),
+    onFocusContact: vi.fn(),
+    onLogAndNext: vi.fn(),
+    onLogEvent: vi.fn(),
+    onSkip: vi.fn(),
+    onSkipMany: vi.fn(),
+    onLogMany: vi.fn(),
+  };
+
   it("keeps the logged contact in the prioritized event panel", () => {
     render(
       <RunnerView
-        session={session}
+        {...runnerProps}
         contacts={[alice, bob]}
         currentContact={bob}
-        loading={false}
-        error={null}
         awaitingEvent={alice}
-        onBack={vi.fn()}
-        onLogAndNext={vi.fn()}
-        onLogEvent={vi.fn()}
-        onSkip={vi.fn()}
       />,
     );
 
     expect(screen.getByRole("heading", { name: "RDV planifié — Alice Martin" })).toBeTruthy();
   });
 
-  it("shows title and LinkedIn on the contact card", () => {
-    const current = { ...bob, title: "RF", linkedin_url: "https://linkedin.com/in/bob" };
+  it("shows title, LinkedIn and result buttons on the contact card", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, title: "RF", linkedin_url: "https://linkedin.com/in/bob", status: "pending" as const };
     render(
       <RunnerView
-        session={session}
+        {...runnerProps}
         contacts={[current]}
         currentContact={current}
-        loading={false}
-        error={null}
         awaitingEvent={null}
-        onBack={vi.fn()}
-        onLogAndNext={vi.fn()}
-        onLogEvent={vi.fn()}
-        onSkip={vi.fn()}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
     expect(screen.getByText("RF")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Profil LinkedIn" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "LinkedIn" }).getAttribute("href")).toBe(
       "https://linkedin.com/in/bob",
+    );
+    expect(screen.getByRole("button", { name: "Appel argumenté" })).toBeTruthy();
+    expect(screen.queryByLabelText("Durée (secondes)")).toBeNull();
+    expect(screen.getByText("Contacts")).toBeTruthy();
+    expect(screen.getByText("Restant")).toBeTruthy();
+  });
+
+  it("toggles to list mode with session statuses", () => {
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[alice, bob]}
+        currentContact={bob}
+        awaitingEvent={null}
+      />,
+    );
+
+    expect(screen.getByText("Liste de la séance")).toBeTruthy();
+    expect(screen.getByText("Appelé")).toBeTruthy();
+    expect(screen.getByText("À faire")).toBeTruthy();
+  });
+
+  it("bulk-logs the same outcome for selected contacts", async () => {
+    const user = userEvent.setup();
+    const onLogMany = vi.fn();
+    const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
+    const pendingB = { ...bob, id: 3, contact_name: "Claire", status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogMany={onLogMany}
+        contacts={[pendingA, pendingB]}
+        currentContact={pendingA}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByLabelText("Sélectionner Claire"));
+    await user.click(screen.getByRole("button", { name: "Appel décroché" }));
+    await user.click(screen.getByRole("button", { name: "Consigner pour 2" }));
+
+    expect(onLogMany).toHaveBeenCalledWith(
+      [2, 3],
+      expect.objectContaining({ resultat: "Appel décroché" }),
     );
   });
 });

@@ -32,6 +32,37 @@ export type SessionContact = {
   sf_task_id: string | null;
   sf_event_id: string | null;
   called_at: string | null;
+  recall_at?: string | null;
+  do_not_call?: boolean;
+  sf_contact_url?: string | null;
+  sf_account_url?: string | null;
+};
+
+export type ContactTaskHistoryItem = {
+  id: string;
+  activity_date: string | null;
+  result: string | null;
+  subject: string | null;
+  description: string | null;
+  record_url: string | null;
+};
+
+export type ContactOpportunityItem = {
+  id: string;
+  name: string;
+  stage_name: string | null;
+  is_closed: boolean;
+  is_won: boolean;
+  amount: number | null;
+  close_date: string | null;
+  record_url: string | null;
+};
+
+export type ContactContext = {
+  contact_record_url: string | null;
+  account_record_url: string | null;
+  tasks: ContactTaskHistoryItem[];
+  opportunities: ContactOpportunityItem[];
 };
 
 export type SessionDetail = {
