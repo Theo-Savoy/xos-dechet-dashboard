@@ -48,7 +48,13 @@ export function LoginScreen() {
     setSfLoading(true);
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: SALESFORCE_PROVIDER,
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        scopes: "openid email profile api refresh_token",
+        queryParams: {
+          prompt: "consent",
+        },
+      },
     });
     // Succès = redirection navigateur ; on ne repasse ici qu'en cas d'échec.
     if (err) {

@@ -18,6 +18,8 @@ export function useSession() {
       bridging.current = true;
       try {
         const providerRefreshToken = s.provider_refresh_token;
+        console.log("[useSession] bridge session:", s);
+        console.log("[useSession] provider_refresh_token present:", !!providerRefreshToken);
         const res = await fetch("/api/auth", {
           method: "POST",
           headers: {
