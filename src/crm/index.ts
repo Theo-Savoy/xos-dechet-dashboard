@@ -115,8 +115,16 @@ export const RESULTAT_CALL_VALUES = [
 ] as const;
 export type ResultatCall = (typeof RESULTAT_CALL_VALUES)[number];
 
-/** Défaut relance « follow-up » : les résultats qui justifient un rappel. */
+/** Défaut relance « follow-up » : les résultats qui justifient un rappel automatique. */
 export const RELANCE_DEFAULT_RESULTATS: ResultatCall[] = ["Appel non décroché", "Message répondeur"];
+
+/** Résultats pour lesquels on peut planifier une date de rappel. */
+export const RECALL_ELIGIBLE_RESULTATS: ResultatCall[] = [
+  "Appel non décroché",
+  "Message répondeur",
+  "Appel décroché",
+  "Appel argumenté",
+];
 
 /** Résultats qui comptent dans le pipe « décroché » du cockpit. */
 export const PIPE_DECROCHE: ResultatCall[] = ["Appel décroché", "Appel argumenté", "RDV planifié"];

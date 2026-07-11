@@ -10,6 +10,7 @@ import {
   deletePreset,
   deleteSession,
   fetchContactContext,
+  fetchContactCount,
   fetchContactList,
   fetchPresets,
   fetchSession,
@@ -80,7 +81,11 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [preview, setPreview] = useState<ContactPreview[]>([]);
   const [dedup, setDedup] = useState<DedupEntry[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [matchCountCapped, setMatchCountCapped] = useState(false);
+  const [matchCountLoading, setMatchCountLoading] = useState(false);
   const previewRequest = useRef(0);
+  const matchCountRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
 
@@ -170,6 +175,32 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setDedup([]);
     setPreviewLoading(false);
   };
+
+  useEffect(() => {
+    if (!token || view !== "new") return;
+    const requestId = matchCountRequest.current + 1;
+    matchCountRequest.current = requestId;
+    setMatchCountLoading(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const data = await fetchContactCount(token, filters);
+          if (matchCountRequest.current !== requestId) return;
+          setMatchCount(data.count);
+          setMatchCountCapped(data.capped);
+        } catch {
+          if (matchCountRequest.current !== requestId) return;
+          setMatchCount(null);
+          setMatchCountCapped(false);
+        } finally {
+          if (matchCountRequest.current === requestId) setMatchCountLoading(false);
+        }
+      })();
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [token, view, filters]);
 
   const handleFiltersChange = (next: FilterTree) => {
     setFilters(next);
@@ -525,6 +556,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             setMaxPerCompany(null);
             setPreview([]);
             setDedup([]);
+            setMatchCount(null);
+            setMatchCountCapped(false);
             setNewError(null);
             void loadPresets();
           }}
@@ -544,6 +577,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onMaxPerCompanyChange={handleMaxPerCompanyChange}
           loading={createLoading}
           previewLoading={previewLoading}
+          matchCount={matchCount}
+          matchCountCapped={matchCountCapped}
+          matchCountLoading={matchCountLoading}
           error={newError}
           preview={preview}
           dedup={dedup}

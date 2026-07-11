@@ -22,6 +22,9 @@ type NewSessionViewProps = {
   onMaxPerCompanyChange: (value: MaxPerCompany | null) => void;
   loading: boolean;
   previewLoading: boolean;
+  matchCount: number | null;
+  matchCountCapped: boolean;
+  matchCountLoading: boolean;
   error: string | null;
   preview: ContactPreview[];
   dedup: DedupEntry[];
@@ -68,6 +71,9 @@ export function NewSessionView({
   onMaxPerCompanyChange,
   loading,
   previewLoading,
+  matchCount,
+  matchCountCapped,
+  matchCountLoading,
   error,
   preview,
   dedup,
@@ -175,6 +181,9 @@ export function NewSessionView({
         onChange={onFiltersChange}
         previewCount={preview.length > 0 ? preview.length : null}
         previewLoading={previewLoading}
+        matchCount={matchCount}
+        matchCountCapped={matchCountCapped}
+        matchCountLoading={matchCountLoading}
         contactLimit={contactLimit}
         onContactLimitChange={onContactLimitChange}
         maxPerCompany={maxPerCompany}

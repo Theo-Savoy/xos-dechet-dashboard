@@ -3,6 +3,7 @@ import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   DEFAULT_RECALL_DAYS,
   PIPE_DECROCHE,
+  RECALL_ELIGIBLE_RESULTATS,
   RELANCE_DEFAULT_RESULTATS,
   type ResultatCall,
 } from "../../crm";
@@ -124,6 +125,61 @@ function ResultButtons({
   );
 }
 
+function RecallFields({
+  resultat,
+  scheduleRecall,
+  onScheduleRecallChange,
+  recallAt,
+  onRecallAtChange,
+  defaultRecallDays,
+  onDefaultRecallDaysChange,
+}: {
+  resultat: ResultatCall;
+  scheduleRecall: boolean;
+  onScheduleRecallChange: (value: boolean) => void;
+  recallAt: string;
+  onRecallAtChange: (value: string) => void;
+  defaultRecallDays: number;
+  onDefaultRecallDaysChange: (days: number) => void;
+}) {
+  const autoRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat);
+  if (!RECALL_ELIGIBLE_RESULTATS.includes(resultat)) return null;
+
+  return (
+    <div className="calls-recall" role="group" aria-label="Rappel">
+      <p className="calls-recall__title">Rappel</p>
+      {!autoRecall && (
+        <label className="calls-checkbox calls-checkbox--tight">
+          <input
+            type="checkbox"
+            checked={scheduleRecall}
+            onChange={(e) => onScheduleRecallChange(e.target.checked)}
+          />
+          Planifier un rappel (le contact a demandé à être rappelé)
+        </label>
+      )}
+      {(autoRecall || scheduleRecall) && (
+        <div className="calls-recall__fields">
+          <DatePicker label="Date de rappel" value={recallAt} onChange={onRecallAtChange} />
+          <label className="calls-recall__shortcut">
+            <span>Ou dans (jours)</span>
+            <input
+              type="number"
+              min={0}
+              max={90}
+              className="calls-input"
+              value={defaultRecallDays}
+              onChange={(e) => onDefaultRecallDaysChange(Number(e.target.value) || 0)}
+              aria-label="Définir la date de rappel dans X jours"
+            />
+            <small>Raccourci — calcule la date de rappel à partir d&apos;aujourd&apos;hui</small>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RunnerView({
   session,
   contacts,
@@ -156,13 +212,18 @@ export function RunnerView({
   const [bulkRecallAt, setBulkRecallAt] = useState(() => addDaysIso(readDefaultRecallDays()));
   const [doNotCall, setDoNotCall] = useState(false);
   const [bulkDoNotCall, setBulkDoNotCall] = useState(false);
+  const [scheduleRecall, setScheduleRecall] = useState(true);
+  const [bulkScheduleRecall, setBulkScheduleRecall] = useState(true);
   const [deferIds, setDeferIds] = useState<number[] | null>(null);
   const [deferDate, setDeferDate] = useState(() => addDaysIso(readDefaultRecallDays()));
   const [deferTargetId, setDeferTargetId] = useState<number | null>(null);
 
   const kpis = useMemo(() => computeKpis(contacts), [contacts]);
-  const needsRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat) && !doNotCall;
-  const bulkNeedsRecall = RELANCE_DEFAULT_RESULTATS.includes(bulkResultat) && !bulkDoNotCall;
+  const canRecall = RECALL_ELIGIBLE_RESULTATS.includes(resultat) && !doNotCall;
+  const bulkCanRecall = RECALL_ELIGIBLE_RESULTATS.includes(bulkResultat) && !bulkDoNotCall;
+  const willSendRecall = canRecall && (RELANCE_DEFAULT_RESULTATS.includes(resultat) || scheduleRecall);
+  const bulkWillSendRecall =
+    bulkCanRecall && (RELANCE_DEFAULT_RESULTATS.includes(bulkResultat) || bulkScheduleRecall);
   const pendingContacts = useMemo(() => contacts.filter((c) => c.status === "pending"), [contacts]);
   const statusCounts = useMemo(
     () => ({
@@ -236,8 +297,17 @@ export function RunnerView({
     setResultat(RESULTAT_OPTIONS[0].value);
     setComments("");
     setDoNotCall(false);
+    setScheduleRecall(true);
     setRecallAt(addDaysIso(defaultRecallDays));
   }, [focusedContact?.id, defaultRecallDays]);
+
+  useEffect(() => {
+    setScheduleRecall(RELANCE_DEFAULT_RESULTATS.includes(resultat));
+  }, [resultat]);
+
+  useEffect(() => {
+    setBulkScheduleRecall(RELANCE_DEFAULT_RESULTATS.includes(bulkResultat));
+  }, [bulkResultat]);
 
   useEffect(() => {
     // Drop selections that are no longer pending after a bulk action.
@@ -287,7 +357,7 @@ export function RunnerView({
     onLogAndNext(focusedContact.id, {
       resultat,
       comments,
-      recallAt: needsRecall ? recallAt : null,
+      recallAt: willSendRecall ? recallAt : null,
       doNotCall,
     });
   };
@@ -311,7 +381,7 @@ export function RunnerView({
     onLogMany(pendingSelected, {
       resultat: bulkResultat,
       comments: bulkComments,
-      recallAt: bulkNeedsRecall ? bulkRecallAt : null,
+      recallAt: bulkWillSendRecall ? bulkRecallAt : null,
       doNotCall: bulkDoNotCall,
     });
     setSelectedIds(new Set());
@@ -446,21 +516,16 @@ export function RunnerView({
               </div>
               <details className="calls-bulk-options">
                 <summary>Options (rappel, NPA, commentaires)</summary>
-                {bulkNeedsRecall && (
-                  <div className="calls-fb-row">
-                    <DatePicker label="Date de rappel" value={bulkRecallAt} onChange={setBulkRecallAt} />
-                    <label className="calls-field">
-                      <span>Défaut rappel (jours)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={90}
-                        className="calls-input"
-                        value={defaultRecallDays}
-                        onChange={(e) => handleDefaultRecallDays(Number(e.target.value) || 0)}
-                      />
-                    </label>
-                  </div>
+                {bulkCanRecall && (
+                  <RecallFields
+                    resultat={bulkResultat}
+                    scheduleRecall={bulkScheduleRecall}
+                    onScheduleRecallChange={setBulkScheduleRecall}
+                    recallAt={bulkRecallAt}
+                    onRecallAtChange={setBulkRecallAt}
+                    defaultRecallDays={defaultRecallDays}
+                    onDefaultRecallDaysChange={handleDefaultRecallDays}
+                  />
                 )}
                 <label className="calls-checkbox">
                   <input
@@ -806,21 +871,16 @@ export function RunnerView({
                 <ResultButtons value={resultat} onChange={setResultat} />
               </div>
 
-              {needsRecall && (
-                <div className="calls-fb-row">
-                  <DatePicker label="Date de rappel" value={recallAt} onChange={setRecallAt} />
-                  <label className="calls-field">
-                    <span>Défaut rappel (jours)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={90}
-                      className="calls-input"
-                      value={defaultRecallDays}
-                      onChange={(e) => handleDefaultRecallDays(Number(e.target.value) || 0)}
-                    />
-                  </label>
-                </div>
+              {canRecall && (
+                <RecallFields
+                  resultat={resultat}
+                  scheduleRecall={scheduleRecall}
+                  onScheduleRecallChange={setScheduleRecall}
+                  recallAt={recallAt}
+                  onRecallAtChange={setRecallAt}
+                  defaultRecallDays={defaultRecallDays}
+                  onDefaultRecallDaysChange={handleDefaultRecallDays}
+                />
               )}
 
               <label className="calls-checkbox">

@@ -510,6 +510,12 @@ export async function POST(request) {
     if (result.error) {
       return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
     }
+    if (typeof result.count === "number") {
+      return new Response(
+        JSON.stringify({ count: result.count, capped: Boolean(result.capped) }),
+        { status: 200, headers },
+      );
+    }
     return new Response(
       JSON.stringify({ contacts: result.contacts, dedup: result.dedup }),
       { status: 200, headers },

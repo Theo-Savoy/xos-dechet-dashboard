@@ -87,6 +87,11 @@ export type ContactListResult = {
   dedup: DedupEntry[];
 };
 
+export type ContactCountResult = {
+  count: number;
+  capped: boolean;
+};
+
 export async function fetchContactList(
   token: string,
   filters: FilterTree,
@@ -100,6 +105,21 @@ export async function fetchContactList(
       preset_id: opts?.presetId,
       limit: opts?.limit ?? 200,
       ...(opts?.maxPerCompany ? { max_per_company: opts.maxPerCompany } : {}),
+    }),
+  });
+}
+
+export async function fetchContactCount(
+  token: string,
+  filters: FilterTree,
+): Promise<ContactCountResult> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "list_contacts",
+      filters,
+      count_only: true,
+      limit: 2000,
     }),
   });
 }

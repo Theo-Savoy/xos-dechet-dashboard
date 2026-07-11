@@ -41,6 +41,7 @@ export function parseListContactsBody(body) {
   return {
     filters: { ...body.filters, limit: body.limit ?? body.filters.limit },
     maxPerCompany: body.max_per_company ?? null,
+    countOnly: body.count_only === true,
   };
 }
 
@@ -108,7 +109,7 @@ async function findDedup(client, contactIds) {
   return [...dedup].map(([sf_contact_id, in_session_of]) => ({ sf_contact_id, in_session_of }));
 }
 
-/** Returns { contacts, dedup } or { error, status }. */
+/** Returns { contacts, dedup } or { count, capped } or { error, status }. */
 export async function listContacts(client, userId, body) {
   const parsed = parseListContactsBody(body);
   if (parsed.error) return { error: parsed.error, status: 400 };
@@ -121,7 +122,8 @@ export async function listContacts(client, userId, body) {
 
   const maxPerCompany = parsed.maxPerCompany;
   const requestedLimit = boundedLimit(parsed.filters.limit);
-  const wideFetch = hasRelanceQueryFilters(parsed.filters) || maxPerCompany !== null;
+  const countOnly = parsed.countOnly;
+  const wideFetch = countOnly || hasRelanceQueryFilters(parsed.filters) || maxPerCompany !== null;
   const queryFilters = wideFetch ? { ...parsed.filters, limit: SOQL_FETCH_CAP } : parsed.filters;
 
   const soql = buildTargetQuery(queryFilters, mapping, profile.sfUserId);
@@ -129,6 +131,13 @@ export async function listContacts(client, userId, body) {
   if (search.error) return { error: search.error, status: 502 };
 
   const filtered = filterTargetContacts(search.records, parsed.filters, mapping);
+  if (countOnly) {
+    return {
+      count: filtered.length,
+      capped: filtered.length >= SOQL_FETCH_CAP || (search.records?.length ?? 0) >= SOQL_FETCH_CAP,
+    };
+  }
+
   const normalized = normalizeContacts(filtered);
   const contacts = maxPerCompany !== null
     ? buildPreviewContactList(normalized, requestedLimit, maxPerCompany)

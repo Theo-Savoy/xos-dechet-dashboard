@@ -23,6 +23,9 @@ type FilterBuilderProps = {
   onChange: (next: FilterTree) => void;
   previewCount: number | null;
   previewLoading: boolean;
+  matchCount: number | null;
+  matchCountCapped: boolean;
+  matchCountLoading: boolean;
   contactLimit: ContactLimit;
   onContactLimitChange: (limit: ContactLimit) => void;
   maxPerCompany: MaxPerCompany | null;
@@ -93,6 +96,9 @@ export function FilterBuilder({
   onChange,
   previewCount,
   previewLoading,
+  matchCount,
+  matchCountCapped,
+  matchCountLoading,
   contactLimit,
   onContactLimitChange,
   maxPerCompany,
@@ -370,6 +376,18 @@ export function FilterBuilder({
       </details>
 
       <footer className="calls-fb-footer">
+        <div className="calls-fb-match" role="status" aria-live="polite">
+          {matchCountLoading ? (
+            <Tag>Comptage…</Tag>
+          ) : matchCount !== null ? (
+            <Tag variant="accent">
+              {matchCountCapped ? "≥ " : ""}
+              {matchCount} contact{matchCount > 1 ? "s" : ""} dans les filtres
+            </Tag>
+          ) : (
+            <Tag>Filtres → comptage live</Tag>
+          )}
+        </div>
         <label className="calls-field calls-field--inline">
           <span>Contacts max</span>
           <select
@@ -408,7 +426,7 @@ export function FilterBuilder({
         </Button>
         {previewCount !== null && !previewLoading && (
           <Tag variant="accent">
-            {previewCount} contact{previewCount > 1 ? "s" : ""}
+            Aperçu : {previewCount} contact{previewCount > 1 ? "s" : ""}
           </Tag>
         )}
       </footer>

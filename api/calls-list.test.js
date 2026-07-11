@@ -368,7 +368,21 @@ describe("POST /api/calls action=list_contacts", () => {
     expect(parseListContactsBody({ filters: {}, max_per_company: 3 })).toEqual({
       filters: { limit: undefined },
       maxPerCompany: 3,
+      countOnly: false,
     });
+  });
+
+  it("returns count_only without contact payloads", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: SF_RECORDS }), { status: 200 }));
+
+    const res = await POST(makeReq({ filters: baseFilters, count_only: true }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ count: 1, capped: false });
+    expect(body.contacts).toBeUndefined();
   });
 
   it("returns 500 when profile lookup fails", async () => {

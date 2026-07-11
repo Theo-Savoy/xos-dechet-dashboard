@@ -211,7 +211,37 @@ describe("RunnerView", () => {
 
     expect(onLogMany).toHaveBeenCalledWith(
       [2, 3],
-      expect.objectContaining({ resultat: "Appel décroché" }),
+      expect.objectContaining({ resultat: "Appel décroché", recallAt: null }),
+    );
+  });
+
+  it("lets the user schedule a recall after an answered call", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogAndNext={onLogAndNext}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "Appel décroché" }));
+    expect(screen.getByLabelText(/Planifier un rappel/i)).toBeTruthy();
+    await user.click(screen.getByLabelText(/Planifier un rappel/i));
+    expect(screen.getByLabelText("Date de rappel")).toBeTruthy();
+    expect(screen.getByLabelText("Définir la date de rappel dans X jours")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
+    expect(onLogAndNext).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        resultat: "Appel décroché",
+        recallAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
     );
   });
 
@@ -369,6 +399,9 @@ describe("call targeting copy and controls", () => {
     onChange: vi.fn(),
     previewCount: null as number | null,
     previewLoading: false,
+    matchCount: null as number | null,
+    matchCountCapped: false,
+    matchCountLoading: false,
     contactLimit: 200 as const,
     onContactLimitChange: vi.fn(),
     maxPerCompany: null as null,
@@ -474,6 +507,9 @@ describe("preview selection and enriched rows", () => {
         onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
+        matchCount={null}
+        matchCountCapped={false}
+        matchCountLoading={false}
         error={null}
         preview={preview}
         dedup={[]}
@@ -536,6 +572,9 @@ describe("preview selection and enriched rows", () => {
         onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
+        matchCount={null}
+        matchCountCapped={false}
+        matchCountLoading={false}
         error={null}
         preview={cappedPreview}
         dedup={[]}
@@ -589,6 +628,9 @@ describe("dedup modes in preview selection", () => {
     onMaxPerCompanyChange: vi.fn(),
     loading: false,
     previewLoading: false,
+    matchCount: null as number | null,
+    matchCountCapped: false,
+    matchCountLoading: false,
     error: null,
     preview,
     dedup,
@@ -637,6 +679,9 @@ describe("error announcements", () => {
         onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
+        matchCount={null}
+        matchCountCapped={false}
+        matchCountLoading={false}
         error="Échec d'enregistrement de la liste d'appels (base de données)"
         preview={[]}
         dedup={[]}
