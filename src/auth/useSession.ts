@@ -17,9 +17,16 @@ export function useSession() {
       if (bridged.current || bridging.current) return;
       bridging.current = true;
       try {
+        const providerRefreshToken = s.provider_refresh_token;
         const res = await fetch("/api/auth", {
           method: "POST",
-          headers: { Authorization: `Bearer ${s.access_token}` },
+          headers: {
+            Authorization: `Bearer ${s.access_token}`,
+            ...(providerRefreshToken ? { "Content-Type": "application/json" } : {}),
+          },
+          ...(providerRefreshToken
+            ? { body: JSON.stringify({ salesforce_refresh_token: providerRefreshToken }) }
+            : {}),
         });
         if (cancelled || generation.current !== gen) return;
         if (!res.ok) {

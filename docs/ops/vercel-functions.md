@@ -1,10 +1,10 @@
-# Ops — Fonctions Vercel (plafond Hobby = 12 ; 8/12 utilisées)
+# Ops — Fonctions Vercel (plafond Hobby = 12 ; 9/12 utilisées)
 
 **Constat 2026-07-11** : le plan Hobby Vercel limite à **12 Serverless Functions**.
 
 **Mise à jour** : consolidations **B** et **C** appliquées (`search` + `log` → `launcher`, `sso-bridge` + `auth/salesforce` → `auth`).
 
-## Inventaire actuel (handlers HTTP) — post lot Hub 2.3
+## Inventaire actuel (handlers HTTP) — post lot Weekly 3.1
 
 | # | Fichier | Rôle | Touché par |
 |---|---|---|---|
@@ -13,12 +13,22 @@
 | 3 | `api/history.js` | Journal Blob Cleaner | `dashboard.html` |
 | 4 | `api/version.js` | Clé cache Cleaner | `dashboard.html` |
 | 5 | `api/launcher.js` | SOSL + `/log` + `/create` | Cmd+K |
-| 6 | `api/auth.js` | Cookie legacy + OAuth SF (stub → 8.1) | Login |
+| 6 | `api/auth.js` | Cookie legacy + liaison OAuth SF par utilisateur | Login / compte |
 | 7 | `api/calls.js` | Sessions + list_contacts + presets | Calls app |
 | 8 | `api/status.js` | Statut Hub, réglages équipe et rôles | Hub 2.3 |
-| 9–12 | **libres** | Weekly `perf`, réserve | — |
+| 9 | `api/perf.js` | Agrégats Weekly Perf (Pulse, Pipeline, Effort) | Lot 3.1 |
+| 10–12 | **libres** | Réserve | — |
 
 Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `api/_calls/*`, `api/_config/*`.
+
+### Activation OAuth utilisateur (lot 8.1b)
+
+- ✅ Migration `supabase/migrations/015_salesforce_user_oauth.sql` appliquée en Production le 2026-07-11.
+- ✅ `SF_TOKEN_ENCRYPTION_KEY` ajoutée à Vercel Production (32 octets aléatoires, base64).
+- Conserver `SF_REFRESH_TOKEN` : il reste le fallback d'intégration pour les comptes non liés ou révoqués.
+- Callback Connected App : `https://xos.hellotheo.fr/api/auth?flow=salesforce-callback`.
+- Ne jamais faire tourner la clé de chiffrement sans relier ensuite tous les comptes Salesforce.
+- Le login Salesforce synchronise automatiquement `provider_refresh_token`; la route dédiée sert de reliaison/secours.
 
 ### Routes `/api/launcher`
 
@@ -34,6 +44,8 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 | Méthode | Route | Rôle |
 |---|---|---|
 | `POST` | — | Vérifie le JWT puis pose le cookie `xos_auth` (ancien `/api/sso-bridge`) |
+| `POST` | `?flow=salesforce-link` | Démarre la liaison OAuth SF du user JWT ; retourne `authorization_url` |
+| `GET` | `?flow=salesforce-callback` | Callback SF, validation identité et stockage chiffré du refresh token |
 | `GET` | `?flow=salesforce` | Stub OAuth : redirection `/?auth_error=sf_coming_soon` (ancien `/api/auth/salesforce`) |
 | `GET` | sans flux reconnu | `400 { error: "invalid_flow" }` |
 | `OPTIONS` | — | CORS : `GET, POST, OPTIONS` |
@@ -54,7 +66,7 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 | Endpoint prévu | Phase | Slot |
 |---|---|---|
 | `status` (Hub) | 2.3 | livré (`api/status.js`) |
-| `perf` (Weekly) | 3.1 | libre |
+| `perf` (Weekly) | 3.1 | livré (`api/perf.js`) |
 | `business-review` | 6.1 | réserve / consolidation C |
 | `arena/*` | 5.1 | Pro ou consolidation C |
 | `chat` + `slack/*` | 7.x | Pro ou consolidation C |
@@ -81,5 +93,5 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 
 ## Décision produit
 
-- **Fait** : consolidations **B** et **C**, puis Hub 2.3 → **8 fonctions**, soit **4 slots libres** pour Weekly + marge.
-- **Moyen terme** : la consolidation **D** reste intouchable hors lot Cleaner ; envisager Vercel Pro si les besoins dépassent ces 5 slots.
+- **Fait** : consolidations **B** et **C**, Hub 2.3 puis Weekly 3.1 → **9 fonctions**, soit **3 slots libres**.
+- **Moyen terme** : la consolidation **D** reste intouchable hors lot Cleaner ; envisager Vercel Pro si les besoins dépassent les 3 slots restants.

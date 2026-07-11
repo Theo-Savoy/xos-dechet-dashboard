@@ -55,6 +55,16 @@ describe("verifyJWT cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("accepts Vercel Node request headers used by legacy handlers", async () => {
+    const { verifyJWT } = await loadAuth();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "user-node" }), { status: 200 }),
+    ));
+
+    await expect(verifyJWT({ headers: { authorization: "Bearer node-token" } }))
+      .resolves.toEqual({ id: "user-node" });
+  });
+
   it("evicts the oldest token when inserting a 201st entry", async () => {
     const { verifyJWT } = await loadAuth();
     const fetchMock = vi.fn((_, init) => {

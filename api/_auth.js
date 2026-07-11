@@ -32,7 +32,9 @@ export async function verifyJWT(request) {
     return null;
   }
 
-  const authHeader = request.headers.get("authorization");
+  const authHeader = typeof request.headers?.get === "function"
+    ? request.headers.get("authorization")
+    : request.headers?.authorization || request.headers?.Authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;
   }

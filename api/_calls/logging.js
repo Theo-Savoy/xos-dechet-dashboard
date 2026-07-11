@@ -55,7 +55,7 @@ export async function handleLogging({ action, body, user, client, headers }) {
       return new Response(JSON.stringify({ error: profileResult.error }), { status: 500, headers });
     }
 
-    const tokenResult = await fetchSFToken();
+    const tokenResult = await fetchSFToken({ client, userId: user.id });
     if (tokenResult.error) {
       return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
     }
@@ -172,7 +172,7 @@ export async function handleLogging({ action, body, user, client, headers }) {
       return new Response(JSON.stringify({ error: profileResult.error }), { status: 500, headers });
     }
 
-    const tokenResult = await fetchSFToken();
+    const tokenResult = await fetchSFToken({ client, userId: user.id });
     if (tokenResult.error) {
       return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
     }

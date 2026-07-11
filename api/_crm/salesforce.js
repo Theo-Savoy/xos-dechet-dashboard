@@ -1,9 +1,12 @@
 /** Salesforce CRM adapter. All organization-specific API names come from mapping. */
 import defaultMapping from "./mapping.js";
+import { decryptRefreshToken } from "./tokenEncryption.js";
 
 export const SOQL_FETCH_CAP = 2000;
 const SF_TOKEN_TTL_MS = 30 * 60_000;
 let sfTokenCache = { accessToken: null, fetchedAt: 0 };
+const sfUserTokenCache = new Map();
+const sfUserTokenContexts = new Map();
 
 function invalidateSFTokenCache() {
   sfTokenCache = { accessToken: null, fetchedAt: 0 };
@@ -12,6 +15,8 @@ function invalidateSFTokenCache() {
 /** Test-only hook to isolate module-scope token cache state. */
 export function __resetSFTokenCache() {
   invalidateSFTokenCache();
+  sfUserTokenCache.clear();
+  sfUserTokenContexts.clear();
 }
 
 export function escapeSOQL(value) {
@@ -202,36 +207,78 @@ export function filterTargetContacts(records, filters = {}, mapping, now = new D
   });
 }
 
+async function exchangeRefreshToken(refreshToken) {
+  const clientId = process.env.SF_CLIENT_ID || "";
+  const clientSecret = process.env.SF_CLIENT_SECRET || "";
+  const loginUrl = process.env.SF_LOGIN_URL || "https://login.salesforce.com";
+  if (!clientId || !clientSecret || !refreshToken) return { error: "sf_missing_credentials" };
+  const response = await fetch(`${loginUrl}/services/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) return { error: "sf_auth_error" };
+  const accessToken = (await response.json()).access_token;
+  return accessToken ? { accessToken } : { error: "sf_auth_error" };
+}
+
+async function fetchUserSFToken({ client, userId, forceRefresh = false }) {
+  const cached = sfUserTokenCache.get(userId);
+  if (!forceRefresh && cached && Date.now() - cached.fetchedAt < SF_TOKEN_TTL_MS) {
+    sfUserTokenContexts.set(cached.accessToken, { client, userId });
+    return { accessToken: cached.accessToken, credential: "user" };
+  }
+  if (cached) sfUserTokenCache.delete(userId);
+
+  let data;
+  let error;
+  try {
+    ({ data, error } = await client
+      .from("profiles")
+      .select("sf_refresh_token_encrypted")
+      .eq("id", userId)
+      .maybeSingle());
+  } catch {
+    return null;
+  }
+  if (error || !data?.sf_refresh_token_encrypted) return null;
+
+  try {
+    const refreshToken = await decryptRefreshToken(data.sf_refresh_token_encrypted);
+    const result = await exchangeRefreshToken(refreshToken);
+    if (result.error) return null;
+    sfUserTokenCache.set(userId, { accessToken: result.accessToken, fetchedAt: Date.now() });
+    sfUserTokenContexts.set(result.accessToken, { client, userId });
+    return { accessToken: result.accessToken, credential: "user" };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchSFToken(options = {}) {
+  if (options.client && options.userId) {
+    const userToken = await fetchUserSFToken(options);
+    if (userToken) return userToken;
+  }
   if (!options.forceRefresh && sfTokenCache.accessToken && Date.now() - sfTokenCache.fetchedAt < SF_TOKEN_TTL_MS) {
     return { accessToken: sfTokenCache.accessToken };
   }
   const clientId = process.env.SF_CLIENT_ID || "";
   const clientSecret = process.env.SF_CLIENT_SECRET || "";
   const refreshToken = process.env.SF_REFRESH_TOKEN || "";
-  const loginUrl = process.env.SF_LOGIN_URL || "https://login.salesforce.com";
   if (!clientId || !clientSecret || !refreshToken) {
     invalidateSFTokenCache();
     return { error: "sf_missing_credentials" };
   }
   try {
-    const response = await fetch(`${loginUrl}/services/oauth2/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
+    const result = await exchangeRefreshToken(refreshToken);
+    if (result.error) {
       invalidateSFTokenCache();
-      return { error: "sf_auth_error" };
+      return result;
     }
-    const accessToken = (await response.json()).access_token;
-    if (!accessToken) {
-      invalidateSFTokenCache();
-      return { error: "sf_auth_error" };
-    }
-    sfTokenCache = { accessToken, fetchedAt: Date.now() };
-    return { accessToken };
+    sfTokenCache = { accessToken: result.accessToken, fetchedAt: Date.now() };
+    return { accessToken: result.accessToken };
   } catch (error) {
     invalidateSFTokenCache();
     throw error;
@@ -246,8 +293,11 @@ async function sfFetchWithRetry(token, makeRequest) {
   let response = await makeRequest(token);
   if (response.status !== 401) return { response, token };
 
-  invalidateSFTokenCache();
-  const refreshed = await fetchSFToken({ forceRefresh: true });
+  const userContext = sfUserTokenContexts.get(token);
+  if (!userContext) invalidateSFTokenCache();
+  const refreshed = await fetchSFToken(userContext
+    ? { ...userContext, forceRefresh: true }
+    : { forceRefresh: true });
   if (refreshed.error) return { error: "sf_auth_error" };
 
   response = await makeRequest(refreshed.accessToken);
@@ -298,6 +348,26 @@ async function createSObject(token, objectName, fields) {
   const { response } = result;
   if (!response.ok) return { error: "sf_write_error", message: (await response.text()).slice(0, 500) };
   return { record: await response.json() };
+}
+
+export function createRecord(token, objectName, fields) {
+  return createSObject(token, objectName, fields);
+}
+
+export async function updateSObjects(token, objectName, records) {
+  const request = (requestToken) => fetch(`${instanceUrl()}/services/data/v67.0/composite/sobjects`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${requestToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      allOrNone: false,
+      records: records.map((record) => ({ attributes: { type: objectName }, ...record })),
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const result = await sfFetchWithRetry(token, request);
+  if (result.error) return result;
+  if (!result.response.ok) return { error: "sf_write_error", message: (await result.response.text()).slice(0, 500) };
+  return { records: await result.response.json() };
 }
 
 /** YYYY-MM-DD in Europe/Paris — required for Tasks to show in SF activity timelines. */

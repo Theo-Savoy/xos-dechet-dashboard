@@ -522,6 +522,14 @@ let selectedReasons = new Set();
 let META = { stages: [], users: [] };
 let historyOpen = false;
 let LAST_DATA = null;
+let XOS_ACCESS_TOKEN = null;
+
+window.addEventListener('message', function(event) {
+  if (event.origin !== window.location.origin) return;
+  if (event.data && event.data.type === 'xos:auth' && typeof event.data.accessToken === 'string') {
+    XOS_ACCESS_TOKEN = event.data.accessToken;
+  }
+});
 
 const REASON_FAMILIES = {
   'CloseDate depassée >1 an': 'closedate',
@@ -1302,7 +1310,10 @@ function sendBulkUpdate(opps, changes) {
 
   fetch('/api/update', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + (XOS_ACCESS_TOKEN || '')
+    },
     body: JSON.stringify({ opps: opps, changes: changes })
   }).then(function(r) {
     return r.json().then(function(d) { return { ok: r.ok, data: d }; });

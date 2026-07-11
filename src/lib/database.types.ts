@@ -9,6 +9,10 @@ export interface Database {
           email: string;
           full_name: string | null;
           sf_user_id: string | null;
+          sf_refresh_token_encrypted: string | null;
+          sf_auth_connected_at: string | null;
+          sf_oauth_state_hash: string | null;
+          sf_oauth_state_expires_at: string | null;
           role: "commercial" | "manager" | "admin";
           created_at: string;
           updated_at: string;
@@ -18,6 +22,10 @@ export interface Database {
           email: string;
           full_name?: string | null;
           sf_user_id?: string | null;
+          sf_refresh_token_encrypted?: string | null;
+          sf_auth_connected_at?: string | null;
+          sf_oauth_state_hash?: string | null;
+          sf_oauth_state_expires_at?: string | null;
           role?: "commercial" | "manager" | "admin";
           created_at?: string;
           updated_at?: string;
@@ -27,6 +35,10 @@ export interface Database {
           email?: string;
           full_name?: string | null;
           sf_user_id?: string | null;
+          sf_refresh_token_encrypted?: string | null;
+          sf_auth_connected_at?: string | null;
+          sf_oauth_state_hash?: string | null;
+          sf_oauth_state_expires_at?: string | null;
           role?: "commercial" | "manager" | "admin";
           created_at?: string;
           updated_at?: string;

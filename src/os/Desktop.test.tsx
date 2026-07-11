@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Desktop } from "./Desktop";
+import { startSalesforceLink } from "./salesforceLink";
 
 // Polyfill ResizeObserver (required by cmdk / Radix Dialog in jsdom)
 globalThis.ResizeObserver = class {
@@ -101,5 +102,21 @@ describe("Desktop", () => {
 
     await user.click(screen.getByRole("button", { name: "Fermer Aperçu commercial" }));
     expect(screen.queryByRole("dialog", { name: "Aperçu commercial" })).toBeNull();
+  });
+
+  it("starts the authenticated Salesforce account-link flow", async () => {
+    const navigate = vi.fn();
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ authorization_url: "https://login.salesforce.test/authorize" }),
+    });
+
+    await startSalesforceLink("jwt-token", navigate, fetcher);
+
+    expect(fetcher).toHaveBeenCalledWith("/api/auth?flow=salesforce-link", {
+      method: "POST",
+      headers: { Authorization: "Bearer jwt-token" },
+    });
+    expect(navigate).toHaveBeenCalledWith("https://login.salesforce.test/authorize");
   });
 });

@@ -10,6 +10,7 @@ import {
   windowReducer,
 } from "./windowState";
 import { Launcher } from "./Launcher";
+import { startSalesforceLink } from "./salesforceLink";
 import "./theme.css";
 import "./desktop.css";
 
@@ -28,6 +29,8 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
     ),
   );
   const [role, setRole] = useState<AppRole>("commercial");
+  const [sfLinked, setSfLinked] = useState(false);
+  const [sfLinking, setSfLinking] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +43,16 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
         const value = data?.role;
         if (!cancelled && (value === "admin" || value === "manager" || value === "commercial")) {
           setRole(value);
+        }
+      });
+    void supabase
+      .from("profiles")
+      .select("sf_auth_connected_at")
+      .eq("email", userEmail)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data && "sf_auth_connected_at" in data) {
+          setSfLinked(Boolean(data.sf_auth_connected_at));
         }
       });
     return () => {
@@ -82,6 +95,17 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
           <span className="xos-menubar__status" aria-hidden="true" />
           {userEmail}
         </span>
+        <button
+          type="button"
+          className="xos-menubar__sf-link"
+          disabled={sfLinking}
+          onClick={() => {
+            setSfLinking(true);
+            void startSalesforceLink(accessToken).catch(() => setSfLinking(false));
+          }}
+        >
+          {sfLinked ? "Salesforce lié" : sfLinking ? "Connexion…" : "Lier Salesforce"}
+        </button>
         <button
           type="button"
           className="xos-menubar__logout"

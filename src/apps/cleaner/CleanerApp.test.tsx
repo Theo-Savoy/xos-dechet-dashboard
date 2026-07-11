@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { getSession } = vi.hoisted(() => ({
+  getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "cleaner-jwt" } } }),
+}));
+vi.mock("../../lib/supabase", () => ({ supabase: { auth: { getSession } } }));
 import { appRegistry, getAppManifest } from "../../os/registry";
 import CleanerApp from "./CleanerApp";
 
@@ -46,5 +51,17 @@ describe("CleanerApp component", () => {
     render(<CleanerApp />);
     const iframe = screen.getByTitle("CRM Cleaner");
     expect(iframe.getAttribute("title")).toBe("CRM Cleaner");
+  });
+
+  it("passes the authenticated session to the same-origin legacy dashboard", async () => {
+    render(<CleanerApp />);
+    const iframe = screen.getByTitle("CRM Cleaner") as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
+    fireEvent.load(iframe);
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      { type: "xos:auth", accessToken: "cleaner-jwt" },
+      window.location.origin,
+    ));
   });
 });

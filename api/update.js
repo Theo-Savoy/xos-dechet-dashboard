@@ -1,6 +1,9 @@
 // POST /api/update — Mise à jour en lot d'opportunités Salesforce + journal Blob.
 // Auth cookie gérée par middleware.js, rien à faire ici.
 import { put } from '@vercel/blob';
+import { verifyJWT } from './_auth.js';
+import { getServiceClient } from './_calls/http.js';
+import { fetchSFToken, updateSObjects } from './_crm/salesforce.js';
 
 const SF_ID = /^[a-zA-Z0-9]{15,18}$/;
 const DATE_YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,6 +24,11 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'method_not_allowed', message: 'Méthode non autorisée, utiliser POST.' });
+  }
+
+  const user = await verifyJWT(req);
+  if (!user) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Session X OS requise.' });
   }
 
   // ── Validation du payload (trust boundary) ──
@@ -81,69 +89,31 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_payload', message: 'changes doit contenir au moins une clé parmi owner_id, close_date, stage, type_vente.' });
   }
 
-  // ── OAuth Salesforce (même flux que api/refresh.py) ──
-  const clientId = process.env.SF_CLIENT_ID || '';
-  const clientSecret = process.env.SF_CLIENT_SECRET || '';
-  const refreshToken = process.env.SF_REFRESH_TOKEN || '';
-  const loginUrl = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
-  const instanceUrl = process.env.SF_INSTANCE_URL || 'https://db0000000d7rdeay.my.salesforce.com';
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    return res.status(500).json({ error: 'missing_env', message: 'SF credentials not configured' });
-  }
-
-  let accessToken;
+  // Credential personnel si le commercial a lié Salesforce ; fallback intégration.
+  let tokenResult;
   try {
-    const tokenResp = await fetch(loginUrl + '/services/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!tokenResp.ok) {
-      const errText = await tokenResp.text();
-      return res.status(502).json({ error: 'salesforce_auth_error', message: errText.slice(0, 500) });
-    }
-    accessToken = (await tokenResp.json()).access_token;
+    tokenResult = await fetchSFToken({ client: getServiceClient(), userId: user.id });
   } catch (e) {
     return res.status(502).json({ error: 'salesforce_auth_error', message: String(e && e.message || e).slice(0, 500) });
+  }
+  if (tokenResult.error || !tokenResult.accessToken) {
+    return res.status(502).json({ error: 'salesforce_auth_error', message: tokenResult.error || 'Token Salesforce indisponible.' });
   }
 
   // ── PATCH composite en lot (≤200) ──
   let results;
   try {
-    const patchResp = await fetch(instanceUrl + '/services/data/v67.0/composite/sobjects', {
-      method: 'PATCH',
-      headers: {
-        Authorization: 'Bearer ' + accessToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        allOrNone: false,
-        records: opps.map(o => {
-          const rec = { attributes: { type: 'Opportunity' }, id: o.id, ...fields };
-          const tv = o.type_vente;
-          if (fields.Raison_de_perte_V2__c && tv && tv !== '—' && tv !== 'null') {
-            rec.Type_de_vente__c = tv;
-          }
-          if (changes.owner_id === 'ACCOUNT_OWNER' && o.account_owner_id) {
-            rec.OwnerId = o.account_owner_id;
-          }
-          return rec;
-        }),
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!patchResp.ok) {
-      const errText = await patchResp.text();
-      return res.status(502).json({ error: 'salesforce_api_error', message: errText.slice(0, 500) });
+    const updateResult = await updateSObjects(tokenResult.accessToken, 'Opportunity', opps.map(o => {
+      const rec = { id: o.id, ...fields };
+      const tv = o.type_vente;
+      if (fields.Raison_de_perte_V2__c && tv && tv !== '—' && tv !== 'null') rec.Type_de_vente__c = tv;
+      if (changes.owner_id === 'ACCOUNT_OWNER' && o.account_owner_id) rec.OwnerId = o.account_owner_id;
+      return rec;
+    }));
+    if (updateResult.error) {
+      return res.status(502).json({ error: 'salesforce_api_error', message: updateResult.message || updateResult.error });
     }
-    results = await patchResp.json(); // [{id, success, errors}] dans l'ordre des records
+    results = updateResult.records;
   } catch (e) {
     return res.status(502).json({ error: 'salesforce_api_error', message: String(e && e.message || e).slice(0, 500) });
   }

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockSession = {
   user: { email: "theo@xos-learning.fr" },
   access_token: "test-token-abc",
+  provider_refresh_token: "sf-provider-refresh",
 } as const;
 
 let getSessionResolver: ((value: { data: { session: typeof mockSession | null } }) => void) | null =
@@ -75,7 +76,11 @@ describe("useSession — auth bridge", () => {
 
     expect(global.fetch).toHaveBeenCalledWith("/api/auth", expect.objectContaining({
       method: "POST",
-      headers: { Authorization: "Bearer test-token-abc" },
+      headers: {
+        Authorization: "Bearer test-token-abc",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ salesforce_refresh_token: "sf-provider-refresh" }),
     }));
 
     expect(result.current.loading).toBe(true);

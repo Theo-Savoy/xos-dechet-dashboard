@@ -6,7 +6,7 @@
 import { verifyJWT } from "./_auth.js";
 import { getProfile } from "./_calls/profileCache.js";
 import { getServiceClient, journalAction } from "./_calls/http.js";
-import { fetchSFToken } from "./_crm/salesforce.js";
+import { createRecord, fetchSFToken } from "./_crm/salesforce.js";
 
 export { fetchSFToken };
 
@@ -176,8 +176,6 @@ export async function POST(request) {
     return new Response(JSON.stringify({ error: "missing_action" }), { status: 400, headers });
   }
 
-  const instanceUrl = process.env.SF_INSTANCE_URL || "https://db0000000d7rdeay.my.salesforce.com";
-
   if (action === "log_call") {
     const { recordId, recordType, comments } = body;
     if (!recordId || typeof recordId !== "string" || !SF_ID.test(recordId)) {
@@ -190,7 +188,7 @@ export async function POST(request) {
       return new Response(JSON.stringify({ error: "missing_comments" }), { status: 400, headers });
     }
 
-    const tokenResult = await fetchSFToken();
+    const tokenResult = await fetchSFToken({ client: getServiceClient(), userId: user.id });
     if (tokenResult.error) {
       return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
     }
@@ -212,22 +210,15 @@ export async function POST(request) {
     const sfOwnerId = await lookupSfOwnerId(user.id);
     if (sfOwnerId) taskFields.OwnerId = sfOwnerId;
 
-    const sfResp = await fetch(`${instanceUrl}/services/data/v67.0/sobjects/Task`, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + tokenResult.accessToken, "Content-Type": "application/json" },
-      body: JSON.stringify(taskFields),
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!sfResp.ok) {
-      const errText = await sfResp.text();
+    const sfResult = await createRecord(tokenResult.accessToken, "Task", taskFields);
+    if (sfResult.error) {
       return new Response(
-        JSON.stringify({ error: "sf_task_creation_failed", message: errText.slice(0, 500) }),
+        JSON.stringify({ error: "sf_task_creation_failed", message: sfResult.message }),
         { status: 502, headers },
       );
     }
 
-    const taskId = (await sfResp.json()).id;
+    const taskId = sfResult.record.id;
     await journalAction({
       actorId: user.id,
       actionType: "log_call",
@@ -262,7 +253,7 @@ export async function POST(request) {
       return new Response(JSON.stringify({ error: "invalid_account_id" }), { status: 400, headers });
     }
 
-    const tokenResult = await fetchSFToken();
+    const tokenResult = await fetchSFToken({ client: getServiceClient(), userId: user.id });
     if (tokenResult.error) {
       return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
     }
@@ -276,22 +267,15 @@ export async function POST(request) {
     const sfOwnerId = await lookupSfOwnerId(user.id);
     if (sfOwnerId) contactFields.OwnerId = sfOwnerId;
 
-    const sfResp = await fetch(`${instanceUrl}/services/data/v67.0/sobjects/Contact`, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + tokenResult.accessToken, "Content-Type": "application/json" },
-      body: JSON.stringify(contactFields),
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!sfResp.ok) {
-      const errText = await sfResp.text();
+    const sfResult = await createRecord(tokenResult.accessToken, "Contact", contactFields);
+    if (sfResult.error) {
       return new Response(
-        JSON.stringify({ error: "sf_contact_creation_failed", message: errText.slice(0, 500) }),
+        JSON.stringify({ error: "sf_contact_creation_failed", message: sfResult.message }),
         { status: 502, headers },
       );
     }
 
-    const contactId = (await sfResp.json()).id;
+    const contactId = sfResult.record.id;
     await journalAction({
       actorId: user.id,
       actionType: "create_contact",

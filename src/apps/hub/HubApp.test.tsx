@@ -41,7 +41,7 @@ describe("Hub app", () => {
     expect(await screen.findByText("Ada Lovelace")).toBeTruthy();
     expect(screen.getByText("Configuration équipe")).toBeTruthy();
     expect(screen.queryByText("Accès & rôles")).toBeNull();
-    expect(screen.getByText("14 900 / 15 000")).toBeTruthy();
+    expect(screen.getByText(/100 utilisés \/ 15.000 — 14.900 restants/)).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledWith("/api/status", expect.objectContaining({ headers: { Authorization: "Bearer token" } }));
   });
 
