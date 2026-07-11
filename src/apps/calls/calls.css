@@ -927,19 +927,23 @@
   display: grid;
   gap: 0;
   width: 100%;
+  min-width: 56rem;
+  --calls-preview-check: 1.75rem;
+  --calls-preview-linkedin: 4.75rem;
+  --calls-preview-status: 7.5rem;
 }
 
 .calls-preview__list li {
   display: grid;
   grid-template-columns:
-    1.75rem
-    minmax(5.5rem, 0.8fr)
-    minmax(8rem, 2fr)
-    minmax(8rem, 2fr)
-    minmax(7rem, 1.35fr)
-    minmax(5.5rem, 0.65fr)
-    4.5rem
-    minmax(4rem, 0.5fr);
+    var(--calls-preview-check)
+    minmax(0, 0.9fr)
+    minmax(0, 1.7fr)
+    minmax(0, 1.7fr)
+    minmax(0, 1.25fr)
+    minmax(0, 0.8fr)
+    var(--calls-preview-linkedin)
+    var(--calls-preview-status);
   column-gap: 0.65rem;
   font-size: 0.84rem;
   padding: 0.55rem 0.4rem;
@@ -1246,9 +1250,86 @@
   margin-top: 0.55rem;
 }
 
-.calls-recap-list__comment {
+.calls-recalls {
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.calls-recalls__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calls-recalls__head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.calls-recalls__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.calls-recalls__row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  text-align: left;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.calls-recalls__row:hover {
+  border-color: color-mix(in srgb, var(--xos-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--xos-accent) 8%, transparent);
+}
+
+.calls-recalls__when,
+.calls-recalls__who,
+.calls-recalls__meta {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.calls-recalls__who strong,
+.calls-recalls__meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calls-recalls__who small,
+.calls-recalls__when small {
   color: var(--xos-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+}
+
+.calls-recalls__meta {
+  justify-items: end;
+}
+
+@media (max-width: 720px) {
+  .calls-recalls__row {
+    grid-template-columns: 1fr;
+  }
+
+  .calls-recalls__meta {
+    justify-items: start;
+  }
 }
 
 .calls-event-panel--inline {
@@ -1279,20 +1360,23 @@
   display: grid;
   gap: 0;
   width: 100%;
-  min-width: 0;
+  min-width: 52rem;
+  --calls-col-check: 1.75rem;
+  --calls-col-status: 8rem;
+  --calls-col-recall: 5.5rem;
 }
 
 .calls-cockpit-list__rows li {
   display: grid;
   grid-template-columns:
-    1.75rem
-    minmax(5rem, 0.75fr)
-    minmax(8rem, 2.1fr)
-    minmax(8rem, 2.1fr)
-    minmax(7rem, 1.35fr)
-    minmax(5.25rem, 0.65fr)
-    minmax(3.5rem, max-content)
-    minmax(3.5rem, max-content);
+    var(--calls-col-check)
+    minmax(0, 0.9fr)
+    minmax(0, 1.7fr)
+    minmax(0, 1.7fr)
+    minmax(0, 1.25fr)
+    minmax(0, 0.8fr)
+    var(--calls-col-status)
+    var(--calls-col-recall);
   gap: 0.4rem;
   align-items: start;
   padding: 0.55rem 0.35rem;

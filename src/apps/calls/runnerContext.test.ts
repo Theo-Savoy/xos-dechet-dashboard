@@ -27,8 +27,12 @@ describe("resolveContextContactId", () => {
     expect(resolveContextContactId(contacts, 1, 2)).toBe(1);
   });
 
-  it("ignores focused contact that is no longer pending", () => {
-    expect(resolveContextContactId(contacts, null, 1)).toBe(2);
+  it("keeps focused contact even when already called (recall inbox)", () => {
+    expect(resolveContextContactId(contacts, null, 1)).toBe(1);
+  });
+
+  it("falls back to next pending when focus is missing", () => {
+    expect(resolveContextContactId(contacts, null, 99)).toBe(2);
   });
 
   it("keeps focused pending contact when user opened their fiche", () => {

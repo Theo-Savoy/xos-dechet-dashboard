@@ -1,22 +1,24 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { ProgressBar } from "./ProgressBar";
-import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
-import type { CallStats, PeriodKpis, SessionSummary, SessionType } from "./types";
+import { DatePicker, SessionTypePicker, formatIsoDateFr, todayParisIso } from "./formControls";
+import type { CallStats, PeriodKpis, RecallInboxItem, SessionSummary, SessionType } from "./types";
 import { SESSION_TYPE_OPTIONS, sessionTypeLabel } from "./types";
 
-type HubViewMode = "list" | "calendar";
+type HubViewMode = "list" | "calendar" | "recalls";
 type KpiPeriod = "week" | "month";
 type ScheduleFilter = "upcoming" | "done" | "all";
 
 type SessionsViewProps = {
   sessions: SessionSummary[];
   stats: CallStats | null;
+  recalls: RecallInboxItem[];
+  recallsLoading: boolean;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
   onNewSession: () => void;
-  onOpenSession: (sessionId: number) => void;
+  onOpenSession: (sessionId: number, contactId?: number) => void;
   onUpdateSession: (
     sessionId: number,
     patch: { name?: string; scheduled_for?: string | null; session_type?: SessionType },
@@ -97,6 +99,8 @@ function sortSessions(list: SessionSummary[], filter: ScheduleFilter): SessionSu
 export function SessionsView({
   sessions,
   stats,
+  recalls,
+  recallsLoading,
   loading,
   error,
   onRefresh,
@@ -299,7 +303,19 @@ export function SessionsView({
               >
                 Calendrier
               </button>
+              <button
+                type="button"
+                className={`calls-seg__btn${viewMode === "recalls" ? " calls-seg__btn--active" : ""}`}
+                aria-pressed={viewMode === "recalls"}
+                onClick={() => setViewMode("recalls")}
+              >
+                Rappels
+                {recalls.length > 0 && (
+                  <span className="calls-seg__count xos-numeric">{recalls.length}</span>
+                )}
+              </button>
             </div>
+            {viewMode !== "recalls" && (
             <div className="calls-seg" role="group" aria-label="Échéance">
               <button
                 type="button"
@@ -328,7 +344,9 @@ export function SessionsView({
                 Toutes
               </button>
             </div>
+            )}
           </div>
+          {viewMode !== "recalls" && (
           <div className="calls-list-filter-chips" role="group" aria-label="Type de séance">
             <button
               type="button"
@@ -350,6 +368,7 @@ export function SessionsView({
               </button>
             ))}
           </div>
+          )}
         </div>
 
         {loading && <p className="calls-state">Chargement des séances…</p>}
@@ -392,6 +411,52 @@ export function SessionsView({
               >
                 Réinitialiser les filtres
               </Button>
+            )}
+          </GlassCard>
+        )}
+
+        {!loading && !error && viewMode === "recalls" && (
+          <GlassCard className="calls-recalls">
+            <div className="calls-recalls__head">
+              <h3>Inbox rappels</h3>
+              <Tag variant="accent">
+                {recallsLoading ? "…" : `${recalls.length} contact${recalls.length > 1 ? "s" : ""}`}
+              </Tag>
+            </div>
+            {recallsLoading && <p className="calls-state">Chargement des rappels…</p>}
+            {!recallsLoading && recalls.length === 0 && (
+              <p className="calls-muted">Aucun rappel planifié — inbox zero.</p>
+            )}
+            {!recallsLoading && recalls.length > 0 && (
+              <ul className="calls-recalls__list">
+                {recalls.map((item) => {
+                  const overdue = item.recall_at < today;
+                  return (
+                    <li key={`${item.session_id}-${item.id}`}>
+                      <button
+                        type="button"
+                        className="calls-recalls__row"
+                        onClick={() => onOpenSession(item.session_id, item.id)}
+                      >
+                        <span className="calls-recalls__when">
+                          <Tag variant={overdue ? "alert" : "accent"}>
+                            {formatIsoDateFr(item.recall_at)}
+                          </Tag>
+                          {overdue && <small>En retard</small>}
+                        </span>
+                        <span className="calls-recalls__who">
+                          <strong>{item.contact_name}</strong>
+                          <small>{item.account_name ?? "—"}{item.title ? ` · ${item.title}` : ""}</small>
+                        </span>
+                        <span className="calls-recalls__meta">
+                          <small>{item.session_name}</small>
+                          {item.outcome && <Tag variant="muted">{item.outcome}</Tag>}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </GlassCard>
         )}

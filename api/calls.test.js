@@ -753,12 +753,12 @@ describe("POST /api/calls", () => {
           data: [{ sf_contact_id: "003000000000001", contact_name: "Alice", outcome: SEMANTIC.followUpNoAnswer }],
           error: null,
         })
-        .mockResolvedValueOnce({ data: { id: 20, name: "Relance — Base", status: "active", created_at: "2026-01-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 20, name: "Base #2", status: "active", created_at: "2026-01-01T00:00:00Z" }, error: null })
         .mockResolvedValueOnce({ data: [{ id: 301, sf_contact_id: "003000000000001", contact_name: "Alice", status: "pending" }], error: null });
 
       const res = await POST(makeReq("POST", { action: "create_follow_up_session", session_id: 1 }));
       expect(res.status).toBe(200);
-      expect((await res.json()).session.name).toBe("Relance — Base");
+      expect((await res.json()).session.name).toBe("Base #2");
     });
 
     it("returns 500 when follow-up contact lookup fails", async () => {
@@ -873,7 +873,7 @@ describe("POST /api/calls", () => {
         .mockResolvedValueOnce({
           data: {
             id: 20,
-            name: "Relance — Base",
+            name: "Base #2",
             status: "active",
             created_at: "2026-01-01T00:00:00Z",
             scheduled_for: "2026-07-15",
@@ -895,7 +895,52 @@ describe("POST /api/calls", () => {
         }),
       );
       expect(res.status).toBe(200);
-      expect((await res.json()).target_session.session_type).toBe("relance");
+      const body = await res.json();
+      expect(body.target_session.session_type).toBe("relance");
+      expect(body.target_session.name).toBe("Base #2");
+    });
+
+    it("uses an explicit continuation name when provided", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "Base", status: "active" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{
+            id: 101,
+            sf_contact_id: "003000000000001",
+            contact_name: "Alice",
+            status: "pending",
+            attempt_count: 0,
+          }],
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({
+          data: {
+            id: 21,
+            name: "Prospection Lyon #2",
+            status: "active",
+            created_at: "2026-01-01T00:00:00Z",
+            scheduled_for: "2026-07-11",
+            session_type: "relance",
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 302, sf_contact_id: "003000000000001", contact_name: "Alice", status: "pending", attempt_count: 0 }],
+          error: null,
+        });
+
+      const res = await POST(
+        makeReq("POST", {
+          action: "defer_contacts",
+          session_id: 1,
+          contact_ids: [101],
+          scheduled_for: "2026-07-11",
+          name: "Prospection Lyon #2",
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).target_session.name).toBe("Prospection Lyon #2");
     });
   });
 

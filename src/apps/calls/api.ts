@@ -3,6 +3,7 @@ import type {
   CallStats,
   ContactContext,
   ContactPreview,
+  RecallInboxItem,
   SessionContact,
   SessionDetail,
   SessionSummary,
@@ -235,6 +236,7 @@ export async function deferContacts(
   contactIds: number[],
   scheduledFor: string,
   targetSessionId?: number | null,
+  name?: string | null,
 ): Promise<{ target_session: SessionDetail; contacts?: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -244,8 +246,14 @@ export async function deferContacts(
       contact_ids: contactIds,
       scheduled_for: scheduledFor,
       ...(typeof targetSessionId === "number" ? { target_session_id: targetSessionId } : {}),
+      ...(name ? { name } : {}),
     }),
   });
+}
+
+export async function fetchRecalls(token: string): Promise<RecallInboxItem[]> {
+  const data = await apiFetch<{ recalls: RecallInboxItem[] }>(token, "/api/calls?resource=recalls");
+  return data.recalls;
 }
 
 export async function completeSession(token: string, sessionId: number): Promise<void> {

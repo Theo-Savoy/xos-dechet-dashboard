@@ -9,7 +9,7 @@ export function resolveContextContactId(
   if (awaitingEventId) return awaitingEventId;
   if (focusedContactId != null) {
     const focused = contacts.find((contact) => contact.id === focusedContactId);
-    if (focused?.status === "pending") return focusedContactId;
+    if (focused) return focusedContactId;
   }
   return contacts.find((contact) => contact.status === "pending")?.id ?? null;
 }

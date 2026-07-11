@@ -39,7 +39,7 @@ export function RecapView({
             {followUpLoading
               ? "Création…"
               : followUpCount
-                ? `Créer une séance de relance (${followUpCount})`
+                ? `Créer séance #2 (${followUpCount})`
                 : "Aucune relance nécessaire"}
           </Button>
           <Button onClick={onBack}>Retour au hub</Button>

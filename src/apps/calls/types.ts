@@ -30,6 +30,21 @@ export type SessionSummary = {
   pending: number;
 };
 
+export type RecallInboxItem = {
+  id: number;
+  session_id: number;
+  session_name: string;
+  session_status: SessionStatus;
+  contact_name: string;
+  account_name: string | null;
+  phone: string | null;
+  email?: string | null;
+  title?: string | null;
+  recall_at: string;
+  outcome: ResultatCall | null;
+  attempt_count?: number;
+};
+
 export type SessionContact = {
   id: number;
   position: number;

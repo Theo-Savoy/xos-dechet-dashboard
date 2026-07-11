@@ -10,6 +10,7 @@ import {
 import { EventPanel } from "./EventPanel";
 import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
 import { ProgressBar } from "./ProgressBar";
+import { nextContinuationName } from "./sessionNaming";
 import type { ContactContext, SessionContact, SessionDetail, SessionSummary } from "./types";
 import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 
@@ -27,6 +28,7 @@ type LogPayload = {
 type DeferPayload = {
   scheduledFor: string;
   targetSessionId: number | null;
+  name?: string | null;
 };
 
 type ListStatusFilter = "all" | "pending" | "called" | "skipped";
@@ -302,10 +304,15 @@ export function RunnerView({
   }, [awaitingEvent?.id]);
 
   useEffect(() => {
-    if (currentContact && (focusedId == null || !contacts.some((c) => c.id === focusedId && c.status === "pending"))) {
-      setFocusedId(currentContact.id);
-    }
+    if (focusedId != null && contacts.some((c) => c.id === focusedId)) return;
+    if (currentContact) setFocusedId(currentContact.id);
   }, [currentContact?.id, contacts, focusedId]);
+
+  useEffect(() => {
+    if (focusedId != null && contacts.some((c) => c.id === focusedId && c.status !== "pending")) {
+      setMode("detail");
+    }
+  }, [focusedId, contacts]);
 
   useEffect(() => {
     setResultat(RESULTAT_OPTIONS[0].value);
@@ -418,6 +425,16 @@ export function RunnerView({
       targetSessionId: deferTargetId,
     });
     setDeferIds(null);
+    setSelectedIds(new Set());
+  };
+
+  const createContinuationSession = (ids: number[]) => {
+    if (ids.length === 0) return;
+    onDeferContacts(ids, {
+      scheduledFor: todayParisIso(),
+      targetSessionId: null,
+      name: nextContinuationName(session.name),
+    });
     setSelectedIds(new Set());
   };
 
@@ -578,6 +595,14 @@ export function RunnerView({
                   </Button>
                   <Button
                     variant="secondary"
+                    onClick={() => createContinuationSession(pendingSelected)}
+                    disabled={loading}
+                    title={`Créer « ${nextContinuationName(session.name)} » avec la sélection`}
+                  >
+                    Créer séance #2
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={() => openDefer(pendingSelected)}
                     disabled={loading}
                   >
@@ -650,7 +675,17 @@ export function RunnerView({
                   disabled={loading || pendingContacts.length === 0}
                   onClick={toggleSelectAllPending}
                 >
-                  {allPendingSelected ? "Tout désélectionner" : "Tout sélectionner"}
+                  {allPendingSelected
+                    ? "Tout désélectionner"
+                    : `Sélectionner les à faire (${pendingContacts.length})`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={loading || pendingContacts.length === 0}
+                  onClick={() => createContinuationSession(pendingContacts.map((c) => c.id))}
+                  title={`Créer « ${nextContinuationName(session.name)} » avec tous les contacts sans statut`}
+                >
+                  Créer séance #2
                 </Button>
               </div>
             </div>
