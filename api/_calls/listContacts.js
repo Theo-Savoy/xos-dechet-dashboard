@@ -1,7 +1,5 @@
-/** Live Call Manager target list, backed by the CRM adapter. */
-import { createClient } from "@supabase/supabase-js";
-import { respond, verifyJWT } from "./_auth.js";
-import mapping from "./_crm/mapping.js";
+/** Target list (ex /api/calls-list) — absorbed into /api/calls. */
+import mapping from "../_crm/mapping.js";
 import {
   buildTargetQuery,
   boundedLimit,
@@ -9,25 +7,13 @@ import {
   filterTargetContacts,
   hasRelanceQueryFilters,
   searchContacts,
-} from "./_crm/salesforce.js";
-
-function json(status, body) {
-  const response = respond(status, body);
-  response.headers.set("Cache-Control", "no-store");
-  return response;
-}
-
-function getServiceClient() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  return url && key ? createClient(url, key) : null;
-}
+} from "../_crm/salesforce.js";
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseBody(body) {
+export function parseListContactsBody(body) {
   if (!isObject(body)) return { error: "invalid_body" };
   if (!isObject(body.filters)) return { error: "invalid_filters" };
   for (const family of ["entreprise", "contact", "relance"]) {
@@ -108,29 +94,20 @@ async function findDedup(client, contactIds) {
   return [...dedup].map(([sf_contact_id, in_session_of]) => ({ sf_contact_id, in_session_of }));
 }
 
-export async function POST(request) {
-  const user = await verifyJWT(request);
-  if (!user) return json(401, { error: "unauthorized" });
+/** Returns { contacts, dedup } or { error, status }. */
+export async function listContacts(client, userId, body) {
+  const parsed = parseListContactsBody(body);
+  if (parsed.error) return { error: parsed.error, status: 400 };
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json(400, { error: "invalid_json" });
-  }
-  const parsed = parseBody(body);
-  if (parsed.error) return json(400, { error: parsed.error });
-
-  const client = getServiceClient();
-  if (!client) return json(500, { error: "server_error" });
-  const profile = await fetchProfile(client, user.id);
-  if (profile.error) return json(500, { error: profile.error });
+  const profile = await fetchProfile(client, userId);
+  if (profile.error) return { error: profile.error, status: 500 };
 
   const tokenResult = await fetchSFToken();
-  if (tokenResult.error) return json(502, { error: tokenResult.error });
+  if (tokenResult.error) return { error: tokenResult.error, status: 502 };
+
   const soql = buildTargetQuery(parsed.filters, mapping, profile.sfUserId);
   const search = await searchContacts(tokenResult.accessToken, soql);
-  if (search.error) return json(502, { error: search.error });
+  if (search.error) return { error: search.error, status: 502 };
 
   const filtered = filterTargetContacts(search.records, parsed.filters, mapping);
   const requestedLimit = boundedLimit(parsed.filters.limit);
@@ -138,16 +115,5 @@ export async function POST(request) {
     hasRelanceQueryFilters(parsed.filters) ? filtered.slice(0, requestedLimit) : filtered,
   );
   const dedup = await findDedup(client, contacts.map((contact) => contact.sf_contact_id));
-  return json(200, { contacts, dedup });
-}
-
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    },
-  });
+  return { contacts, dedup };
 }

@@ -19,7 +19,7 @@ describe("emptyFilterTree", () => {
     expect(tree.relance.dernier_resultat).toEqual([]);
   });
 
-  it("round-trips through JSON (as sent to /api/calls-list)", () => {
+  it("round-trips through JSON (as sent to /api/calls list_contacts)", () => {
     const tree = emptyFilterTree();
     tree.entreprise.secteurs = ["Finance", "Transports"];
     tree.relance.exclure_si_plus_de = { appels: 3, sur_jours: 30 };

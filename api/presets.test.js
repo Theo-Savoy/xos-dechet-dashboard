@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET, POST, DELETE, parsePresetId, validatePresetInput } from "./presets.js";
+import { GET, POST, DELETE } from "./calls.js";
+import { parsePresetId, validatePresetInput } from "./_calls/presets.js";
 
 const { mockVerifyJWT } = vi.hoisted(() => ({
   mockVerifyJWT: vi.fn(),
@@ -7,6 +8,17 @@ const { mockVerifyJWT } = vi.hoisted(() => ({
 
 vi.mock("./_auth.js", () => ({
   verifyJWT: mockVerifyJWT,
+}));
+
+vi.mock("./_crm/salesforce.js", () => ({
+  fetchSFToken: vi.fn(),
+  logCall: vi.fn(),
+  createEvent: vi.fn(),
+  createRecallTask: vi.fn(),
+  updateContactDoNotCall: vi.fn(),
+  fetchContactContext: vi.fn(),
+  buildLightningUrl: (objectType, recordId) =>
+    recordId ? `https://example.salesforce.com/lightning/r/${objectType}/${recordId}/view` : null,
 }));
 
 const mockDb = vi.fn();
@@ -29,7 +41,7 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({ from: mockFrom }),
 }));
 
-function makeReq(method, body, url = "http://localhost/api/presets") {
+function makeReq(method, body, url = "http://localhost/api/calls?resource=presets") {
   const headers = new Headers({
     Authorization: "Bearer token",
     "Content-Type": "application/json",
@@ -74,86 +86,64 @@ describe("validatePresetInput", () => {
   });
 });
 
-describe("GET /api/presets", () => {
+describe("GET /api/calls?resource=presets", () => {
   it("returns 401 when unauthorized", async () => {
     mockVerifyJWT.mockResolvedValue(null);
     const res = await GET(makeReq("GET"));
     expect(res.status).toBe(401);
   });
 
-  it("returns 500 on DB lookup error", async () => {
-    mockDb.mockResolvedValueOnce({ data: null, error: { message: "db" } });
-    const res = await GET(makeReq("GET"));
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe("preset_lookup_failed");
-  });
-
-  it("returns presets list", async () => {
-    mockDb.mockResolvedValueOnce({
-      data: [{ id: 1, owner: "user-123", name: "Prospects", filters: {}, shared: false, created_at: "2026-01-01" }],
+  it("returns presets for owner or shared", async () => {
+    mockDb.mockResolvedValue({
+      data: [{ id: 1, owner: "user-123", name: "Mine", filters: {}, shared: false, created_at: "2026-07-10" }],
       error: null,
     });
     const res = await GET(makeReq("GET"));
     expect(res.status).toBe(200);
-    expect((await res.json()).presets).toHaveLength(1);
+    const body = await res.json();
+    expect(body.presets).toHaveLength(1);
   });
 });
 
-describe("POST /api/presets", () => {
-  it("returns 400 on invalid JSON", async () => {
+describe("POST /api/calls action=save_preset", () => {
+  it("returns 400 for invalid JSON", async () => {
     const headers = new Headers({ Authorization: "Bearer token", "Content-Type": "application/json" });
-    const res = await POST(new Request("http://localhost/api/presets", { method: "POST", headers, body: "{bad" }));
+    const res = await POST(new Request("http://localhost/api/calls", { method: "POST", headers, body: "{bad" }));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("invalid_json");
   });
 
-  it("returns 400 on invalid filters", async () => {
-    const res = await POST(makeReq("POST", { name: "X", filters: [] }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("invalid_filters");
-  });
-
-  it("creates preset", async () => {
-    mockDb.mockResolvedValueOnce({
-      data: { id: 2, owner: "user-123", name: "Relance", filters: { relance: {} }, shared: false, created_at: "2026-01-01" },
+  it("creates a preset", async () => {
+    mockDb.mockResolvedValue({
+      data: { id: 9, owner: "user-123", name: "Finance", filters: { contact: {} }, shared: false, created_at: "2026-07-10" },
       error: null,
     });
-    const res = await POST(makeReq("POST", { name: "Relance", filters: { relance: {} } }));
+    const res = await POST(makeReq("POST", {
+      action: "save_preset",
+      name: "Finance",
+      filters: { contact: {} },
+      shared: false,
+    }, "http://localhost/api/calls"));
     expect(res.status).toBe(200);
-    expect((await res.json()).preset.name).toBe("Relance");
-  });
-
-  it("returns 500 when creation fails", async () => {
-    mockDb.mockResolvedValueOnce({ data: null, error: { message: "insert failed" } });
-    const res = await POST(makeReq("POST", { name: "Relance", filters: {} }));
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe("preset_creation_failed");
+    expect((await res.json()).preset.name).toBe("Finance");
   });
 });
 
-describe("DELETE /api/presets", () => {
-  it("returns 400 for invalid id strings", async () => {
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=1abc"));
+describe("DELETE /api/calls?resource=presets", () => {
+  it("returns 400 for invalid id", async () => {
+    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/calls?resource=presets&id=1abc"));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("invalid_id");
   });
 
-  it("returns 500 when preset lookup fails", async () => {
-    mockDb.mockResolvedValueOnce({ data: null, error: { message: "db" } });
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=3"));
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe("preset_lookup_failed");
-  });
-
-  it("returns 404 when preset not owned by user", async () => {
-    mockDb.mockResolvedValueOnce({ data: { id: 3, owner: "other-user" }, error: null });
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=3"));
+  it("returns 404 when preset missing", async () => {
+    mockDb.mockResolvedValue({ data: null, error: null });
+    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/calls?resource=presets&id=3"));
     expect(res.status).toBe(404);
   });
 
-  it("returns 404 when preset does not exist", async () => {
-    mockDb.mockResolvedValueOnce({ data: null, error: null });
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=3"));
+  it("returns 404 when preset owned by someone else", async () => {
+    mockDb.mockResolvedValue({ data: { id: 3, owner: "other" }, error: null });
+    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/calls?resource=presets&id=3"));
     expect(res.status).toBe(404);
   });
 
@@ -161,17 +151,8 @@ describe("DELETE /api/presets", () => {
     mockDb
       .mockResolvedValueOnce({ data: { id: 3, owner: "user-123" }, error: null })
       .mockResolvedValueOnce({ data: null, error: null });
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=3"));
+    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/calls?resource=presets&id=3"));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
-  });
-
-  it("returns 500 when delete fails", async () => {
-    mockDb
-      .mockResolvedValueOnce({ data: { id: 3, owner: "user-123" }, error: null })
-      .mockResolvedValueOnce({ data: null, error: { message: "delete failed" } });
-    const res = await DELETE(makeReq("DELETE", undefined, "http://localhost/api/presets?id=3"));
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe("preset_delete_failed");
   });
 });

@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { verifyJWT } from "./_auth.js";
+import { listContacts } from "./_calls/listContacts.js";
+import { deletePreset, listPresets, savePreset } from "./_calls/presets.js";
 import mapping from "./_crm/mapping.js";
 import { buildLightningUrl, createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
 
@@ -239,6 +241,15 @@ export async function GET(request) {
   const url = new URL(request.url);
   const sessionIdParam = url.searchParams.get("session_id");
   const statsParam = url.searchParams.get("stats");
+  const resource = url.searchParams.get("resource");
+
+  if (resource === "presets") {
+    const result = await listPresets(client, user.id);
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: 500, headers });
+    }
+    return new Response(JSON.stringify({ presets: result.presets }), { status: 200, headers });
+  }
 
   if (statsParam === "1") {
     const { data: userSessions, error: sessionsError } = await client
@@ -436,6 +447,41 @@ export async function POST(request) {
   const client = getServiceClient();
   if (!client) {
     return new Response(JSON.stringify({ error: "server_error" }), { status: 500, headers });
+  }
+
+  if (action === "list_contacts") {
+    const result = await listContacts(client, user.id, body);
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
+    }
+    return new Response(
+      JSON.stringify({ contacts: result.contacts, dedup: result.dedup }),
+      { status: 200, headers },
+    );
+  }
+
+  if (action === "list_presets") {
+    const result = await listPresets(client, user.id);
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: 500, headers });
+    }
+    return new Response(JSON.stringify({ presets: result.presets }), { status: 200, headers });
+  }
+
+  if (action === "save_preset") {
+    const result = await savePreset(client, user.id, body);
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
+    }
+    return new Response(JSON.stringify({ preset: result.preset }), { status: 200, headers });
+  }
+
+  if (action === "delete_preset") {
+    const result = await deletePreset(client, user.id, body.id);
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
   if (action === "create_session") {
@@ -820,12 +866,47 @@ export async function POST(request) {
   return new Response(JSON.stringify({ error: "invalid_action" }), { status: 400, headers });
 }
 
+export async function DELETE(request) {
+  const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+
+  const user = await verifyJWT(request);
+  if (!user) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers });
+  }
+
+  const client = getServiceClient();
+  if (!client) {
+    return new Response(JSON.stringify({ error: "server_error" }), { status: 500, headers });
+  }
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("resource") !== "presets") {
+    return new Response(JSON.stringify({ error: "invalid_resource" }), { status: 400, headers });
+  }
+
+  let presetId = url.searchParams.get("id");
+  if (!presetId) {
+    try {
+      const body = await request.json();
+      presetId = body?.id;
+    } catch {
+      presetId = null;
+    }
+  }
+
+  const result = await deletePreset(client, user.id, presetId);
+  if (result.error) {
+    return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
+  }
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
     },
   });

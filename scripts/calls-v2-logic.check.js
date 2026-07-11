@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import mapping from "../api/_crm/mapping.js";
 import { filterContactsForFollowUp, getFollowUpOutcomes, isValidEventStart } from "../api/calls.js";
-import { parsePresetId, validatePresetInput } from "../api/presets.js";
+import { parsePresetId, validatePresetInput } from "../api/_calls/presets.js";
 
 const followUpOutcomes = getFollowUpOutcomes(mapping);
 assert.deepEqual(followUpOutcomes, [

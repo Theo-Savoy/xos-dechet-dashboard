@@ -91,7 +91,8 @@ Le mapping (noms de champs) vient de `api/_crm/mapping.js`, jamais en dur.
 
 ## API
 
-- **`POST /api/calls-list`** (v2) : body `{ filters: <arbre>, preset_id?, limit? }` → `{ contacts: [ {sf_contact_id, sf_account_id, contact_name, account_name, phone, last_call_at?, call_count?} ], dedup: [{sf_contact_id, in_session_of}] }`. Forme contact compatible `create_session`.
+- **`POST /api/calls` `{ action: "list_contacts", filters, preset_id?, limit? }`** → `{ contacts: […], dedup: […] }` *(ex-`/api/calls-list`, consolidé Vercel B)*.
+- **Presets** : `GET|DELETE /api/calls?resource=presets` + `POST` `{ action: "save_preset" | "delete_preset" }` *(ex-`/api/presets`)*.
 - **`POST /api/calls`** — actions v2 :
   - `log_call` étendu : `{ session_id, contact_id, resultat, comments, duration_sec }` → `logCall` avec `OwnerId = sf_user_id du user` ; si `resultat='RDV planifié'` la réponse signale `needs_event: true`.
   - `log_event` (nouveau) : `{ session_id, contact_id, start, duration_min, invitees[] }` → `createEvent`.

@@ -9,7 +9,7 @@ import {
 } from "./_crm/salesforce.js";
 import mapping from "./_crm/mapping.js";
 import { FONCTION_PRESETS } from "../src/crm/index.ts";
-import { POST } from "./calls-list.js";
+import { POST } from "./calls.js";
 
 const { mockVerifyJWT } = vi.hoisted(() => ({
   mockVerifyJWT: vi.fn(),
@@ -40,10 +40,10 @@ function makeReq(body, token = "supabase-jwt-token") {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   });
-  return new Request("http://localhost/api/calls-list", {
+  return new Request("http://localhost/api/calls", {
     method: "POST",
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify({ action: "list_contacts", ...body }),
   });
 }
 
@@ -52,7 +52,7 @@ function makeRawReq(rawBody) {
     Authorization: "Bearer supabase-jwt-token",
     "Content-Type": "application/json",
   });
-  return new Request("http://localhost/api/calls-list", {
+  return new Request("http://localhost/api/calls", {
     method: "POST",
     headers,
     body: rawBody,
@@ -260,7 +260,7 @@ describe("adapter exports", () => {
   });
 });
 
-describe("POST /api/calls-list", () => {
+describe("POST /api/calls action=list_contacts", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockMaybeSingle.mockReset();

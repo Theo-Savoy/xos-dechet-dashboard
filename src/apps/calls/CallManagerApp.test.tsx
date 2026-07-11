@@ -145,20 +145,20 @@ describe("CallManagerApp component", () => {
     });
     let previewRequest = 0;
 
-    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/calls") {
-        return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
-      }
       if (url === "/api/calls?stats=1") {
         return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       }
-      if (url === "/api/presets") {
+      if (url === "/api/calls?resource=presets") {
         return Promise.resolve(new Response(JSON.stringify({ presets: [] }), { status: 200 }));
       }
-      if (url === "/api/calls-list") {
+      if (url === "/api/calls" && init?.method === "POST") {
         previewRequest += 1;
         return previewRequest === 1 ? first : second;
+      }
+      if (url === "/api/calls") {
+        return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
       }
       return Promise.resolve(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
     });
