@@ -47,15 +47,16 @@ function recordSet() {
     ],
     [{ OwnerId: "005A", CloseDate: "2026-07-10", Amount: 50 }],
     [
-      { OwnerId: "005A", IsClosed: false, StageName: "Projet identifié" },
-      { OwnerId: "005A", IsClosed: false, StageName: "Suspect enlisé" },
+      { Id: "006OPEN", Name: "Deal froid", OwnerId: "005A", IsClosed: false, StageName: "Proposition envoyée", Amount: 12000, Probability: 40, ExpectedRevenue: 4800, CloseDate: "2026-08-20", CreatedDate: "2026-04-01", LastActivityDate: null, LastStageChangeDate: "2026-04-15" },
+      { OwnerId: "005A", IsClosed: false, StageName: "Suspect enlisé", Amount: 5000, Probability: 10 },
     ],
     [{ OwnerId: "005A", CloseDate: "2026-07-10", Amount: 100 }],
     [
-      { OwnerId: "005A", CloseDate: "2026-08-10", Amount: 200, Probability: 50 },
-      { OwnerId: "005A", CloseDate: "2026-09-10", Amount: 100, Probability: 25 },
+      { Id: "006Q1", Name: "Deal TQ", OwnerId: "005A", CloseDate: "2026-08-10", Amount: 200, Probability: 50, ExpectedRevenue: 100, StageName: "XOS recommandé" },
+      { Id: "006Q2", Name: "Deal TQ 2", OwnerId: "005A", CloseDate: "2026-09-10", Amount: 100, Probability: 25, ExpectedRevenue: 25, StageName: "Projet identifié" },
     ],
     [{ OwnerId: "005A", CloseDate: "2026-10-15", Amount: 300, Type_de_vente__c: "Sur-mesure", ExpectedRevenue: 150, Probability: 50, Id: "006SM", Name: "Deal SM" }],
+    [{ OwnerId: "005A", CloseDate: "2025-07-10", Amount: 80 }],
   ];
 }
 
@@ -64,6 +65,14 @@ function queueSalesforce(records = recordSet(), baseline = []) {
   let index = 0;
   mockSearchContacts.mockImplementation(async (_token, soql) => {
     if (soql.includes("FROM OpportunityHistory") && soql.includes("OpportunityId IN")) return { records: baseline };
+    if (soql.includes("FROM User")) {
+      return {
+        records: [
+          { Id: "005A", Name: "Ada", Email: "ada@xos-learning.fr", IsActive: true },
+          { Id: "005B", Name: "Béa", Email: "bea@xos-learning.fr", IsActive: true },
+        ],
+      };
+    }
     return { records: records[index++] || [] };
   });
 }
@@ -117,16 +126,48 @@ describe("fiscal quarter helpers", () => {
     expect(perf.fiscalQuarter("2026-08-20")).toEqual({ from: "2026-07-01", toExclusive: "2026-10-01", label: "FY27-Q1" });
   });
 
-  it("builds the week window from the fiscal quarter start to the current Monday", () => {
+  it("builds the week window for the full fiscal quarter including future weeks", () => {
     expect(perf.quarterWeekWindow("2026-07-11")).toMatchObject({
       from: "2026-07-06",
+      to: "2026-07-12",
       period: "quarter",
-      starts: ["2026-07-06"],
     });
+    const window = perf.quarterWeekWindow("2026-07-11");
+    expect(window.starts[0]).toBe("2026-07-06");
+    expect(window.starts.at(-1)).toBe("2026-09-28");
+    expect(window.starts).toHaveLength(13);
   });
 
   it("adds signed and probability-weighted open amounts", () => {
     expect(perf.quarterForecast(100, [{ Amount: 200, Probability: 50 }, { Amount: 100, Probability: 25 }], { amount: "Amount", probability: "Probability" })).toEqual({ weightedOpen: 125, forecast: 225 });
+  });
+
+  it("builds prior fiscal quarter one year earlier", () => {
+    expect(perf.priorFiscalQuarter("2026-07-11")).toEqual({ from: "2025-07-01", toExclusive: "2025-10-01", label: "FY26-Q1" });
+  });
+
+  it("ranks follow-up opps by expected revenue", () => {
+    const fields = { id: "Id", name: "Name", ownerId: "OwnerId", stageName: "StageName", amount: "Amount", probability: "Probability", expectedRevenue: "ExpectedRevenue", closeDate: "CloseDate" };
+    const rows = perf.buildFollowUpOpps([
+      { Id: "1", Name: "A", OwnerId: "005A", StageName: "XOS recommandé", Amount: 10000, Probability: 10, ExpectedRevenue: 1000, CloseDate: "2026-08-01" },
+      { Id: "2", Name: "B", OwnerId: "005A", StageName: "Négo financière engagée", Amount: 8000, Probability: 50, ExpectedRevenue: 4000, CloseDate: "2026-08-15" },
+    ], fields, ["005A"]);
+    expect(rows.map((row) => row.id)).toEqual(["2", "1"]);
+    expect(rows[0].expected).toBe(4000);
+  });
+
+  it("flags stagnant opps for long stage and silence", () => {
+    const fields = {
+      id: "Id", name: "Name", ownerId: "OwnerId", isClosed: "IsClosed", stageName: "StageName", amount: "Amount",
+      probability: "Probability", expectedRevenue: "ExpectedRevenue", closeDate: "CloseDate", createdDate: "CreatedDate",
+      lastActivityDate: "LastActivityDate", lastStageChangeDate: "LastStageChangeDate",
+    };
+    const rows = perf.buildStagnantOpps([
+      { Id: "1", Name: "Silence", OwnerId: "005A", IsClosed: false, StageName: "XOS recommandé", Amount: 5000, Probability: 20, ExpectedRevenue: 1000, CloseDate: "2026-08-01", CreatedDate: "2026-06-01", LastActivityDate: "2026-05-01", LastStageChangeDate: "2026-06-20" },
+      { Id: "2", Name: "Fresh", OwnerId: "005A", IsClosed: false, StageName: "XOS recommandé", Amount: 5000, Probability: 20, ExpectedRevenue: 1000, CloseDate: "2026-08-01", CreatedDate: "2026-07-01", LastActivityDate: "2026-07-10", LastStageChangeDate: "2026-07-08" },
+    ], fields, ["005A"], "2026-07-11");
+    expect(rows.map((row) => row.id)).toEqual(["1"]);
+    expect(rows[0].reasons).toEqual(expect.arrayContaining(["silence"]));
   });
 });
 
@@ -201,7 +242,11 @@ describe("GET /api/perf", () => {
       forecast: 225,
       custom_pipe: 300,
       target: 60000,
+      signed_n1: 80,
     }]);
+    expect(body.follow_up_opps[0]).toMatchObject({ id: "006Q1", expected: 100 });
+    expect(body.stagnant_opps.some((row) => row.id === "006OPEN")).toBe(true);
+    expect(body.pace).toMatchObject({ week_of_quarter: 1, signed_to_date: 100, signed_n1: 80, target: 60000 });
   });
 
   it("returns a null target when weekly_targets is absent", async () => {

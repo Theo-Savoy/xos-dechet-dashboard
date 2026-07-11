@@ -272,6 +272,8 @@ const mapping = {
         closeDate: "CloseDate",
         ownerId: "OwnerId",
         createdDate: "CreatedDate",
+        lastActivityDate: "LastActivityDate",
+        lastStageChangeDate: "LastStageChangeDate",
       },
       saleTypeField: "Type_de_vente__c",
       saleTypes: {

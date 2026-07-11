@@ -13,6 +13,7 @@ vi.mock("recharts", () => ({
   Legend: () => null,
   Line: () => null,
   LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="forecast-chart">{children}</div>,
+  ReferenceLine: () => null,
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Tooltip: () => null,
   XAxis: () => null,
@@ -37,10 +38,27 @@ const selfPayload = {
     { sf_user_id: "self", week: "2026-W28", week_start: "2026-07-06", generated_count: 2, generated_amount: 12000, won_count: 1, won_amount: 6000, won_by_type: { catalogue: 3000, sur_mesure: 2000, conseil: 1000 }, won_arr_amount: 3000, closing_rate_count: 0.5, closing_rate_amount: 0.5 },
   ],
   effort: [{ sf_user_id: "self", week: "2026-W28", week_start: "2026-07-06", progressions: 3, open_opps_at_start: 20, effort_rate: 0.15 }],
-  quarter: [{ sf_user_id: "self", quarter: "FY27-Q1", signed_to_date: 20000, weighted_open: 15000, forecast: 35000, custom_pipe: 18000, target: 60000 }],
+  quarter: [{ sf_user_id: "self", quarter: "FY27-Q1", signed_to_date: 20000, weighted_open: 15000, forecast: 35000, custom_pipe: 18000, target: 60000, signed_n1: 15000 }],
   forecast_history: [
     { sf_user_id: "self", week_start: "2026-07-06", week: "2026-W28", forecast: 35000, signed_to_date: 20000 },
   ],
+  follow_up_opps: [
+    { id: "006F", name: "Deal à pousser", sf_user_id: "self", stage: "Négo financière engagée", amount: 20000, probability: 50, expected: 10000, close_date: "2026-08-15" },
+  ],
+  stagnant_opps: [
+    { id: "006S", name: "Deal silencieux", sf_user_id: "self", stage: "Proposition envoyée", amount: 12000, probability: 40, expected: 4800, close_date: "2026-09-01", days_in_stage: 52, days_since_activity: 28, reasons: ["stage", "silence"] },
+  ],
+  pace: {
+    week_of_quarter: 1,
+    weeks_in_quarter: 13,
+    signed_to_date: 20000,
+    forecast: 35000,
+    target: 60000,
+    signed_n1: 15000,
+    expected_to_date: 4615,
+    run_rate: 260000,
+    won_count: 1,
+  },
   custom_pipe: {
     horizon_days: 180,
     total_amount: 18000,
@@ -99,6 +117,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Weekly Perf", () => {
+  it("renders the Monday decision board with weighted and stagnant opps", async () => {
+    render(<WeeklyApp />);
+    expect(await screen.findByText("Ce qu’il faut bouger lundi")).toBeTruthy();
+    expect(screen.getByText("Deal à pousser")).toBeTruthy();
+    expect(screen.getByText("Deal silencieux")).toBeTruthy();
+    expect(screen.getByText("Étape + silence")).toBeTruthy();
+    expect(screen.getByText("Objectif trimestre en vue")).toBeTruthy();
+    expect(screen.getByText(/\+5 000|vs N−1/)).toBeTruthy();
+  });
+
   it("renders a commercial's week metrics without a team toggle", async () => {
     render(<WeeklyApp />);
 
@@ -138,6 +166,20 @@ describe("Weekly Perf", () => {
     expect(within(rollup).getByText(/Ada 6/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Tableau" }));
     expect(await screen.findByRole("table", { name: /consolidé de l.équipe/i })).toBeTruthy();
+  });
+
+  it("keeps the display mode when switching to quarter", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(selfPayload), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify(quarterPayload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+    await screen.findByText("Ada Lovelace");
+    expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+    expect(await screen.findByText("Trimestre fiscal en cours, semaine par semaine")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
+    expect(screen.getByText("Target trimestre")).toBeTruthy();
   });
 
   it("filters managers and DG by default and reveals them with their badge", async () => {
@@ -198,6 +240,8 @@ describe("Weekly Perf", () => {
     expect(within(table).getByRole("columnheader", { name: "Total" })).toBeTruthy();
     expect(within(table).getByRole("row", { name: /RDV effectués/ })).toBeTruthy();
     expect(within(table).queryByRole("row", { name: /Pipe sur-mesure/ })).toBeNull();
-    expect(within(table).getAllByRole("row")).toHaveLength(10);
+    expect(within(table).getAllByRole("row")).toHaveLength(8);
+    expect(within(table).queryByRole("row", { name: /Target/ })).toBeNull();
+    expect(screen.getByText("Target trimestre")).toBeTruthy();
   });
 });
