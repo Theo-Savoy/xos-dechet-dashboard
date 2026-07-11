@@ -16,9 +16,9 @@ export function formatIsoDateFr(iso: string): string {
   });
 }
 
-function todayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+/** Date métier Call Manager (alignée API / SF) — Europe/Paris. */
+export function todayParisIso(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
 }
 
 function buildMonthCells(year: number, monthIndex: number): (Date | null)[] {
@@ -115,7 +115,7 @@ export function DatePicker({
     month: "long",
     year: "numeric",
   });
-  const today = todayIso();
+  const today = todayParisIso();
 
   return (
     <div className="calls-field calls-datepicker" ref={rootRef}>

@@ -7,7 +7,7 @@ import {
   type ResultatCall,
 } from "../../crm";
 import { EventPanel } from "./EventPanel";
-import { DatePicker } from "./formControls";
+import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
 import { ProgressBar } from "./ProgressBar";
 import type { ContactContext, SessionContact, SessionDetail, SessionSummary } from "./types";
 import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
@@ -54,10 +54,9 @@ type RunnerViewProps = {
 };
 
 function addDaysIso(days: number): string {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const [y, m, d] = todayParisIso().split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function readDefaultRecallDays(): number {
@@ -165,6 +164,15 @@ export function RunnerView({
   const needsRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat) && !doNotCall;
   const bulkNeedsRecall = RELANCE_DEFAULT_RESULTATS.includes(bulkResultat) && !bulkDoNotCall;
   const pendingContacts = useMemo(() => contacts.filter((c) => c.status === "pending"), [contacts]);
+  const statusCounts = useMemo(
+    () => ({
+      all: contacts.length,
+      pending: contacts.filter((c) => c.status === "pending").length,
+      called: contacts.filter((c) => c.status === "called").length,
+      skipped: contacts.filter((c) => c.status === "skipped").length,
+    }),
+    [contacts],
+  );
   const filteredContacts = useMemo(() => {
     const q = listQuery.trim().toLowerCase();
     return contacts.filter((contact) => {
@@ -436,40 +444,43 @@ export function RunnerView({
                   disabledValues={singleSelectedId ? [] : ["RDV planifié"]}
                 />
               </div>
-              {bulkNeedsRecall && (
-                <div className="calls-fb-row">
-                  <DatePicker label="Date de rappel" value={bulkRecallAt} onChange={setBulkRecallAt} />
-                  <label className="calls-field">
-                    <span>Défaut rappel (jours)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={90}
-                      className="calls-input"
-                      value={defaultRecallDays}
-                      onChange={(e) => handleDefaultRecallDays(Number(e.target.value) || 0)}
-                    />
-                  </label>
-                </div>
-              )}
-              <label className="calls-checkbox">
-                <input
-                  type="checkbox"
-                  checked={bulkDoNotCall}
-                  onChange={(e) => setBulkDoNotCall(e.target.checked)}
-                />
-                Ne pas rappeler (NPA)
-              </label>
-              <label className="calls-field">
-                <span>Commentaires (optionnel)</span>
-                <textarea
-                  className="calls-textarea"
-                  value={bulkComments}
-                  onChange={(e) => setBulkComments(e.target.value)}
-                  rows={2}
-                  placeholder="Note commune pour la sélection…"
-                />
-              </label>
+              <details className="calls-bulk-options">
+                <summary>Options (rappel, NPA, commentaires)</summary>
+                {bulkNeedsRecall && (
+                  <div className="calls-fb-row">
+                    <DatePicker label="Date de rappel" value={bulkRecallAt} onChange={setBulkRecallAt} />
+                    <label className="calls-field">
+                      <span>Défaut rappel (jours)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={90}
+                        className="calls-input"
+                        value={defaultRecallDays}
+                        onChange={(e) => handleDefaultRecallDays(Number(e.target.value) || 0)}
+                      />
+                    </label>
+                  </div>
+                )}
+                <label className="calls-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={bulkDoNotCall}
+                    onChange={(e) => setBulkDoNotCall(e.target.checked)}
+                  />
+                  Ne pas rappeler (NPA)
+                </label>
+                <label className="calls-field">
+                  <span>Commentaires (optionnel)</span>
+                  <textarea
+                    className="calls-textarea"
+                    value={bulkComments}
+                    onChange={(e) => setBulkComments(e.target.value)}
+                    rows={2}
+                    placeholder="Note commune pour la sélection…"
+                  />
+                </label>
+              </details>
               {bulkResultat === "RDV planifié" && singleSelectedContact ? (
                 <EventPanel
                   contactName={singleSelectedContact.contact_name}
@@ -486,17 +497,6 @@ export function RunnerView({
                       ? "Enregistrement…"
                       : `Consigner pour ${pendingSelected.length}`}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => openDefer(pendingSelected)}
-                    disabled={loading}
-                  >
-                    Non contacté
-                  </Button>
-                </div>
-              )}
-              {bulkResultat === "RDV planifié" && singleSelectedContact && (
-                <div className="calls-runner-actions">
                   <Button
                     variant="secondary"
                     onClick={() => openDefer(pendingSelected)}
@@ -579,12 +579,12 @@ export function RunnerView({
               <div className="calls-list-filter-chips" role="group" aria-label="Filtrer par statut">
                 {(
                   [
-                    ["all", "Tous"],
-                    ["pending", "À faire"],
-                    ["called", "Appelés"],
-                    ["skipped", "Non contactés"],
+                    ["all", "Tous", statusCounts.all],
+                    ["pending", "À faire", statusCounts.pending],
+                    ["called", "Appelés", statusCounts.called],
+                    ["skipped", "Non contactés", statusCounts.skipped],
                   ] as const
-                ).map(([value, label]) => (
+                ).map(([value, label, count]) => (
                   <button
                     key={value}
                     type="button"
@@ -593,6 +593,7 @@ export function RunnerView({
                     onClick={() => setListStatusFilter(value)}
                   >
                     {label}
+                    <span className="calls-list-filter-chip__count xos-numeric">{count}</span>
                   </button>
                 ))}
               </div>
@@ -661,7 +662,7 @@ export function RunnerView({
                   <span className="calls-cockpit-list__status">
                     <Tag variant={status.variant}>{status.label}</Tag>
                   </span>
-                  <span className="calls-cockpit-list__cell xos-numeric">{contact.recall_at ?? "—"}</span>
+                  <span className="calls-cockpit-list__cell xos-numeric">{contact.recall_at ? formatIsoDateFr(contact.recall_at) : "—"}</span>
                 </li>
                 );
               })}

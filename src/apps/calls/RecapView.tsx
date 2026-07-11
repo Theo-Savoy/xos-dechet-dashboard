@@ -35,12 +35,14 @@ export function RecapView({
           <h2>{session.name}</h2>
         </div>
         <div className="calls-view__actions">
-          <Button variant="secondary" onClick={onCreateFollowUp} disabled={followUpLoading}>
+          <Button variant="secondary" onClick={onCreateFollowUp} disabled={followUpLoading || followUpCount === 0}>
             {followUpLoading
               ? "Création…"
-              : `Créer une séance de relance${followUpCount ? ` (${followUpCount})` : ""}`}
+              : followUpCount
+                ? `Créer une séance de relance (${followUpCount})`
+                : "Aucune relance nécessaire"}
           </Button>
-          <Button onClick={onBack}>Retour aux séances</Button>
+          <Button onClick={onBack}>Retour au hub</Button>
         </div>
       </header>
 
@@ -63,9 +65,15 @@ export function RecapView({
         </GlassCard>
       </div>
 
-      {error && <p role="alert" aria-live="assertive" className="calls-error">{error}</p>}
+      {error && (
+        <GlassCard className="calls-error">
+          <p role="alert" aria-live="assertive">
+            {error}
+          </p>
+        </GlassCard>
+      )}
 
-      {called.length > 0 && (
+      {called.length > 0 ? (
         <GlassCard className="calls-recap-list">
           <h3>Appels enregistrés</h3>
           <ul>
@@ -83,10 +91,14 @@ export function RecapView({
                 >
                   {contact.outcome ?? "—"}
                 </Tag>
-                {contact.comments && <span>{contact.comments}</span>}
+                {contact.comments && <span className="calls-recap-list__comment">{contact.comments}</span>}
               </li>
             ))}
           </ul>
+        </GlassCard>
+      ) : (
+        <GlassCard className="calls-empty">
+          <p>Aucun appel journalisé sur cette séance.</p>
         </GlassCard>
       )}
 

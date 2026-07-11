@@ -9,7 +9,7 @@ import {
 } from "../../crm";
 import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
-import { DatePicker, SessionTypePicker } from "./formControls";
+import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
 import type { ContactPreview, SessionType } from "./types";
 
@@ -39,11 +39,6 @@ type NewSessionViewProps = {
     sessionType: SessionType,
   ) => void;
 };
-
-function todayLocalDate(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
 
 function Cell({
   children,
@@ -84,7 +79,7 @@ export function NewSessionView({
   onCreate,
 }: NewSessionViewProps) {
   const [sessionName, setSessionName] = useState("");
-  const [scheduledFor, setScheduledFor] = useState(todayLocalDate);
+  const [scheduledFor, setScheduledFor] = useState(todayParisIso);
   const [sessionType, setSessionType] = useState<SessionType>("prospection");
   const [dedupMode, setDedupMode] = useState<DedupMode>("avertir");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -321,8 +316,13 @@ export function NewSessionView({
       )}
 
       {!previewLoading && preview.length === 0 && !error && (
-        <GlassCard className="calls-empty">
-          <p>Réglez les filtres puis prévisualisez la liste de contacts.</p>
+        <GlassCard className="calls-empty calls-empty--hero">
+          <Tag variant="accent">Ciblage</Tag>
+          <h3>Prévisualisez votre liste</h3>
+          <p>Réglez les filtres, puis lancez une prévisualisation pour sélectionner les contacts.</p>
+          <Button onClick={onPreview} disabled={previewLoading}>
+            Prévisualiser
+          </Button>
         </GlassCard>
       )}
     </div>

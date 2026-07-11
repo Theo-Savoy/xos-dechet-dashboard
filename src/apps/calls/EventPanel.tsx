@@ -56,8 +56,12 @@ export function EventPanel({
     onSubmit(eventStart.toISOString(), durationMin, invitees);
   };
 
+  const inline = Boolean(className?.includes("calls-event-panel--inline"));
+  const Wrapper = inline ? "div" : GlassCard;
+  const wrapperClass = ["calls-event-panel", className].filter(Boolean).join(" ");
+
   return (
-    <GlassCard className={["calls-event-panel", className].filter(Boolean).join(" ")}>
+    <Wrapper className={wrapperClass}>
       <h3>{heading ?? `RDV planifié — ${contactName}`}</h3>
       <div className="calls-fb-row">
         <label className="calls-field">
@@ -92,6 +96,6 @@ export function EventPanel({
       <Button onClick={handleSubmit} disabled={loading || !start}>
         {loading ? "Enregistrement…" : (submitLabel ?? "Enregistrer le RDV & suivant")}
       </Button>
-    </GlassCard>
+    </Wrapper>
   );
 }

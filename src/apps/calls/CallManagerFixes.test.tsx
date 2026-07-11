@@ -9,6 +9,7 @@ import { FilterBuilder } from "./FilterBuilder";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
 import { RunnerView } from "./RunnerView";
+import { SessionsView } from "./SessionsView";
 import { PicklistMultiSelect } from "./filterControls";
 import type { SessionContact, SessionDetail } from "./types";
 import { emptyFilterTree, normalizeFilterTree } from "../../crm";
@@ -248,6 +249,63 @@ describe("RecapView", () => {
 
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Aucun contact ne nécessite de relance.");
+  });
+});
+
+describe("SessionsView hub filters", () => {
+  it("filters hub sessions between upcoming and done", async () => {
+    const user = userEvent.setup();
+    const sessions = [
+      {
+        id: 1,
+        name: "À faire demain",
+        status: "active" as const,
+        created_at: "2026-07-10T10:00:00Z",
+        scheduled_for: "2026-07-12",
+        session_type: "prospection" as const,
+        total: 10,
+        called: 2,
+        skipped: 0,
+        pending: 8,
+      },
+      {
+        id: 2,
+        name: "Déjà faite",
+        status: "completed" as const,
+        created_at: "2026-07-01T10:00:00Z",
+        scheduled_for: "2026-07-01",
+        session_type: "relance" as const,
+        total: 5,
+        called: 5,
+        skipped: 0,
+        pending: 0,
+      },
+    ];
+
+    render(
+      <SessionsView
+        sessions={sessions}
+        stats={null}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn()}
+        onNewSession={vi.fn()}
+        onOpenSession={vi.fn()}
+        onUpdateSession={vi.fn()}
+        onDeleteSession={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("À faire demain")).toBeTruthy();
+    expect(screen.queryByText("Déjà faite")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Réalisées/i }));
+    expect(screen.getByText("Déjà faite")).toBeTruthy();
+    expect(screen.queryByText("À faire demain")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^Toutes$/i }));
+    expect(screen.getByText("À faire demain")).toBeTruthy();
+    expect(screen.getByText("Déjà faite")).toBeTruthy();
   });
 });
 
