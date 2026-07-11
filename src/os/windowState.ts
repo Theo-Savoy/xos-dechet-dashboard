@@ -107,11 +107,26 @@ export function windowReducer(
       }));
       return focusWindow(toggled, action.appId);
     }
-    case "setBounds":
+    case "setBounds": {
+      const { x, y, w, h } = action.bounds;
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        !Number.isFinite(w) ||
+        !Number.isFinite(h) ||
+        w <= 0 ||
+        h <= 0
+      ) {
+        return state;
+      }
       return updateWindow(state, action.appId, (window) => ({
         ...window,
-        ...action.bounds,
+        x,
+        y,
+        w,
+        h,
       }));
+    }
   }
 }
 

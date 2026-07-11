@@ -93,6 +93,28 @@ describe("windowReducer", () => {
     });
   });
 
+  it("ignores setBounds if dimensions or coordinates are invalid (e.g. NaN or negative)", () => {
+    const opened = windowReducer(createWindowState(), {
+      type: "open",
+      appId: "insights",
+      defaultSize,
+    });
+    const movedWithNaN = windowReducer(opened, {
+      type: "setBounds",
+      appId: "insights",
+      bounds: { x: NaN, y: 90, w: 810, h: 530 },
+    });
+    const movedWithNegative = windowReducer(opened, {
+      type: "setBounds",
+      appId: "insights",
+      bounds: { x: 140, y: 90, w: -100, h: 530 },
+    });
+
+    expect(movedWithNaN.windows[0].x).not.toBeNaN();
+    expect(movedWithNaN.windows[0].x).toBe(72); // retained default
+    expect(movedWithNegative.windows[0].w).toBe(720); // retained default
+  });
+
   it("closes only the selected application", () => {
     const first = windowReducer(createWindowState(), {
       type: "open",
