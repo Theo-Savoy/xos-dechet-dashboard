@@ -238,7 +238,7 @@ Ajoute **« Se connecter avec Salesforce »** sur l'écran de login **EN PLUS** 
 
 ### Priorisation suggérée (prochains lots)
 
-1. **Consolidation Vercel B** (−`auth-test`, merger `calls-list`+`presets` → `calls`) — débloque les slots.
+1. ~~**Consolidation Vercel B** (−`auth-test`, merger `calls-list`+`presets` → `calls`)~~ ✅
 2. **8.1** OAuth SF *ou* **3.1/3.2** Weekly Perf (priorité manager) en parallèle possible après slots.
 3. **2.3 Hub** (rôles déjà actés).
 4. **5 / 6 / 7** selon priorité produit.

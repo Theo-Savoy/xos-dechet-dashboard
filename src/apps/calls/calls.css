@@ -549,6 +549,21 @@
   gap: 0.85rem;
 }
 
+.calls-cockpit-side--loading {
+  grid-template-columns: 1fr;
+}
+
+.calls-context-panel--skeleton {
+  min-height: 6rem;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.calls-contact-card__npa {
+  margin-top: 0.5rem;
+}
+
 .calls-context-panel {
   padding: 1rem;
 }

@@ -252,14 +252,22 @@ export function buildLightningUrl(objectType, recordId) {
   return `${instanceUrl()}/lightning/r/${objectType}/${recordId}/view`;
 }
 
-/** Live Task history + open/closed opportunities for the runner cockpit. */
+/** Live Task history + open/closed opportunities + NPA for the runner cockpit. */
 export async function fetchContactContext(token, { contactId, accountId }, mapping = defaultMapping) {
   const contact = mapping.objects.contact;
   const account = mapping.objects.account;
   const task = mapping.objects.task;
   const opportunity = mapping.objects.opportunity;
   const tf = task.fields;
+  const cf = contact.fields;
   const of = opportunity.fields;
+
+  const contactSoql = [
+    `SELECT ${cf.doNotCall}`,
+    `FROM ${contact.name}`,
+    `WHERE ${cf.id} = '${escapeSOQL(contactId)}'`,
+    `LIMIT 1`,
+  ].join(" ");
 
   const taskSoql = [
     `SELECT ${[tf.id, tf.activityDate, tf.result, tf.subject, tf.description].join(", ")}`,
@@ -270,35 +278,44 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     `LIMIT 15`,
   ].join(" ");
 
-  const tasksResult = await searchContacts(token, taskSoql);
-  if (tasksResult.error) return { error: tasksResult.error };
+  const oppSoql = accountId
+    ? [
+        `SELECT ${[of.id, of.name, of.stageName, of.isClosed, of.isWon, of.amount, of.closeDate].join(", ")}`,
+        `FROM ${opportunity.name}`,
+        `WHERE ${of.accountId} = '${escapeSOQL(accountId)}'`,
+        `ORDER BY ${of.isClosed} ASC, ${of.closeDate} DESC NULLS LAST`,
+        `LIMIT 10`,
+      ].join(" ")
+    : null;
 
-  let opportunities = [];
-  if (accountId) {
-    const oppSoql = [
-      `SELECT ${[of.id, of.name, of.stageName, of.isClosed, of.isWon, of.amount, of.closeDate].join(", ")}`,
-      `FROM ${opportunity.name}`,
-      `WHERE ${of.accountId} = '${escapeSOQL(accountId)}'`,
-      `ORDER BY ${of.isClosed} ASC, ${of.closeDate} DESC NULLS LAST`,
-      `LIMIT 10`,
-    ].join(" ");
-    const oppResult = await searchContacts(token, oppSoql);
-    if (oppResult.error) return { error: oppResult.error };
-    opportunities = (oppResult.records || []).map((record) => ({
-      id: record[of.id],
-      name: record[of.name] || "",
-      stage_name: record[of.stageName] || null,
-      is_closed: Boolean(record[of.isClosed]),
-      is_won: Boolean(record[of.isWon]),
-      amount: typeof record[of.amount] === "number" ? record[of.amount] : null,
-      close_date: record[of.closeDate] || null,
-      record_url: buildLightningUrl(opportunity.name, record[of.id]),
-    }));
-  }
+  const [contactResult, tasksResult, oppResult] = await Promise.all([
+    searchContacts(token, contactSoql),
+    searchContacts(token, taskSoql),
+    oppSoql ? searchContacts(token, oppSoql) : Promise.resolve({ records: [] }),
+  ]);
+
+  if (contactResult.error) return { error: contactResult.error };
+  if (tasksResult.error) return { error: tasksResult.error };
+  if (oppResult.error) return { error: oppResult.error };
+
+  const contactRow = contactResult.records?.[0];
+  const npa = Boolean(contactRow?.[cf.doNotCall]);
+
+  const opportunities = (oppResult.records || []).map((record) => ({
+    id: record[of.id],
+    name: record[of.name] || "",
+    stage_name: record[of.stageName] || null,
+    is_closed: Boolean(record[of.isClosed]),
+    is_won: Boolean(record[of.isWon]),
+    amount: typeof record[of.amount] === "number" ? record[of.amount] : null,
+    close_date: record[of.closeDate] || null,
+    record_url: buildLightningUrl(opportunity.name, record[of.id]),
+  }));
 
   return {
     contact_record_url: buildLightningUrl(contact.name, contactId),
     account_record_url: accountId ? buildLightningUrl(account.name, accountId) : null,
+    npa,
     tasks: (tasksResult.records || []).map((record) => ({
       id: record[tf.id],
       activity_date: record[tf.activityDate] || null,

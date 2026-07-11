@@ -92,9 +92,10 @@ export async function fetchContactList(
   filters: FilterTree,
   opts?: { presetId?: number; limit?: number },
 ): Promise<ContactListResult> {
-  return apiFetch(token, "/api/calls-list", {
+  return apiFetch(token, "/api/calls", {
     method: "POST",
     body: JSON.stringify({
+      action: "list_contacts",
       filters,
       preset_id: opts?.presetId,
       limit: opts?.limit ?? 200,
@@ -200,7 +201,7 @@ export async function createFollowUpSession(
 }
 
 export async function fetchPresets(token: string): Promise<CallTargetPreset[]> {
-  const data = await apiFetch<{ presets: CallTargetPreset[] }>(token, "/api/presets");
+  const data = await apiFetch<{ presets: CallTargetPreset[] }>(token, "/api/calls?resource=presets");
   return data.presets;
 }
 
@@ -210,13 +211,13 @@ export async function createPreset(
   filters: FilterTree,
   shared: boolean,
 ): Promise<CallTargetPreset> {
-  const data = await apiFetch<{ preset: CallTargetPreset }>(token, "/api/presets", {
+  const data = await apiFetch<{ preset: CallTargetPreset }>(token, "/api/calls", {
     method: "POST",
-    body: JSON.stringify({ name, filters, shared }),
+    body: JSON.stringify({ action: "save_preset", name, filters, shared }),
   });
   return data.preset;
 }
 
 export async function deletePreset(token: string, id: number): Promise<void> {
-  await apiFetch(token, `/api/presets?id=${id}`, { method: "DELETE" });
+  await apiFetch(token, `/api/calls?resource=presets&id=${id}`, { method: "DELETE" });
 }

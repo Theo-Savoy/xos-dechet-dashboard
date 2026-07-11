@@ -35,6 +35,7 @@ vi.mock("./_crm/salesforce.js", () => ({
   fetchContactContext: vi.fn().mockResolvedValue({
     contact_record_url: "https://example.salesforce.com/lightning/r/Contact/003/view",
     account_record_url: null,
+    npa: false,
     tasks: [],
     opportunities: [],
   }),

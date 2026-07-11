@@ -33,7 +33,6 @@ export type SessionContact = {
   sf_event_id: string | null;
   called_at: string | null;
   recall_at?: string | null;
-  do_not_call?: boolean;
   sf_contact_url?: string | null;
   sf_account_url?: string | null;
 };
@@ -61,6 +60,7 @@ export type ContactOpportunityItem = {
 export type ContactContext = {
   contact_record_url: string | null;
   account_record_url: string | null;
+  npa: boolean;
   tasks: ContactTaskHistoryItem[];
   opportunities: ContactOpportunityItem[];
 };
