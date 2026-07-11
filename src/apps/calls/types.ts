@@ -34,6 +34,8 @@ export type SessionContact = {
   called_at: string | null;
   recall_at?: string | null;
   do_not_call?: boolean;
+  sf_contact_url?: string | null;
+  sf_account_url?: string | null;
 };
 
 export type ContactTaskHistoryItem = {

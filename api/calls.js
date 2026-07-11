@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { verifyJWT } from "./_auth.js";
 import mapping from "./_crm/mapping.js";
-import { createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
+import { buildLightningUrl, createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
 
 const SF_ID = /^[a-zA-Z0-9]{15,18}$/;
 const VALID_RESULTS = mapping.objects.task.results;
@@ -165,7 +165,7 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     sf_account_id: contact.sf_account_id || null,
     contact_name: contact.contact_name.trim(),
     account_name: contact.account_name || null,
-    phone: contact.phone || null,
+    phone: contact.mobile_phone || contact.phone || null,
     title: contact.title || null,
     linkedin_url: contact.linkedin_url || null,
     status: "pending",
@@ -182,7 +182,15 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     return { error: "session_contacts_insert_failed", status: 500 };
   }
 
-  return { session, contacts: insertedContacts };
+  return { session, contacts: enrichSessionContacts(insertedContacts) };
+}
+
+function enrichSessionContacts(contacts) {
+  return (contacts || []).map((contact) => ({
+    ...contact,
+    sf_contact_url: buildLightningUrl("Contact", contact.sf_contact_id),
+    sf_account_url: contact.sf_account_id ? buildLightningUrl("Account", contact.sf_account_id) : null,
+  }));
 }
 
 function getParisDateRange() {
@@ -347,7 +355,11 @@ export async function GET(request) {
     }
 
     return new Response(
-      JSON.stringify({ session: sessionData, contacts: contacts || [], ...(context ? { context } : {}) }),
+      JSON.stringify({
+        session: sessionData,
+        contacts: enrichSessionContacts(contacts),
+        ...(context ? { context } : {}),
+      }),
       { status: 200, headers },
     );
   }

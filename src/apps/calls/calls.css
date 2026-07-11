@@ -428,11 +428,37 @@
   background: transparent;
   color: var(--xos-text-muted);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .calls-mode-toggle__btn--active {
   background: var(--xos-accent);
   color: #fff;
+}
+
+.calls-cockpit-list-wrap {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.calls-bulk-bar {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 8%, rgba(255, 255, 255, 0.03));
+}
+
+.calls-bulk-bar__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.calls-bulk-bar__head strong {
+  font-size: 0.95rem;
 }
 
 .calls-cockpit-list {
@@ -469,6 +495,16 @@
   padding: 0.55rem 0.35rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.85rem;
+  border-radius: 0.4rem;
+  transition: background-color 0.12s ease;
+}
+
+.calls-cockpit-list__rows li:not(.calls-cockpit-list__header):hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.calls-cockpit-list__row--selected {
+  background: color-mix(in srgb, var(--xos-accent) 10%, transparent) !important;
 }
 
 .calls-cockpit-list__header {
@@ -488,6 +524,10 @@
   cursor: pointer;
   padding: 0;
   font: inherit;
+}
+
+.calls-cockpit-list__name:hover strong {
+  color: var(--xos-accent);
 }
 
 .calls-cockpit-list__name small {
@@ -604,10 +644,16 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.calls-result-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .calls-result-btn--active {
   color: var(--xos-accent);
   border-color: color-mix(in srgb, var(--xos-accent) 55%, transparent);
-  background: color-mix(in srgb, var(--xos-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--xos-accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xos-accent) 25%, transparent);
 }
 
 @media (max-width: 900px) {

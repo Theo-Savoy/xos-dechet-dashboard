@@ -95,6 +95,7 @@ describe("RunnerView", () => {
     onLogEvent: vi.fn(),
     onSkip: vi.fn(),
     onSkipMany: vi.fn(),
+    onLogMany: vi.fn(),
   };
 
   it("keeps the logged contact in the prioritized event panel", () => {
@@ -110,7 +111,8 @@ describe("RunnerView", () => {
     expect(screen.getByRole("heading", { name: "RDV planifié — Alice Martin" })).toBeTruthy();
   });
 
-  it("shows title, LinkedIn and result buttons on the contact card", () => {
+  it("shows title, LinkedIn and result buttons on the contact card", async () => {
+    const user = userEvent.setup();
     const current = { ...bob, title: "RF", linkedin_url: "https://linkedin.com/in/bob", status: "pending" as const };
     render(
       <RunnerView
@@ -121,6 +123,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
     expect(screen.getByText("RF")).toBeTruthy();
     expect(screen.getByRole("link", { name: "LinkedIn" }).getAttribute("href")).toBe(
       "https://linkedin.com/in/bob",
@@ -131,8 +134,7 @@ describe("RunnerView", () => {
     expect(screen.getByText("Restant")).toBeTruthy();
   });
 
-  it("toggles to list mode with session statuses", async () => {
-    const user = userEvent.setup();
+  it("toggles to list mode with session statuses", () => {
     render(
       <RunnerView
         {...runnerProps}
@@ -142,10 +144,35 @@ describe("RunnerView", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
     expect(screen.getByText("Appelé")).toBeTruthy();
     expect(screen.getByText("À faire")).toBeTruthy();
+  });
+
+  it("bulk-logs the same outcome for selected contacts", async () => {
+    const user = userEvent.setup();
+    const onLogMany = vi.fn();
+    const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
+    const pendingB = { ...bob, id: 3, contact_name: "Claire", status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogMany={onLogMany}
+        contacts={[pendingA, pendingB]}
+        currentContact={pendingA}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByLabelText("Sélectionner Claire"));
+    await user.click(screen.getByRole("button", { name: "Appel décroché" }));
+    await user.click(screen.getByRole("button", { name: "Consigner pour 2" }));
+
+    expect(onLogMany).toHaveBeenCalledWith(
+      [2, 3],
+      expect.objectContaining({ resultat: "Appel décroché" }),
+    );
   });
 });
 

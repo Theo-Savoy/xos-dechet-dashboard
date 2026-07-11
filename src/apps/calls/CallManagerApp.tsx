@@ -46,6 +46,12 @@ function errorMessage(err: unknown): string {
     if (err.code === "session_contacts_insert_failed") {
       return "Échec d'enregistrement de la liste d'appels (base de données)";
     }
+    if (err.code === "sf_write_error" || err.code === "sf_auth_error" || err.code === "sf_query_error") {
+      const hint = err.details?.trim();
+      return hint
+        ? `Salesforce a refusé l'opération : ${hint.slice(0, 220)}`
+        : "Salesforce a refusé l'enregistrement.";
+    }
     return `Erreur API (${err.code})`;
   }
   return "Une erreur est survenue.";
@@ -350,6 +356,37 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
+  const handleLogMany = async (contactIds: number[], payload: LogPayload) => {
+    if (!token || !activeSession || contactIds.length === 0) return;
+    if (payload.resultat === "RDV planifié") {
+      setRunnerError("Le RDV se planifie contact par contact (fiche individuelle).");
+      return;
+    }
+
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      for (const contactId of contactIds) {
+        await logCall(token, activeSession.id, contactId, payload.resultat, {
+          comments: payload.comments,
+          recallAt: payload.recallAt,
+          doNotCall: payload.doNotCall,
+        });
+      }
+      await advanceOrComplete(activeSession.id);
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+      try {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+      } catch {
+        /* keep current list */
+      }
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
   const handleCreateFollowUp = async () => {
     if (!token || !activeSession) return;
     setFollowUpLoading(true);
@@ -449,6 +486,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           }
           onSkip={(contactId) => void handleSkip(contactId)}
           onSkipMany={(ids) => void handleSkipMany(ids)}
+          onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
         />
       )}
 

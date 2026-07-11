@@ -166,7 +166,7 @@ describe("CallManagerApp component", () => {
     render(<CallManagerApp />);
     await user.click(await screen.findByText("Nouvelle séance"));
     await user.click(screen.getByText("Aperçu de la liste"));
-    await user.click(screen.getByLabelText("A un numéro de téléphone"));
+    await user.click(screen.getByLabelText("A un numéro de mobile"));
     await user.click(screen.getByText("Aperçu de la liste"));
 
     resolveSecond(
@@ -267,6 +267,7 @@ describe("CallManagerApp component", () => {
 
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Dernier contact" });
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
     await user.click(screen.getByRole("button", { name: "RDV planifié" }));
     await user.click(screen.getByRole("button", { name: "Logguer & suivant" }));
 

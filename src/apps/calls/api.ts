@@ -12,18 +12,22 @@ export class CallsApiError extends Error {
   constructor(
     public status: number,
     public code: string,
+    public details?: string,
   ) {
     super(code);
     this.name = "CallsApiError";
   }
 }
 
-async function parseError(res: Response): Promise<string> {
+async function parseError(res: Response): Promise<{ code: string; details?: string }> {
   try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? `http_${res.status}`;
+    const body = (await res.json()) as { error?: string; message?: string };
+    return {
+      code: body.error ?? `http_${res.status}`,
+      details: typeof body.message === "string" ? body.message : undefined,
+    };
   } catch {
-    return `http_${res.status}`;
+    return { code: `http_${res.status}` };
   }
 }
 
@@ -42,8 +46,8 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    const code = await parseError(res);
-    throw new CallsApiError(res.status, code);
+    const { code, details } = await parseError(res);
+    throw new CallsApiError(res.status, code, details);
   }
 
   return res.json() as Promise<T>;

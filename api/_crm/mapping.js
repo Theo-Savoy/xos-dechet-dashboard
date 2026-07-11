@@ -241,7 +241,8 @@ const mapping = {
         activityDate: "ActivityDate",
       },
       subtypeValue: "Call",
-      statusValue: "Achevée",
+      // Standard Task.Status API value (UI label may be "Achevée" in FR orgs).
+      statusValue: "Completed",
       results: [
         "Appel non décroché",
         "Message répondeur",

@@ -30,6 +30,16 @@ vi.mock("./_crm/salesforce.js", () => ({
   fetchSFToken: mockFetchSFToken,
   logCall: mockLogCall,
   createEvent: mockCreateEvent,
+  createRecallTask: vi.fn().mockResolvedValue({ record: { id: "00Trecall" } }),
+  updateContactDoNotCall: vi.fn().mockResolvedValue({ ok: true }),
+  fetchContactContext: vi.fn().mockResolvedValue({
+    contact_record_url: "https://example.salesforce.com/lightning/r/Contact/003/view",
+    account_record_url: null,
+    tasks: [],
+    opportunities: [],
+  }),
+  buildLightningUrl: (objectType, recordId) =>
+    recordId ? `https://example.salesforce.com/lightning/r/${objectType}/${recordId}/view` : null,
 }));
 
 const mockDb = vi.fn();

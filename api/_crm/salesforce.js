@@ -99,7 +99,7 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
     }
   }
 
-  if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.phone} != null`);
+  if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
   if (contactFilters.exclure_npa !== false) conditions.push(`${contact.fields.doNotCall} = false`);
   const decisionLevels = stringList(contactFilters.niveau_decision);
   if (decisionLevels.length) conditions.push(`${contact.fields.decisionLevel} IN (${escapedList(decisionLevels)})`);
@@ -220,18 +220,28 @@ async function createSObject(token, objectName, fields) {
   return { record: await response.json() };
 }
 
+/** YYYY-MM-DD in Europe/Paris — required for Tasks to show in SF activity timelines. */
+export function parisToday() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+}
+
 export async function logCall(token, { contactId, accountId, resultat, comments = "", durationSec = 0, ownerId, actorName = "Utilisateur Inconnu" }, mapping = defaultMapping) {
   const task = mapping.objects.task;
   const fields = task.fields;
   const call = {
     [fields.subtype]: task.subtypeValue,
     [fields.result]: resultat,
-    [fields.duration]: durationSec,
     [fields.whoId]: contactId,
     [fields.status]: task.statusValue,
+    [fields.activityDate]: parisToday(),
     [fields.subject]: `Appel — ${resultat}`,
     [fields.description]: `${comments}\n\n[via X OS par ${actorName}]`,
+    Priority: "Normal",
   };
+  // Duration is optional / unused in the cockpit — omit zero to avoid noisy SF fields.
+  if (Number.isFinite(durationSec) && durationSec > 0) {
+    call[fields.duration] = durationSec;
+  }
   if (accountId) call[fields.whatId] = accountId;
   if (ownerId) call[fields.ownerId] = ownerId;
   return createSObject(token, task.name, call);
