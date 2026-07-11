@@ -100,6 +100,9 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
       conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false)`);
     }
   }
+  if (enterprise.opp_perdue === false) {
+    conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.stageName} = '${escapeSOQL(opportunity.closedLostStage)}')`);
+  }
 
   if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
   if (contactFilters.exclure_npa !== false) conditions.push(`${contact.fields.doNotCall} = false`);

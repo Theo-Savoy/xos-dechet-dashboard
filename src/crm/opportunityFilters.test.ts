@@ -20,10 +20,20 @@ describe("opportunityFilters", () => {
     expect(countOpportunitySemiJoins({ opp_ouverte: true, opp_perdue: true })).toBe(2);
   });
 
+  it("counts lost=false as one semi-join", () => {
+    expect(countOpportunitySemiJoins({ opp_ouverte: null, opp_perdue: false })).toBe(1);
+  });
+
   it("explains the open+lost workaround in the UI guidance", () => {
     const guidance = getOpportunityFilterGuidance({ opp_ouverte: true, opp_perdue: true });
     expect(guidance.hint).toContain("ouverte");
     expect(guidance.note).toContain("Limite Salesforce");
-    expect(guidance.disabled.opp_perdue).toContain(false);
+    expect(guidance.disabled.opp_perdue).not.toContain(false);
+  });
+
+  it("describes lost=false in the UI guidance", () => {
+    const guidance = getOpportunityFilterGuidance({ opp_ouverte: null, opp_perdue: false });
+    expect(guidance.hint).toContain("sans opportunité");
+    expect(guidance.disabled.opp_perdue).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@ export function countOpportunitySemiJoins(entreprise: EntrepriseOpp): number {
       count += 1;
     }
   }
+  if (entreprise.opp_perdue === false) count += 1;
   return count;
 }
 
@@ -41,13 +42,9 @@ export function getOpportunityFilterGuidance(entreprise: EntrepriseOpp): Opportu
 
   const disabled: OpportunityFilterGuidance["disabled"] = {
     opp_ouverte: [],
-    opp_perdue: [false],
+    opp_perdue: [],
   };
-  const disabledReasons: OpportunityFilterGuidance["disabledReasons"] = {
-    opp_perdue: {
-      false: "Filtre non pris en charge — utilisez « Peu importe » ou « Oui ».",
-    },
-  };
+  const disabledReasons: OpportunityFilterGuidance["disabledReasons"] = {};
 
   let hint: string | null = null;
   let note: string | null = null;
@@ -61,6 +58,15 @@ export function getOpportunityFilterGuidance(entreprise: EntrepriseOpp): Opportu
     hint = "Comptes avec une opportunité perdue et aucune opportunité ouverte.";
   } else if (opp_perdue === true) {
     hint = "Comptes avec une opportunité perdue et aucune opportunité ouverte.";
+    if (atLimit) {
+      note = "Limite Salesforce atteinte pour ces filtres opportunité.";
+    }
+  } else if (opp_perdue === false && opp_ouverte === true) {
+    hint = "Comptes avec au moins une opportunité ouverte et sans opportunité perdue.";
+  } else if (opp_perdue === false && opp_ouverte === false) {
+    hint = "Comptes sans opportunité ouverte ni opportunité perdue.";
+  } else if (opp_perdue === false) {
+    hint = "Comptes sans opportunité au stade perdu.";
     if (atLimit) {
       note = "Limite Salesforce atteinte pour ces filtres opportunité.";
     }

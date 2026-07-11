@@ -196,6 +196,28 @@ describe("adapter exports", () => {
     expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
   });
 
+  it("buildTargetQuery opp_perdue=false excludes lost stage accounts", () => {
+    const soql = buildTargetQuery(
+      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_perdue: false } },
+      mapping,
+      null,
+    );
+    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
+    expect(soql).not.toMatch(/AccountId IN \(SELECT AccountId FROM Opportunity WHERE StageName/);
+  });
+
+  it("buildTargetQuery opp_ouverte=true + opp_perdue=false stays within semi-join limit", () => {
+    const soql = buildTargetQuery(
+      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: false } },
+      mapping,
+      null,
+    );
+    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
+    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
+    const semiJoins = soql.match(/AccountId (?:NOT )?IN \(SELECT/g) || [];
+    expect(semiJoins.length).toBeLessThanOrEqual(2);
+  });
+
   it("buildTargetQuery opp_ouverte=true + opp_perdue=true keeps ≤2 semi-joins (open AND lost)", () => {
     const soql = buildTargetQuery(
       { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: true } },

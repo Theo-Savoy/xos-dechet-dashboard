@@ -653,8 +653,24 @@ describe("call targeting copy and controls", () => {
     );
     expect(screen.getByRole("note")).toBeTruthy();
     expect(screen.getByText(/aucune ouverte/i)).toBeTruthy();
+  });
+
+  it("shows guidance when lost is set to Non", () => {
+    render(
+      <FilterBuilder
+        {...filterBuilderProps}
+        filters={{
+          ...emptyFilterTree(),
+          entreprise: {
+            ...emptyFilterTree().entreprise,
+            opp_perdue: false,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/sans opportunité au stade perdu/i)).toBeTruthy();
     const nonButtons = screen.getAllByRole("button", { name: "Non" });
-    expect(nonButtons.some((btn) => (btn as HTMLButtonElement).disabled)).toBe(true);
+    expect(nonButtons.every((btn) => !(btn as HTMLButtonElement).disabled)).toBe(true);
   });
 
   it("only shows preset deletion to the current preset owner", async () => {
