@@ -4,17 +4,18 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { signInWithOtp } = vi.hoisted(() => ({
+const { signInWithOtp, signInWithOAuth } = vi.hoisted(() => ({
   signInWithOtp: vi.fn().mockResolvedValue({ data: {}, error: null }),
+  signInWithOAuth: vi.fn().mockResolvedValue({ data: {}, error: null }),
 }));
 
 vi.mock("../lib/supabase", () => ({
   supabase: {
-    auth: { signInWithOtp },
+    auth: { signInWithOtp, signInWithOAuth },
   },
 }));
 
-import { LoginScreen, SALESFORCE_AUTH_START } from "./LoginScreen";
+import { LoginScreen, SALESFORCE_PROVIDER } from "./LoginScreen";
 
 describe("LoginScreen — email normalization", () => {
   beforeEach(() => {
@@ -64,6 +65,7 @@ describe("LoginScreen — email normalization", () => {
 describe("LoginScreen — dual auth layout", () => {
   beforeEach(() => {
     signInWithOtp.mockClear();
+    signInWithOAuth.mockClear();
     window.history.replaceState({}, "", "/");
   });
   afterEach(cleanup);
@@ -80,23 +82,36 @@ describe("LoginScreen — dual auth layout", () => {
     expect(screen.getByRole("separator", { name: "ou" })).toBeTruthy();
   });
 
-  it("starts Salesforce OAuth via the auth router", async () => {
+  it("starts Salesforce OAuth via the Supabase custom provider", async () => {
     const user = userEvent.setup();
-    const assign = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign,
-      origin: window.location.origin,
-      search: "",
-    });
 
     render(<LoginScreen />);
     await user.click(
       screen.getByRole("button", { name: "Se connecter avec Salesforce" }),
     );
 
-    expect(assign).toHaveBeenCalledWith(SALESFORCE_AUTH_START);
-    vi.unstubAllGlobals();
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: SALESFORCE_PROVIDER,
+      options: { redirectTo: window.location.origin },
+    });
+  });
+
+  it("shows an error and re-enables the button when signInWithOAuth fails", async () => {
+    const user = userEvent.setup();
+    signInWithOAuth.mockResolvedValueOnce({ data: {}, error: { message: "boom" } });
+
+    render(<LoginScreen />);
+    await user.click(
+      screen.getByRole("button", { name: "Se connecter avec Salesforce" }),
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("Impossible de démarrer");
+  });
+
+  it("surfaces Supabase OAuth error_description from the redirect", () => {
+    window.history.replaceState({}, "", "/?error=server_error&error_description=Email+non+autorise");
+    render(<LoginScreen />);
+    expect(screen.getByRole("alert").textContent).toContain("Email non autorise");
   });
 
   it("surfaces auth_error query messages for the OAuth callback path", () => {

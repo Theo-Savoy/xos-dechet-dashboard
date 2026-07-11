@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import logoXos from "../assets/logo-xos.png";
 import { Button } from "../components/ui";
 import { supabase } from "../lib/supabase";
@@ -6,35 +6,56 @@ import "./login.css";
 
 const ALLOWED_DOMAIN = "xos-learning.fr";
 
-/** Endpoint OAuth SF (Phase 8.1). Le bouton y pointe déjà ; le backend le branchera. */
-export const SALESFORCE_AUTH_START = "/api/auth?flow=salesforce";
+/** Provider OIDC custom Supabase (Phase 8.1) — issuer = My Domain de l'org. */
+export const SALESFORCE_PROVIDER = "custom:salesforce";
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   domain_not_allowed: `Seules les adresses @${ALLOWED_DOMAIN} sont autorisées.`,
   oauth_denied: "Connexion Salesforce annulée.",
   sf_email_mismatch: "L'email Salesforce ne correspond pas à un compte X OS autorisé.",
-  sf_coming_soon: "La connexion Salesforce arrive bientôt. Utilisez le lien magique pour l'instant.",
   server_error: "Impossible de démarrer la connexion Salesforce. Réessayez.",
 };
 
-function authErrorFromLocation(search: string): string | null {
+function authErrorFromLocation(search: string, hash = ""): string | null {
   const code = new URLSearchParams(search).get("auth_error");
-  if (!code) return null;
-  return AUTH_ERROR_MESSAGES[code] ?? "La connexion a échoué. Réessayez.";
+  if (code) return AUTH_ERROR_MESSAGES[code] ?? "La connexion a échoué. Réessayez.";
+  // Échec OAuth Supabase : error/error_description reviennent en query ou en fragment.
+  const params = new URLSearchParams(search || undefined);
+  const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const description = params.get("error_description") ?? hashParams.get("error_description");
+  const oauthError = params.get("error") ?? hashParams.get("error");
+  if (description) return description;
+  if (oauthError) return "La connexion Salesforce a échoué. Réessayez.";
+  return null;
 }
 
 export function LoginScreen() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sfLoading, setSfLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(() =>
-    typeof window !== "undefined" ? authErrorFromLocation(window.location.search) : null,
+    typeof window !== "undefined"
+      ? authErrorFromLocation(window.location.search, window.location.hash)
+      : null,
   );
 
   const isValidEmail = (value: string) =>
     value.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
 
-  const salesforceHref = useMemo(() => SALESFORCE_AUTH_START, []);
+  const handleSalesforceLogin = async () => {
+    setError(null);
+    setSfLoading(true);
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: SALESFORCE_PROVIDER,
+      options: { redirectTo: window.location.origin },
+    });
+    // Succès = redirection navigateur ; on ne repasse ici qu'en cas d'échec.
+    if (err) {
+      setError(AUTH_ERROR_MESSAGES.server_error);
+      setSfLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,12 +135,11 @@ export function LoginScreen() {
                 type="button"
                 variant="secondary"
                 className="login-sf-btn"
-                onClick={() => {
-                  window.location.assign(salesforceHref);
-                }}
+                disabled={sfLoading}
+                onClick={() => void handleSalesforceLogin()}
               >
                 <SalesforceMark />
-                Se connecter avec Salesforce
+                {sfLoading ? "Redirection vers Salesforce…" : "Se connecter avec Salesforce"}
               </Button>
             </div>
 
