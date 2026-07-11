@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAppManifest } from "../../os/registry";
 
@@ -31,10 +30,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Hub app", () => {
-  it("is registered for every role", () => {
+  it("is registered for managers and admins only (dock gating)", () => {
     const manifest = getAppManifest("hub");
     expect(manifest?.id).toBe("hub");
-    expect(manifest?.roles).toBeUndefined();
+    expect(manifest?.roles).toEqual(["manager", "admin"]);
   });
 
   it("renders manager settings from the status payload and does not expose role management", async () => {
@@ -46,11 +45,9 @@ describe("Hub app", () => {
     expect(global.fetch).toHaveBeenCalledWith("/api/status", expect.objectContaining({ headers: { Authorization: "Bearer token" } }));
   });
 
-  it("uses Supabase signOut from the account panel", async () => {
-    const user = userEvent.setup();
+  it("does not render a logout button anymore (moved to the desktop menubar)", async () => {
     render(<HubApp />);
-    await screen.findByText("Ada Lovelace");
-    await user.click(screen.getByRole("button", { name: "Déconnexion" }));
-    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    await screen.findByText("Compte");
+    expect(screen.queryByRole("button", { name: "Déconnexion" })).toBeNull();
   });
 });

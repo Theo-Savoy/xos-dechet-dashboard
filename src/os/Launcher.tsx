@@ -19,10 +19,12 @@ const GROUP_LABELS: Record<string, string> = {
 
 type LauncherProps = {
   accessToken: string;
+  /** Apps visibles pour le rôle courant (défaut : tout le registry). */
+  apps?: AppManifest[];
   onOpenApp: (app: AppManifest, params?: Record<string, string>) => void;
 };
 
-export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
+export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: LauncherProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -312,7 +314,7 @@ export function Launcher({ accessToken, onOpenApp }: LauncherProps) {
   // Filter local apps that match the query
   const matchingApps =
     query.length >= 2 && !query.startsWith("/")
-      ? appRegistry.filter((app) =>
+      ? apps.filter((app) =>
           app.title.toLowerCase().includes(query.toLowerCase()),
         )
       : [];

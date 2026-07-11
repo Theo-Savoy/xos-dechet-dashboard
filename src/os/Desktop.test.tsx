@@ -15,7 +15,19 @@ globalThis.ResizeObserver = class {
 // Mock supabase — Launcher no longer imports it, but the import chain may
 // pull in supabase.ts which throws if env vars are missing.
 vi.mock("../lib/supabase", () => ({
-  supabase: { auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) } },
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
+    },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { role: "admin" }, error: null }),
+        }),
+      }),
+    }),
+  },
 }));
 
 describe("Desktop", () => {

@@ -32,6 +32,8 @@ export const appRegistry: AppManifest[] = [
     icon: "◌",
     component: lazy(() => import("../apps/hub/HubApp")),
     defaultSize: { w: 820, h: 620 },
+    // Panneau système : bruit pour un commercial, réservé au pilotage.
+    roles: ["manager", "admin"],
   },
   ...(import.meta.env.DEV
     ? [

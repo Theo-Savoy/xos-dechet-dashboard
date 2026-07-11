@@ -72,6 +72,22 @@ textarea {
   object-fit: contain;
 }
 
+.xos-menubar__logout {
+  margin-left: 12px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.xos-menubar__logout:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .xos-menubar__session {
   display: flex;
   align-items: center;

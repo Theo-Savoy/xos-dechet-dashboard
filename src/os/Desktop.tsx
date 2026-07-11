@@ -1,7 +1,8 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
 import logoXos from "../assets/logo-xos.png";
+import { supabase } from "../lib/supabase";
 import { Dock } from "./Dock";
-import { appRegistry, type AppManifest } from "./registry";
+import { appRegistry, type AppManifest, type AppRole } from "./registry";
 import { WindowManager } from "./WindowManager";
 import {
   hydrateWindowState,
@@ -26,6 +27,27 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
       appRegistry.map((app) => app.id),
     ),
   );
+  const [role, setRole] = useState<AppRole>("commercial");
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("role")
+      .eq("email", userEmail)
+      .maybeSingle()
+      .then(({ data }) => {
+        const value = data?.role;
+        if (!cancelled && (value === "admin" || value === "manager" || value === "commercial")) {
+          setRole(value);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userEmail]);
+
+  const visibleApps = appRegistry.filter((app) => !app.roles || app.roles.includes(role));
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, serializeWindowState(state));
@@ -60,11 +82,18 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
           <span className="xos-menubar__status" aria-hidden="true" />
           {userEmail}
         </span>
+        <button
+          type="button"
+          className="xos-menubar__logout"
+          onClick={() => void supabase.auth.signOut()}
+        >
+          Déconnexion
+        </button>
       </header>
 
       <WindowManager windows={state.windows} dispatch={dispatch} />
-      <Dock apps={appRegistry} windows={state.windows} onOpen={openApp} />
-      <Launcher accessToken={accessToken} onOpenApp={openApp} />
+      <Dock apps={visibleApps} windows={state.windows} onOpen={openApp} />
+      <Launcher accessToken={accessToken} onOpenApp={openApp} apps={visibleApps} />
     </main>
   );
 }

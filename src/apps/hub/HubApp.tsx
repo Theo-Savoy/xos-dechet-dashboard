@@ -64,7 +64,6 @@ export default function HubApp() {
       <section className="hub-grid">
         <GlassCard className="hub-panel"><p className="hub-eyebrow">Compte</p><h3>{status.profile.fullName || "Utilisateur X OS"}</h3>
           <dl className="hub-details"><div><dt>Email</dt><dd>{status.profile.email || "—"}</dd></div><div><dt>Rôle</dt><dd><Tag>{status.role}</Tag></dd></div><div><dt>Salesforce</dt><dd>{status.profile.sfUserId ? `Mappé · ${status.profile.sfUserId}` : "Non mappé"}</dd></div></dl>
-          <Button variant="secondary" onClick={() => supabase.auth.signOut()}>Déconnexion</Button>
         </GlassCard>
         <GlassCard className="hub-panel"><p className="hub-eyebrow">Statut</p><h3>Services</h3>
           <div className="hub-status"><span>Salesforce <Tag variant={status.salesforce.connected ? "success" : "warning"}>{status.salesforce.connected ? "OK" : "KO"}</Tag></span><span>Quota <strong>{quota ? `${quota.remaining.toLocaleString("fr-FR")} / ${quota.max.toLocaleString("fr-FR")}` : "Indisponible"}</strong></span><span>Cache Cleaner <strong>{status.cache.cleaner.version || "Non disponible"}</strong></span><span>Déploiement <strong>{status.version}</strong></span></div>
