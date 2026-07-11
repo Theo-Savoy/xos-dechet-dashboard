@@ -5,6 +5,16 @@ Le SMTP intégré Supabase est **dev-only** : rate-limit bas (quelques emails/he
 Template HTML prêt à coller : [`docs/email/magic-link.html`](../email/magic-link.html)  
 Logo servi en prod : `https://xos.hellotheo.fr/email/logo-xos.png` (fichier `public/email/logo-xos.png`).
 
+## Supabase vs Resend — qui fait quoi ?
+
+| | Resend | Supabase |
+|---|---|---|
+| Rôle | **Transport** SMTP (livraison) | **Contenu** du mail (HTML, sujet) |
+| Template magic link | ❌ Ne s’applique pas | ✅ **C’est ici** qu’il faut coller le HTML |
+| Dashboard | resend.com → Domains / API keys | supabase.com → **Auth → Email Templates** |
+
+Resend n’a **aucun** template qui override Supabase pour l’auth. Si tu as créé un template dans Resend, il ne sera **jamais** utilisé pour le magic link — seul le template Supabase compte.
+
 ## Checklist (ordre)
 
 ### 1. Resend — compte + domaine
@@ -36,17 +46,38 @@ Dashboard projet **xos-portal** → **Authentication** → **SMTP** ([lien direc
 
 Après activation, augmenter aussi le rate-limit email Auth si besoin : **Authentication → Rate Limits** (le plafond SMTP intégré ne s’applique plus ; Resend Free ≈ 100 emails/jour, 3 000/mois).
 
-### 3. Template Magic Link
+### 3. Template Magic Link (Supabase — obligatoire)
 
-**Authentication → Email Templates → Magic Link** :
+**Authentication → [Email Templates](https://supabase.com/dashboard/project/vvbslsatsuxgykjczjdt/auth/templates)** :
 
-- **Subject** : `Ton accès XOS Portal`
-- **Body** : coller le contenu de `docs/email/magic-link.html` (ou au minimum le `<body>…</body>`).
-- Ton : conversationnel, léger, marque **XOS Portal**.
+1. Ouvre **Magic Link or OTP** (c’est celui utilisé par `signInWithOtp` — confirmé dans les logs auth : `mail_type: magic_link`).
+2. **Subject** : `Ton accès XOS Portal`
+3. **Body** : colle `docs/email/magic-link-body.html` (fragment table-only, sans `<!DOCTYPE>` ni commentaires HTML — évite le fallback silencieux vers le template par défaut). Preview locale : ouvrir `docs/email/magic-link.html` dans un navigateur.
+4. **Save** sur ce template (bouton en bas, par template).
+5. Renvoie un **nouveau** magic link.
 
-Variables : `{{ .ConfirmationURL }}` (et éventuellement `{{ .SiteURL }}`).
+**Important :** customiser Confirm signup / Invite ne suffit pas pour la connexion magic link d’un user existant.
 
-Refaire **Confirm signup** / **Invite** avec la même charte si tu les utilises.
+**Si le mail reste l’ancien — diagnostic en 2 min :**
+
+| Test | Résultat | Cause |
+|---|---|---|
+| Tu changes **seulement le Subject** en `TEST XOS 123`, Save, nouvel envoi | Sujet inchangé | Save non pris (mauvais projet, pas cliqué Save, mauvais onglet) |
+| Sujet OK, body toujours default | HTML invalide pour Go templates → Supabase **retombe sur le default sans erreur visible** | Colle `magic-link-body.html` ou le minimal ci-dessous |
+| Sujet + body OK | — | Résolu |
+
+Minimal de test (Magic Link body) :
+
+```html
+<h2 style="color:#8b5bfa;">XOS Portal — test template</h2>
+<p><a href="{{ .ConfirmationURL }}">Entrer</a></p>
+```
+
+Si ce minimal passe mais pas le gros template, le HTML complet casse le parseur (commentaires, nesting, etc.).
+
+Variables Supabase : garde exactement `{{ .ConfirmationURL }}` (espaces inclus).
+
+**Si tu vois encore l’ancien mail** : tu n’as pas sauvegardé le bon template, ou le HTML a provoqué un fallback.
 
 ### 4. Déployer le logo
 
@@ -62,6 +93,20 @@ Vérifier dans le navigateur que l’image charge **avant** le smoke-test mail.
 2. Demander un magic link `@xos-learning.fr`
 3. Vérifier : From `XOS Portal <xos@hellotheo.fr>`, logo + bouton, clic → bureau
 4. Resend → **Emails** → Delivered
+
+## Spam — pourquoi et quoi faire
+
+Le spam vient presque toujours de la **réputation DNS**, pas du HTML seul.
+
+1. **Resend → Domains → hellotheo.fr** : tout doit être **Verified** (DKIM + SPF / return-path). Un record manquant ou en proxy orange Cloudflare = spam fréquent.
+2. **DMARC** (recommandé) : `TXT` sur `_dmarc.hellotheo.fr`  
+   `v=DMARC1; p=none; rua=mailto:xos@hellotheo.fr`  
+   Puis passer à `p=quarantine` quand la délivrabilité est stable.
+3. **Alignement expéditeur** : dans Supabase SMTP, **Sender email** = exactement `xos@hellotheo.fr`, **Sender name** = `XOS Portal` (même domaine que DKIM).
+4. **Premiers envois** : domaine neuf → Gmail/Outlook classent souvent en spam ; marquer « Non spam » + ouvrir le mail aide le warm-up.
+5. **Éviter** : sujet tout en majuscules, trop de liens, pièces jointes (pas le cas ici).
+
+Vérifier les headers du mail reçu (Gmail → ⋮ → Afficher l’original) : `spf=pass`, `dkim=pass`, `dmarc=pass`.
 
 ## Ce que tu fais vs ce que l’agent fait
 
