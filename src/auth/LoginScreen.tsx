@@ -51,9 +51,6 @@ export function LoginScreen() {
       options: {
         redirectTo: window.location.origin,
         scopes: "openid email profile api refresh_token",
-        queryParams: {
-          prompt: "consent",
-        },
       },
     });
     // Succès = redirection navigateur ; on ne repasse ici qu'en cas d'échec.

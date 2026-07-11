@@ -95,9 +95,6 @@ describe("LoginScreen — dual auth layout", () => {
       options: {
         redirectTo: window.location.origin,
         scopes: "openid email profile api refresh_token",
-        queryParams: {
-          prompt: "consent",
-        },
       },
     });
   });
