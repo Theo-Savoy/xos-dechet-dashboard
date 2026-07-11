@@ -68,6 +68,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   │   ├── weekly/      Weekly Perf
 │   │   ├── calls/       Call Manager (séances de prospection)
 │   │   ├── arena/       Gamification
+│   │   ├── copilot/     Copilot (pipeline, alertes, adoption CRM)
 │   │   ├── agent/       Chat Agent XOS (UI custom → Slack API ; Hermes = app Slack)
 │   │   └── hub/         Paramètres & statut
 │   ├── auth/            login OTP, session, bridge SSO
@@ -82,7 +83,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   ├── auth.js          pont cookie legacy + OAuth SF (?flow=salesforce)
 │   ├── calls.js         routeur Call Manager → api/_calls/* (sessions, ciblage, presets, rappels, team)
 │   ├── _calls/ _crm/    helpers non exposés (adapter CRM, actions, caches)
-│   └── à venir : status (Hub) · perf (Weekly) · chat + slack/* (Agent) · arena/*
+│   └── à venir : status (Hub) · perf (Weekly) · chat + slack/* (Agent) · arena/* · copilot
 ├── middleware.js        auth edge : session Supabase OU Basic Auth legacy
 └── supabase/migrations/ schéma Postgres
 ```
@@ -178,6 +179,14 @@ Assistant conversationnel : **go-to quotidien** de l'équipe. X OS est l'interfa
     *   **Slack** : persistance et sync du fil ; reprise dans l'app Slack native.
 *   **Bénéfice** : un seul assistant qui connaît le contexte de chaque commercial et agit sur les vrais outils, sans quitter X OS.
 
+### 8. 🧭 Copilot (Pilotage du pipeline & assistant d'action) — *Nouveau — Phase 9 (priorité produit : avant Arena)*
+Le cockpit **prescriptif** du commercial : là où Weekly Perf regarde en arrière (ce qui s'est passé) et Call Manager exécute (les appels du jour), Copilot répond à la question quotidienne *« sur quoi je dois agir maintenant ? »*. Moteur de **règles déterministes** (pas de LLM dans le repo — le volet conversationnel reste Hermes, Phase 7). Périmètre validé le 2026-07-11 :
+*   **Pipeline de travail** : les opportunités ouvertes du commercial triées par urgence (CloseDate proche/dépassée, montant, étape), « à clôturer sous 30 jours » en avant, signal d'hygiène (CloseDate passée → pont Cleaner).
+*   **Alertes & prochaines actions** : détection d'opps dormantes (aucune activité depuis N jours), bloquées (pas de progression d'étape — réutilise la logique `OpportunityHistory` de 3.1), propositions sans suite, RDV passés sans next step. Chaque alerte porte une **action en 1 clic** (Task de relance avec `OwnerId` = le commercial, Event, `/log`, séance Call Manager pré-ciblée) — via les endpoints existants, Copilot n'introduit pas de nouveau chemin d'écriture SF.
+*   **Stratégies de prospection** : analyse du portefeuille (segments à meilleur taux de gain, comptes à opp perdue ré-attaquables) → suggestions concrètes sous forme de **presets de séance Call Manager pré-remplis**.
+*   **Adoption & qualité CRM** : usage du CRM par commercial — appels loggés, Events, contacts et comptes créés sur fenêtre glissante (mêmes définitions que Weekly Perf, pas de deuxième vérité) — et **complétude des champs critiques** (opps, contacts, comptes ; liste des champs dans le mapping CRM, jamais en dur). Vue « Moi » pour le commercial, vue « Équipe » pour manager+admin ; ces indicateurs alimenteront aussi les challenges Arena.
+*   **Contrat** : `docs/specs/copilot.md`. **Précondition** : audit SOQL (lot 9.0) — calibrage des seuils et validation Théo avant toute UI.
+
 ---
 
 ## 📅 Stratégie d'Implémentation
@@ -188,10 +197,13 @@ graph TD
     A --> B[Phase 2: XOS Launcher Cmd+K + Hub]
     B --> C[Phase 3: Weekly Perf]
     C --> D[Phase 4: Call Manager]
-    D --> E[Phase 5: Arena]
+    D --> H[Phase 9: Copilot — pipeline, alertes, adoption CRM]
+    H --> E[Phase 5: Arena]
     E --> F[Phase 6: Business Review]
     F --> G[Phase 7: Agent XOS — chat Slack + Hermes app Slack]
 ```
+
+*Les numéros de phase sont des identifiants stables (la Phase 9 s'exécute avant la 5 : priorité produit actée le 2026-07-11 — valeur métier directe de Copilot > gamification).*
 
 Le détail des lots, l'assignation aux agents (via Orca) et les critères de vérification par lot sont dans **`docs/xos_implementation_plan.md`**.
 
