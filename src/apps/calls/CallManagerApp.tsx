@@ -7,6 +7,7 @@ import {
   createPreset,
   createSession,
   deletePreset,
+  deleteSession,
   fetchContactContext,
   fetchContactList,
   fetchPresets,
@@ -16,6 +17,7 @@ import {
   logCall,
   logEvent,
   skipContact,
+  updateSession,
   CallsApiError,
 } from "./api";
 import { NewSessionView } from "./NewSessionView";
@@ -29,6 +31,7 @@ import type {
   SessionContact,
   SessionDetail,
   SessionSummary,
+  SessionType,
 } from "./types";
 import "./calls.css";
 
@@ -224,12 +227,17 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
-  const handleCreate = async (name: string, contactList: ContactPreview[], scheduledFor: string) => {
+  const handleCreate = async (
+    name: string,
+    contactList: ContactPreview[],
+    scheduledFor: string,
+    sessionType: SessionType,
+  ) => {
     if (!token) return;
     setCreateLoading(true);
     setNewError(null);
     try {
-      const data = await createSession(token, name, contactList, scheduledFor);
+      const data = await createSession(token, name, contactList, scheduledFor, sessionType);
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
@@ -238,6 +246,31 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       setNewError(errorMessage(err));
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const handleUpdateSession = async (
+    sessionId: number,
+    patch: { name?: string; scheduled_for?: string | null; session_type?: SessionType },
+  ) => {
+    if (!token) return;
+    try {
+      await updateSession(token, sessionId, patch);
+      await loadSessions();
+    } catch (err) {
+      setSessionsError(errorMessage(err));
+      throw err;
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: number) => {
+    if (!token) return;
+    try {
+      await deleteSession(token, sessionId);
+      await loadSessions();
+    } catch (err) {
+      setSessionsError(errorMessage(err));
+      throw err;
     }
   };
 
@@ -485,6 +518,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             void loadPresets();
           }}
           onOpenSession={(id) => void openSession(id)}
+          onUpdateSession={handleUpdateSession}
+          onDeleteSession={handleDeleteSession}
         />
       )}
 
@@ -508,7 +543,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
-          onCreate={(name, list, scheduledFor) => void handleCreate(name, list, scheduledFor)}
+          onCreate={(name, list, scheduledFor, sessionType) =>
+            void handleCreate(name, list, scheduledFor, sessionType)
+          }
         />
       )}
 

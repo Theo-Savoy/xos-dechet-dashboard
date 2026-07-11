@@ -128,6 +128,195 @@
   font-size: 0.78rem;
 }
 
+.calls-session-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.calls-session-card__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.calls-hub-kpis {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.calls-hub-kpis__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.calls-hub-kpis__toolbar h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.calls-hub-kpis__grid {
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+}
+
+.calls-hub-kpis__meta {
+  margin: 0;
+  color: var(--xos-text-muted);
+  font-size: 0.8rem;
+}
+
+.calls-hub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calls-calendar {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.calls-calendar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calls-calendar__title {
+  margin: 0;
+  text-transform: capitalize;
+  font-size: 1.05rem;
+}
+
+.calls-calendar__weekdays,
+.calls-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.calls-calendar__weekdays span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--xos-text-muted);
+  text-align: center;
+}
+
+.calls-calendar__cell {
+  min-height: 5.5rem;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 80%, transparent);
+  border-radius: 0.55rem;
+  padding: 0.35rem;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.calls-calendar__cell--empty {
+  border-color: transparent;
+  background: transparent;
+  min-height: 0;
+}
+
+.calls-calendar__cell--today {
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, transparent);
+}
+
+.calls-calendar__cell--has {
+  background: color-mix(in srgb, var(--xos-accent) 8%, transparent);
+}
+
+.calls-calendar__day {
+  font-size: 0.78rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-calendar__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
+}
+
+.calls-calendar__event {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.3rem;
+  font: inherit;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: #fff;
+  background: color-mix(in srgb, var(--xos-accent) 70%, #111);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calls-calendar__event--relance {
+  background: color-mix(in srgb, #f59e0b 75%, #111);
+}
+
+.calls-calendar__event--suivi_opportunites {
+  background: color-mix(in srgb, #38bdf8 75%, #111);
+}
+
+.calls-calendar__event--suivi_clients {
+  background: color-mix(in srgb, #22c55e 70%, #111);
+}
+
+.calls-calendar__more {
+  font-size: 0.68rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(4, 8, 28, 0.72);
+}
+
+.calls-modal__panel {
+  width: min(26rem, 100%);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.1rem;
+}
+
+.calls-modal__panel h3 {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .calls-calendar__cell {
+    min-height: 4.2rem;
+  }
+
+  .calls-calendar__event {
+    font-size: 0.6rem;
+  }
+}
+
 .calls-progress {
   display: flex;
   align-items: center;

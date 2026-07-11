@@ -92,7 +92,7 @@ export function RecapView({
 
       {skipped.length > 0 && (
         <GlassCard className="calls-recap-list">
-          <h3>Non joints (inclus en relance)</h3>
+          <h3>Non joints — essayés sans succès (compteur +1, inclus en relance)</h3>
           <ul>
             {skipped.map((contact) => (
               <li key={contact.id}>
@@ -106,7 +106,7 @@ export function RecapView({
 
       {pending.length > 0 && (
         <GlassCard className="calls-recap-list">
-          <h3>Non contactés (inclus en relance)</h3>
+          <h3>Non contactés — pas encore essayés (inclus en relance, sans incrément)</h3>
           <ul>
             {pending.map((contact) => (
               <li key={contact.id}>

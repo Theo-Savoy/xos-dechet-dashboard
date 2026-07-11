@@ -108,6 +108,7 @@ export async function createSession(
   name: string,
   contacts: ContactPreview[],
   scheduledFor?: string,
+  sessionType?: string,
 ): Promise<{ session: SessionDetail; contacts: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -116,7 +117,31 @@ export async function createSession(
       name,
       contacts,
       ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
+      ...(sessionType ? { session_type: sessionType } : {}),
     }),
+  });
+}
+
+export async function updateSession(
+  token: string,
+  sessionId: number,
+  patch: { name?: string; scheduled_for?: string | null; session_type?: string },
+): Promise<SessionDetail> {
+  const data = await apiFetch<{ session: SessionDetail }>(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "update_session",
+      session_id: sessionId,
+      ...patch,
+    }),
+  });
+  return data.session;
+}
+
+export async function deleteSession(token: string, sessionId: number): Promise<void> {
+  await apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({ action: "delete_session", session_id: sessionId }),
   });
 }
 

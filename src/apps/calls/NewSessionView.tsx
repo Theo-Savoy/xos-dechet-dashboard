@@ -11,7 +11,8 @@ import {
 import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
-import type { ContactPreview } from "./types";
+import type { ContactPreview, SessionType } from "./types";
+import { SESSION_TYPE_OPTIONS } from "./types";
 
 type NewSessionViewProps = {
   filters: FilterTree;
@@ -32,7 +33,12 @@ type NewSessionViewProps = {
   onLoadPreset: (preset: CallTargetPreset) => void;
   onSavePreset: (name: string, shared: boolean) => void;
   onDeletePreset: (id: number) => void;
-  onCreate: (name: string, contacts: ContactPreview[], scheduledFor: string) => void;
+  onCreate: (
+    name: string,
+    contacts: ContactPreview[],
+    scheduledFor: string,
+    sessionType: SessionType,
+  ) => void;
 };
 
 function todayLocalDate(): string {
@@ -63,6 +69,7 @@ export function NewSessionView({
 }: NewSessionViewProps) {
   const [sessionName, setSessionName] = useState("");
   const [scheduledFor, setScheduledFor] = useState(todayLocalDate);
+  const [sessionType, setSessionType] = useState<SessionType>("prospection");
   const [dedupMode, setDedupMode] = useState<DedupMode>("avertir");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPerCompany, setMaxPerCompany] = useState<MaxPerCompany | null>(null);
@@ -130,7 +137,7 @@ export function NewSessionView({
   const handleCreate = () => {
     const name = sessionName.trim();
     if (!name || selectedContacts.length === 0) return;
-    onCreate(name, selectedContacts, scheduledFor);
+    onCreate(name, selectedContacts, scheduledFor, sessionType);
   };
 
   return (
@@ -281,6 +288,21 @@ export function NewSessionView({
                 onChange={(e) => setScheduledFor(e.target.value)}
                 className="calls-input"
               />
+            </label>
+            <label className="calls-field">
+              <span>Type de séance</span>
+              <select
+                className="calls-input"
+                value={sessionType}
+                onChange={(e) => setSessionType(e.target.value as SessionType)}
+                aria-label="Type de séance"
+              >
+                {SESSION_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <Button
               onClick={handleCreate}

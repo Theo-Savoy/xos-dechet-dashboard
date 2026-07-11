@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   GET,
   POST,
+  computeHubKpis,
   filterContactsForFollowUp,
   getFollowUpOutcomes,
   isNotFoundError,
   isValidEventStart,
   isValidScheduledFor,
+  isValidSessionType,
 } from "./calls.js";
 import mapping from "./_crm/mapping.js";
 
@@ -136,6 +138,31 @@ describe("helpers", () => {
     expect(filterContactsForFollowUp(contacts)).toHaveLength(4);
   });
 
+  it("computeHubKpis derives rates and NPA", () => {
+    const kpis = computeHubKpis([
+      { status: "called", outcome: "Appel décroché", marked_npa: false },
+      { status: "called", outcome: "Appel argumenté", marked_npa: false },
+      { status: "called", outcome: "RDV planifié", marked_npa: false },
+      { status: "called", outcome: "Appel non décroché", marked_npa: true },
+      { status: "skipped", outcome: null, marked_npa: false },
+    ]);
+    expect(kpis.calls).toBe(4);
+    expect(kpis.decroche).toBe(3);
+    expect(kpis.argumente).toBe(2);
+    expect(kpis.rdv).toBe(1);
+    expect(kpis.npa).toBe(1);
+    expect(kpis.rate_decroche).toBe(75);
+    expect(kpis.rate_argumente).toBe(50);
+    expect(kpis.rate_rdv_per_decroche).toBeCloseTo(33.3, 1);
+    expect(kpis.rate_rdv_per_argumente).toBe(50);
+  });
+
+  it("isValidSessionType accepts known kinds", () => {
+    expect(isValidSessionType("prospection")).toBe(true);
+    expect(isValidSessionType("relance")).toBe(true);
+    expect(isValidSessionType("autre")).toBe(false);
+  });
+
   it("isValidScheduledFor accepts strict YYYY-MM-DD dates", () => {
     expect(isValidScheduledFor("2026-07-10")).toBe(true);
     expect(isValidScheduledFor("2026-02-30")).toBe(false);
@@ -263,16 +290,27 @@ describe("GET /api/calls", () => {
 
   it("returns stats on success", async () => {
     mockDb
-      .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }], error: null })
-      .mockResolvedValueOnce({ data: { status: "active" }, error: null })
-      .mockResolvedValueOnce({ data: { status: "completed" }, error: null })
-      .mockResolvedValueOnce({ data: [{ called_at: new Date().toISOString() }], error: null });
+      .mockResolvedValueOnce({ data: [{ id: 1, status: "active" }, { id: 2, status: "completed" }], error: null })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            status: "called",
+            outcome: "RDV planifié",
+            called_at: new Date().toISOString(),
+            marked_npa: false,
+          },
+        ],
+        error: null,
+      });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?stats=1"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.stats.sessions_active).toBe(1);
     expect(body.stats.sessions_completed).toBe(1);
+    expect(body.stats.calls_today).toBeGreaterThanOrEqual(1);
+    expect(body.stats.week.calls).toBeGreaterThanOrEqual(1);
+    expect(body.stats.month.rdv).toBeGreaterThanOrEqual(1);
   });
 
   it("returns 500 when stats sessions lookup fails", async () => {
@@ -710,6 +748,46 @@ describe("POST /api/calls", () => {
       const res = await POST(makeReq("POST", { action: "skip_contact", session_id: 1, contact_id: 101 }));
       expect(res.status).toBe(500);
       expect((await res.json()).error).toBe("contact_update_failed");
+    });
+  });
+
+  describe("update_session / delete_session", () => {
+    it("updates session metadata", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "Old", status: "active" }, error: null })
+        .mockResolvedValueOnce({
+          data: {
+            id: 1,
+            name: "New",
+            status: "active",
+            created_at: "2026-01-01T00:00:00Z",
+            scheduled_for: "2026-07-12",
+            session_type: "suivi_clients",
+          },
+          error: null,
+        });
+
+      const res = await POST(
+        makeReq("POST", {
+          action: "update_session",
+          session_id: 1,
+          name: "New",
+          scheduled_for: "2026-07-12",
+          session_type: "suivi_clients",
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).session.name).toBe("New");
+    });
+
+    it("deletes a session", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "X", status: "active" }, error: null })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(makeReq("POST", { action: "delete_session", session_id: 1 }));
+      expect(res.status).toBe(200);
+      expect((await res.json()).ok).toBe(true);
     });
   });
 

@@ -437,7 +437,7 @@ export function RunnerView({
                     : `Consigner pour ${pendingSelected.length}`}
                 </Button>
                 <Button variant="secondary" onClick={handleBulkSkip} disabled={loading}>
-                  Non joint (relance)
+                  Non joints (essayés)
                 </Button>
               </div>
             </GlassCard>
@@ -557,6 +557,9 @@ export function RunnerView({
             <div className="calls-contact-card__top">
               <div>
                 <h3>{focusedContact.contact_name}</h3>
+                {(focusedContact.attempt_count ?? 0) > 0 && (
+                  <Tag variant="muted">Tentative {focusedContact.attempt_count}</Tag>
+                )}
                 {focusedContact.title && (
                   <p className="calls-contact-card__title">{focusedContact.title}</p>
                 )}
@@ -746,7 +749,7 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => onSkip(focusedContact.id)}
                     disabled={loading}
-                    title="Marque comme non joint — inclus dans la séance de relance"
+                    title="Essayé sans succès — inclus en relance, compteur +1"
                   >
                     Non joint
                   </Button>
@@ -759,7 +762,7 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => onSkip(focusedContact.id)}
                     disabled={loading}
-                    title="Marque comme non joint — inclus dans la séance de relance"
+                    title="Essayé sans succès — inclus en relance, compteur +1"
                   >
                     Non joint
                   </Button>

@@ -388,7 +388,12 @@ describe("preview selection and enriched rows", () => {
     await user.click(within(bobRow!).getByRole("checkbox"));
     await user.type(screen.getByLabelText("Nom de la séance"), "Test");
     await user.click(screen.getByRole("button", { name: "Lancer la séance" }));
-    expect(onCreate).toHaveBeenCalledWith("Test", [preview[0]], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(onCreate).toHaveBeenCalledWith(
+      "Test",
+      [preview[0]],
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      "prospection",
+    );
   });
 
   it("caps selection to N contacts from the same company", async () => {

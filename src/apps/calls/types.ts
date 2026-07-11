@@ -4,12 +4,26 @@ export type ContactStatus = "pending" | "called" | "skipped";
 
 export type SessionStatus = "active" | "completed";
 
+export type SessionType = "prospection" | "suivi_opportunites" | "suivi_clients" | "relance";
+
+export const SESSION_TYPE_OPTIONS: { value: SessionType; label: string }[] = [
+  { value: "prospection", label: "Prospection" },
+  { value: "suivi_opportunites", label: "Suivi opportunités" },
+  { value: "suivi_clients", label: "Suivi clients" },
+  { value: "relance", label: "Relance" },
+];
+
+export function sessionTypeLabel(type: SessionType | string | null | undefined): string {
+  return SESSION_TYPE_OPTIONS.find((opt) => opt.value === type)?.label ?? "Prospection";
+}
+
 export type SessionSummary = {
   id: number;
   name: string;
   status: SessionStatus;
   created_at: string;
   scheduled_for: string | null;
+  session_type: SessionType;
   total: number;
   called: number;
   skipped: number;
@@ -33,6 +47,8 @@ export type SessionContact = {
   sf_event_id: string | null;
   called_at: string | null;
   recall_at?: string | null;
+  attempt_count?: number;
+  marked_npa?: boolean;
   sf_contact_url?: string | null;
   sf_account_url?: string | null;
 };
@@ -71,6 +87,7 @@ export type SessionDetail = {
   status: SessionStatus;
   created_at: string;
   scheduled_for?: string | null;
+  session_type?: SessionType;
 };
 
 export type ContactPreview = {
@@ -87,11 +104,25 @@ export type ContactPreview = {
   call_count?: number;
 };
 
+export type PeriodKpis = {
+  calls: number;
+  decroche: number;
+  argumente: number;
+  rdv: number;
+  npa: number;
+  rate_decroche: number;
+  rate_argumente: number;
+  rate_rdv_per_decroche: number;
+  rate_rdv_per_argumente: number;
+};
+
 export type CallStats = {
   calls_today: number;
   calls_week: number;
   sessions_active: number;
   sessions_completed: number;
+  week?: PeriodKpis;
+  month?: PeriodKpis;
 };
 
 export type { FilterTree };

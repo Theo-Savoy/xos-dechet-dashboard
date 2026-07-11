@@ -79,10 +79,45 @@ export function getFollowUpOutcomes(taskMapping = mapping) {
 
 export function filterContactsForFollowUp(contacts, followUpOutcomes = getFollowUpOutcomes()) {
   return (Array.isArray(contacts) ? contacts : []).filter((contact) => {
-    // Non joints (marqués) + non contactés restants + non-réponses / répondeur
+    // Deux cas de follow-up :
+    // 1) essayé sans succès (skipped / non-décroché / répondeur) — compteur déjà incrémenté
+    // 2) pas essayé (pending) — reporté tel quel, sans incrément
     if (contact?.status === "skipped" || contact?.status === "pending") return true;
     return followUpOutcomes.includes(contact?.outcome);
   });
+}
+
+export const SESSION_TYPES = ["prospection", "suivi_opportunites", "suivi_clients", "relance"];
+
+export function isValidSessionType(value) {
+  return typeof value === "string" && SESSION_TYPES.includes(value);
+}
+
+const PIPE_DECROCHE = ["Appel décroché", "Appel argumenté", "RDV planifié"];
+const PIPE_ARGUMENTE = ["Appel argumenté", "RDV planifié"];
+
+/** KPIs hub à partir des lignes contact (status called/skipped + outcome + marked_npa). */
+export function computeHubKpis(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const called = list.filter((row) => row?.status === "called");
+  const calls = called.length;
+  const decroche = called.filter((row) => PIPE_DECROCHE.includes(row?.outcome)).length;
+  const argumente = called.filter((row) => PIPE_ARGUMENTE.includes(row?.outcome)).length;
+  const rdv = called.filter((row) => row?.outcome === "RDV planifié").length;
+  const npa = list.filter((row) => row?.marked_npa === true).length;
+  const rate = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
+
+  return {
+    calls,
+    decroche,
+    argumente,
+    rdv,
+    npa,
+    rate_decroche: rate(decroche, calls),
+    rate_argumente: rate(argumente, calls),
+    rate_rdv_per_decroche: rate(rdv, decroche),
+    rate_rdv_per_argumente: rate(rdv, argumente),
+  };
 }
 
 function getServiceClient() {
@@ -153,11 +188,18 @@ async function assertSessionContact(client, sessionId, contactId) {
   return { contact };
 }
 
-async function insertSessionWithContacts(client, userId, name, contacts, scheduledFor) {
+async function insertSessionWithContacts(client, userId, name, contacts, scheduledFor, options = {}) {
+  const sessionType = isValidSessionType(options.sessionType) ? options.sessionType : "prospection";
   const { data: session, error: sessionError } = await client
     .from("call_sessions")
-    .insert({ owner: userId, name: name.trim(), status: "active", scheduled_for: scheduledFor })
-    .select("id, name, status, created_at, scheduled_for")
+    .insert({
+      owner: userId,
+      name: name.trim(),
+      status: "active",
+      scheduled_for: scheduledFor,
+      session_type: sessionType,
+    })
+    .select("id, name, status, created_at, scheduled_for, session_type")
     .single();
 
   if (sessionError || !session) return { error: "session_creation_failed", status: 500 };
@@ -173,12 +215,16 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     title: contact.title || null,
     linkedin_url: contact.linkedin_url || null,
     status: "pending",
+    attempt_count: Number.isInteger(contact.attempt_count) && contact.attempt_count >= 0
+      ? contact.attempt_count
+      : 0,
+    marked_npa: false,
   }));
 
   const { data: insertedContacts, error: contactsError } = await client
     .from("call_session_contacts")
     .insert(contactRows)
-    .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at")
+    .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
     .order("position", { ascending: true });
 
   if (contactsError || !insertedContacts?.length) {
@@ -223,8 +269,9 @@ function getParisDateRange() {
   const dow = todayStart.getUTCDay();
   const mondayOffset = dow === 0 ? 6 : dow - 1;
   const weekStart = new Date(todayStart.getTime() - mondayOffset * 86400000);
+  const monthStart = new Date(Date.UTC(year, month - 1, 1) + offsetMs);
 
-  return { todayStart, tomorrowStart, weekStart };
+  return { todayStart, tomorrowStart, weekStart, monthStart };
 }
 
 export async function GET(request) {
@@ -256,7 +303,7 @@ export async function GET(request) {
   if (statsParam === "1") {
     const { data: userSessions, error: sessionsError } = await client
       .from("call_sessions")
-      .select("id")
+      .select("id, status")
       .eq("owner", user.id);
 
     if (sessionsError) {
@@ -264,49 +311,55 @@ export async function GET(request) {
     }
 
     const sessionIds = (userSessions || []).map((session) => session.id);
-
     let sessionsActive = 0;
     let sessionsCompleted = 0;
     for (const session of userSessions || []) {
-      const { data: sessionData, error: statusError } = await client
-        .from("call_sessions")
-        .select("status")
-        .eq("id", session.id)
-        .maybeSingle();
-      if (statusError && !isNotFoundError(statusError)) {
-        return new Response(JSON.stringify({ error: "session_lookup_failed" }), { status: 500, headers });
-      }
-      if (sessionData) {
-        if (sessionData.status === "active") sessionsActive++;
-        else if (sessionData.status === "completed") sessionsCompleted++;
-      }
+      if (session.status === "active") sessionsActive++;
+      else if (session.status === "completed") sessionsCompleted++;
     }
 
     let callsToday = 0;
     let callsWeek = 0;
+    let weekRows = [];
+    let monthRows = [];
+
     if (sessionIds.length > 0) {
       const { data: calls, error: callsError } = await client
         .from("call_session_contacts")
-        .select("called_at")
-        .eq("status", "called")
+        .select("status, outcome, called_at, marked_npa")
         .in("session_id", sessionIds)
+        .eq("status", "called")
         .not("called_at", "is", null);
 
       if (callsError) {
         return new Response(JSON.stringify({ error: "calls_lookup_failed" }), { status: 500, headers });
       }
 
-      const { todayStart, weekStart } = getParisDateRange();
+      const { todayStart, weekStart, monthStart } = getParisDateRange();
       for (const call of calls || []) {
         const called = new Date(call.called_at);
         if (called >= todayStart) callsToday++;
-        if (called >= weekStart) callsWeek++;
+        if (called >= weekStart) {
+          callsWeek++;
+          weekRows.push(call);
+        }
+        if (called >= monthStart) monthRows.push(call);
       }
     }
 
+    const week = computeHubKpis(weekRows);
+    const month = computeHubKpis(monthRows);
+
     return new Response(
       JSON.stringify({
-        stats: { calls_today: callsToday, calls_week: callsWeek, sessions_active: sessionsActive, sessions_completed: sessionsCompleted },
+        stats: {
+          calls_today: callsToday,
+          calls_week: callsWeek,
+          sessions_active: sessionsActive,
+          sessions_completed: sessionsCompleted,
+          week,
+          month,
+        },
       }),
       { status: 200, headers },
     );
@@ -320,7 +373,7 @@ export async function GET(request) {
 
     const { data: session, error: sessionError } = await client
       .from("call_sessions")
-      .select("id, owner, name, status, created_at, scheduled_for")
+      .select("id, owner, name, status, created_at, scheduled_for, session_type")
       .eq("id", sessionId)
       .maybeSingle();
 
@@ -336,7 +389,7 @@ export async function GET(request) {
 
     const { data: contacts, error: contactsError } = await client
       .from("call_session_contacts")
-      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at")
+      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
       .eq("session_id", sessionId)
       .order("position", { ascending: true });
 
@@ -379,7 +432,7 @@ export async function GET(request) {
 
   const { data: sessions, error: sessionsError } = await client
     .from("call_sessions")
-    .select("id, name, status, created_at, scheduled_for")
+    .select("id, name, status, created_at, scheduled_for, session_type")
     .eq("owner", user.id)
     .order("created_at", { ascending: false });
 
@@ -416,6 +469,7 @@ export async function GET(request) {
     status: session.status,
     created_at: session.created_at,
     scheduled_for: session.scheduled_for ?? null,
+    session_type: session.session_type ?? "prospection",
     ...(grouped[session.id] || { total: 0, called: 0, skipped: 0, pending: 0 }),
   }));
 
@@ -487,7 +541,7 @@ export async function POST(request) {
   }
 
   if (action === "create_session") {
-    const { name, contacts, scheduled_for: scheduledForInput } = body;
+    const { name, contacts, scheduled_for: scheduledForInput, session_type: sessionTypeInput } = body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return new Response(JSON.stringify({ error: "invalid_name" }), { status: 400, headers });
@@ -501,6 +555,10 @@ export async function POST(request) {
         return new Response(JSON.stringify({ error: "invalid_scheduled_for" }), { status: 400, headers });
       }
       scheduledFor = scheduledForInput;
+    }
+    const sessionType = sessionTypeInput === undefined ? "prospection" : sessionTypeInput;
+    if (!isValidSessionType(sessionType)) {
+      return new Response(JSON.stringify({ error: "invalid_session_type" }), { status: 400, headers });
     }
     for (let i = 0; i < contacts.length; i++) {
       const contact = contacts[i];
@@ -518,7 +576,9 @@ export async function POST(request) {
       }
     }
 
-    const created = await insertSessionWithContacts(client, user.id, name, contacts, scheduledFor);
+    const created = await insertSessionWithContacts(client, user.id, name, contacts, scheduledFor, {
+      sessionType,
+    });
     if (created.error) {
       return new Response(JSON.stringify({ error: created.error }), { status: created.status, headers });
     }
@@ -527,6 +587,75 @@ export async function POST(request) {
       JSON.stringify({ session: created.session, contacts: created.contacts }),
       { status: 200, headers },
     );
+  }
+
+  if (action === "update_session") {
+    const { session_id, name, scheduled_for: scheduledForInput, session_type: sessionTypeInput } = body;
+
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionOwner(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+
+    const patch = {};
+    if (name !== undefined) {
+      if (typeof name !== "string" || name.trim().length === 0) {
+        return new Response(JSON.stringify({ error: "invalid_name" }), { status: 400, headers });
+      }
+      patch.name = name.trim();
+    }
+    if (scheduledForInput !== undefined) {
+      if (scheduledForInput !== null && !isValidScheduledFor(scheduledForInput)) {
+        return new Response(JSON.stringify({ error: "invalid_scheduled_for" }), { status: 400, headers });
+      }
+      patch.scheduled_for = scheduledForInput;
+    }
+    if (sessionTypeInput !== undefined) {
+      if (!isValidSessionType(sessionTypeInput)) {
+        return new Response(JSON.stringify({ error: "invalid_session_type" }), { status: 400, headers });
+      }
+      patch.session_type = sessionTypeInput;
+    }
+    if (Object.keys(patch).length === 0) {
+      return new Response(JSON.stringify({ error: "empty_update" }), { status: 400, headers });
+    }
+
+    const { data: updated, error: updateError } = await client
+      .from("call_sessions")
+      .update(patch)
+      .eq("id", session_id)
+      .select("id, name, status, created_at, scheduled_for, session_type")
+      .single();
+
+    if (updateError || !updated) {
+      return new Response(JSON.stringify({ error: "session_update_failed" }), { status: 500, headers });
+    }
+
+    return new Response(JSON.stringify({ ok: true, session: updated }), { status: 200, headers });
+  }
+
+  if (action === "delete_session") {
+    const { session_id } = body;
+
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionOwner(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+
+    const { error: deleteError } = await client.from("call_sessions").delete().eq("id", session_id);
+    if (deleteError) {
+      return new Response(JSON.stringify({ error: "session_delete_failed" }), { status: 500, headers });
+    }
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
   if (action === "log_call") {
@@ -630,6 +759,8 @@ export async function POST(request) {
         sf_task_id: taskId,
         called_at: new Date().toISOString(),
         recall_at: wantsRecall && do_not_call !== true ? recall_at : null,
+        attempt_count: (Number.isInteger(contact.attempt_count) ? contact.attempt_count : 0) + 1,
+        marked_npa: do_not_call === true,
       })
       .eq("id", contact_id);
 
@@ -776,7 +907,7 @@ export async function POST(request) {
 
     const { data: sessionContacts, error: contactsLookupError } = await client
       .from("call_session_contacts")
-      .select("sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, outcome, status")
+      .select("sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, outcome, status, attempt_count")
       .eq("session_id", session_id)
       .order("position", { ascending: true });
 
@@ -794,6 +925,8 @@ export async function POST(request) {
       user.id,
       `Relance — ${sessionCheck.session.name}`,
       followUpContacts,
+      todayParisDate(),
+      { sessionType: "relance" },
     );
     if (created.error) {
       return new Response(JSON.stringify({ error: created.error }), { status: created.status, headers });
@@ -827,7 +960,10 @@ export async function POST(request) {
 
     const { error: updateError } = await client
       .from("call_session_contacts")
-      .update({ status: "skipped" })
+      .update({
+        status: "skipped",
+        attempt_count: (Number.isInteger(contactCheck.contact.attempt_count) ? contactCheck.contact.attempt_count : 0) + 1,
+      })
       .eq("id", contact_id);
 
     if (updateError) {
