@@ -9,7 +9,7 @@ export interface Database {
           email: string;
           full_name: string | null;
           sf_user_id: string | null;
-          role: "commercial" | "manager";
+          role: "commercial" | "manager" | "admin";
           created_at: string;
           updated_at: string;
         };
@@ -18,7 +18,7 @@ export interface Database {
           email: string;
           full_name?: string | null;
           sf_user_id?: string | null;
-          role?: "commercial" | "manager";
+          role?: "commercial" | "manager" | "admin";
           created_at?: string;
           updated_at?: string;
         };
@@ -27,7 +27,7 @@ export interface Database {
           email?: string;
           full_name?: string | null;
           sf_user_id?: string | null;
-          role?: "commercial" | "manager";
+          role?: "commercial" | "manager" | "admin";
           created_at?: string;
           updated_at?: string;
         };

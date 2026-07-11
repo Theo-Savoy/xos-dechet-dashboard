@@ -93,13 +93,13 @@ interface AppManifest {
   icon: ReactNode;       // icône du dock
   component: LazyExoticComponent<FC>;  // contenu de la fenêtre
   defaultSize: { w: number; h: number };
-  roles?: ("manager" | "commercial")[];  // visibilité dock (défaut : tous)
+  roles?: ("admin" | "manager" | "commercial")[];  // visibilité dock (défaut : tous)
 }
 ```
 Chaque app est enregistrée dans `src/os/registry.ts`. Une app ne touche jamais au shell ni à une autre app.
 
 **Schéma Supabase** (migrations SQL versionnées) :
-- `profiles` : id (= auth.users), email, full_name, `sf_user_id`, role (`manager`/`commercial`), `slack_user_id`, `slack_dm_channel_id` *(Phase 7)*
+- `profiles` : id (= auth.users), email, full_name, `sf_user_id`, role (`admin`/`manager`/`commercial`), `slack_user_id`, `slack_dm_channel_id` *(Phase 7)*
 - `settings` : key, value jsonb (seuils de retard, exclusions de comptes…)
 - `challenges` : titre, métrique, période, statut, créateur
 - `challenge_results` : challenge_id, profile_id, valeur, rang, maj
@@ -125,10 +125,12 @@ L'application actuelle de détection et traitement en lot des opportunités déf
 
 ### 2. 📈 Weekly Perf (Cockpit Hebdomadaire) — *Nouveau*
 Suivi hebdomadaire de la performance commerciale pour piloter le rythme de vente.
-*   **Le "Pulse"** : par commercial et par semaine — appels (Tasks type appel), RDV (Events), propositions envoyées (opportunités entrées en étape "Proposition" sur la période, via `OpportunityHistory`).
+*   **Le "Pulse"** : par commercial et par semaine — appels (Tasks type appel), RDV (Events), propositions envoyées (opportunités entrées en étape "Proposition envoyée" sur la période, via `OpportunityHistory`).
 *   **Pipeline Généré vs Gagné** : somme des montants des opps créées vs gagnées par semaine (graphique comparatif) + taux de closing.
-*   **Le Taux d'Effort** : ratio d'opportunités passées à l'étape supérieure sur la période (`OpportunityHistory`).
-*   **Précondition** : audit SOQL de volumétrie (types de Tasks réellement utilisés, nommage des étapes) pour figer les définitions exactes des trois métriques — validées par Théo avant l'UI.
+*   **Le Taux d'Effort** : nombre de progressions d'étape (primaire) + ratio sur opps ouvertes (secondaire), via `OpportunityHistory`.
+*   **Vues** : « Moi » (tous) / « Équipe » (manager+admin) ; filtre « Commerciaux seulement » par défaut.
+*   **Contrat** : `docs/specs/weekly-perf.md` (définitions figées + API + plan UI).
+*   **Précondition** : audit SOQL livré (`docs/audits/lot-3.0-metriques-activite.md`) — validations actées 2026-07-11.
 
 ### 3. 🎯 Call Manager (Séances de Prospection) — *Nouveau — Phase 4*
 Outil **opérationnel** pour enchaîner les appels de prospection sans friction (pas un dashboard d'analyse) :
@@ -155,8 +157,10 @@ Rendre la saisie CRM et la prospection ludiques grâce au challenge d'équipe.
 
 ### 6. ⚙️ Hub Connexion (Paramètres & Status) — *Nouveau*
 *   **Statut** : connexion API Salesforce, quotas d'appels restants (endpoint SF `/limits`), fraîcheur des caches.
-*   **Configuration** (managers) : seuils de retard, exclusions de comptes — stockés dans `settings` (Supabase), consommés par les endpoints.
+*   **Configuration** (managers + admin) : seuils de retard, exclusions de comptes — stockés dans `settings` (Supabase), consommés par les endpoints.
 *   **Compte** : profil connecté, mapping vers le user Salesforce, déconnexion.
+*   **Accès** (admin seulement) : gestion des rôles `commercial` / `manager` / `admin`.
+*   Contrat détaillé : `docs/specs/roles-and-hub.md`.
 
 ### 7. 🤖 Agent XOS (Chat + Slack + Hermes) — *Nouveau — Phase 7*
 Assistant conversationnel : **go-to quotidien** de l'équipe. X OS est l'interface ; **Hermes (une app Slack)** est le cerveau ; Slack est le fil de messages partagé (dont mobile).

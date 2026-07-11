@@ -274,7 +274,9 @@ Nb d'opportunités ouvertes en début de semaine (hors Suspect enlisé et Fermé
 
 ## 6. Validation
 
-- [ ] Définitions des 3 métriques validées par Théo → débloque le Lot 3.1
+- [x] Définitions des 3 métriques validées → `docs/specs/weekly-perf.md` (2026-07-11)
+- [x] Inclusion Jérôme / Yanis clarifiée : Jérôme = manager (hors classement commercial par défaut) ; Yanis = commercial (inclus)
 - [x] Scripts SOQL exécutés sans erreur
 - [x] Données collectées et analysées
 - [x] Rapport livré
+- [x] Effort : progressions en primaire, % en secondaire (décision produit)

@@ -57,3 +57,6 @@ Seuls les fichiers `public/fonts/*.woff2` sont servis en production. Les sources
 
 - [Plan d'implémentation X OS](docs/xos_implementation_plan.md)
 - [Plan portail](docs/xos_portal_plan.md)
+- [Rôles & Hub](docs/specs/roles-and-hub.md)
+- [Weekly Perf](docs/specs/weekly-perf.md)
+- [Fonctions Vercel (Hobby 12)](docs/ops/vercel-functions.md)

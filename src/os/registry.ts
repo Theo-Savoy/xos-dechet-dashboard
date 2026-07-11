@@ -1,6 +1,6 @@
 import { lazy, type FC, type LazyExoticComponent, type ReactNode } from "react";
 
-export type AppRole = "manager" | "commercial";
+export type AppRole = "admin" | "manager" | "commercial";
 
 export interface AppManifest {
   id: string;
