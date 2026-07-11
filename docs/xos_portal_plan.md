@@ -18,7 +18,7 @@ L'objectif est double :
 | **Dashboard déchet actuel** | **Préservé tel quel** (`dashboard.html` + `api/refresh.py` + `api/update.js` intouchés), embarqué en **iframe** dans la fenêtre "CRM Cleaner". Migration React ultérieure, app par app, jamais big-bang. | Zéro risque de régression sur la seule app en production. La préservation ne contraint pas la stack du reste du portail. |
 | **Authentification** | **Supabase Auth + magic link email**, restreint au domaine `xos-learning.fr` par trigger SQL à l'inscription. Comptes individuels, sessions JWT persistantes par device, révocation immédiate. **En plus** (Phase 8) : bouton **« Se connecter avec Salesforce »** (OAuth) sur l'écran de login — deux options coexistent, le lien magique reste. *(Google SSO abandonné le 2026-07-10 : Théo n'est pas admin Workspace du client.)* | Un mot de passe partagé est inacceptable pour une app qui écrit dans Salesforce, affiche la perf individuelle et gamifie l'équipe. Le login SF est le chemin naturel pour les commerciaux déjà dans Salesforce et prépare l'attribution niveau 2. |
 | **Persistance** | **Supabase Postgres** : profils (mapping ↔ user Salesforce), challenges/scores Arena, configuration, journal d'actions. | Le journal actuel en Blob immuable est déjà un contournement des limites de Vercel Blob (pas de read-modify-write sûr). Arena et la config exigent requêtes, transactions et concurrence propres. |
-| **Écritures Salesforce** | Via l'**utilisateur d'intégration** côté serveur (comme aujourd'hui), chaque action **attribuée à la personne connectée** dans le journal Postgres. | Upgrade possible plus tard vers OAuth SF par user (actions sous le nom de chacun dans SF) sans rien casser. |
+| **Écritures Salesforce** | Via l'**utilisateur d'intégration** côté serveur, chaque action attribuée à la personne connectée dans le journal Postgres **et dans SF via `OwnerId` = son User Salesforce** (auto-mappé par email — migration 013, en place sur tous les chemins d'écriture depuis le 2026-07-11). Limite connue : `CreatedById` reste l'utilisateur d'intégration. | L'attribution **niveau 2** (`CreatedById` correct : écritures sous l'identité de chacun) arrive avec l'OAuth SF par user — lots 8.1/8.1b, sans rien casser (fallback intégration). |
 | **API** | Endpoints serverless Vercel conservés et étendus (nouveaux endpoints en Node, protégés par vérification du JWT Supabase). | Continuité, pas de réécriture. |
 | **Périmètre** | **Tout le plan, phasé** : socle → Launcher → Weekly Perf → Call Manager → Arena. | Architecture dimensionnée pour l'ensemble dès le départ. |
 | **Cible d'affichage** | Desktop-first (métaphore bureau). Mobile : consultation dégradée non prioritaire. | Le public est l'équipe commerciale au poste de travail. |
@@ -75,12 +75,14 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   ├── lib/             client Supabase, types
 │   └── main.tsx
 ├── public/dashboard.html   ← dashboard déchet actuel, servi tel quel sur /dashboard.html
-├── api/                 serverless Vercel (Node + refresh.py existant)
-│   ├── refresh.py       ✅ inchangé        ├── update.js  ✅ inchangé
-│   ├── search.js        Launcher (SOSL)    ├── log.js     /log & /create
-│   ├── perf.js          Weekly Perf        ├── calls.js   Call Manager
-│   ├── chat.js          Transport Slack + historique  ├── slack/   oauth, events
-│   ├── arena/*.js       challenges         └── status.js  Hub (limits SF)
+├── api/                 serverless Vercel — 7 fonctions / plafond Hobby 12 (voir docs/ops/vercel-functions.md)
+│   ├── refresh.py       ✅ inchangé        ├── update.js    ✅ inchangé
+│   ├── history.js       journal Cleaner    ├── version.js   clé cache Cleaner
+│   ├── launcher.js      Cmd+K : SOSL + /log + /create (ex search.js + log.js)
+│   ├── auth.js          pont cookie legacy + OAuth SF (?flow=salesforce)
+│   ├── calls.js         routeur Call Manager → api/_calls/* (sessions, ciblage, presets, rappels, team)
+│   ├── _calls/ _crm/    helpers non exposés (adapter CRM, actions, caches)
+│   └── à venir : status (Hub) · perf (Weekly) · chat + slack/* (Agent) · arena/*
 ├── middleware.js        auth edge : session Supabase OU Basic Auth legacy
 └── supabase/migrations/ schéma Postgres
 ```
