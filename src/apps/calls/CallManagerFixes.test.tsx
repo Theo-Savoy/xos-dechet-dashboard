@@ -256,6 +256,8 @@ describe("call targeting copy and controls", () => {
     previewLoading: false,
     contactLimit: 200 as const,
     onContactLimitChange: vi.fn(),
+    maxPerCompany: null as null,
+    onMaxPerCompanyChange: vi.fn(),
     onPreview: vi.fn(),
     presets: [] as [],
     presetsLoading: false,
@@ -282,6 +284,7 @@ describe("call targeting copy and controls", () => {
     expect(screen.getByText("Tier")).toBeTruthy();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
+    expect(screen.getByLabelText("Maximum de contacts par entreprise")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Avertir" }).getAttribute("aria-pressed")).toBe("true");
     expect(document.body.textContent).not.toContain("Sales" + "force");
     expect(screen.queryByText("Durée min (sec)")).toBeNull();
@@ -379,7 +382,7 @@ describe("preview selection and enriched rows", () => {
     expect(onCreate).toHaveBeenCalledWith("Test", [preview[0]], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
   });
 
-  it("caps selection to N contacts from the same company", async () => {
+  it("caps selection to N contacts from the same company, preferring directors", async () => {
     const user = userEvent.setup();
     const sameCompanyPreview = [
       {
@@ -388,7 +391,7 @@ describe("preview selection and enriched rows", () => {
         contact_name: "Alice Martin",
         account_name: "Acme",
         phone: "0102030405",
-        title: "RF",
+        title: "Chargé de formation",
         linkedin_url: null,
       },
       {
@@ -397,7 +400,7 @@ describe("preview selection and enriched rows", () => {
         contact_name: "Bob Durand",
         account_name: "Acme",
         phone: null,
-        title: null,
+        title: "Directeur formation",
         linkedin_url: null,
       },
       {
@@ -439,9 +442,11 @@ describe("preview selection and enriched rows", () => {
     await user.selectOptions(screen.getByLabelText("Maximum de contacts par entreprise"), "1");
     expect(screen.getByText("2 sélectionnés / 3")).toBeTruthy();
 
+    const aliceRow = screen.getByText("Alice Martin").closest("li");
     const bobRow = screen.getByText("Bob Durand").closest("li");
-    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
-    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
+    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
   });
 });
 

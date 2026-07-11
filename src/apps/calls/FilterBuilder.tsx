@@ -5,6 +5,7 @@ import {
   CONTACT_LIST_UNLIMITED,
   EFFECTIF_TRANCHES,
   FONCTION_PRESETS,
+  MAX_PER_COMPANY_OPTIONS,
   NIVEAU_DECISION_OPTIONS,
   RESULTAT_CALL_VALUES,
   SECTEUR_VALUES,
@@ -13,6 +14,7 @@ import {
   type CallTargetPreset,
   type ContactLimit,
   type FilterTree,
+  type MaxPerCompany,
 } from "../../crm";
 import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
 
@@ -23,6 +25,8 @@ type FilterBuilderProps = {
   previewLoading: boolean;
   contactLimit: ContactLimit;
   onContactLimitChange: (limit: ContactLimit) => void;
+  maxPerCompany: MaxPerCompany | null;
+  onMaxPerCompanyChange: (value: MaxPerCompany | null) => void;
   onPreview: () => void;
   presets: CallTargetPreset[];
   presetsLoading: boolean;
@@ -91,6 +95,8 @@ export function FilterBuilder({
   previewLoading,
   contactLimit,
   onContactLimitChange,
+  maxPerCompany,
+  onMaxPerCompanyChange,
   onPreview,
   presets,
   presetsLoading,
@@ -374,6 +380,25 @@ export function FilterBuilder({
             {CONTACT_LIMIT_OPTIONS.map((limit) => (
               <option key={limit} value={limit}>
                 {limitLabel(limit)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="calls-field calls-field--inline">
+          <span>Max / entreprise</span>
+          <select
+            className="calls-select"
+            value={maxPerCompany ?? ""}
+            onChange={(e) => {
+              const value = e.target.value;
+              onMaxPerCompanyChange(value ? (Number(value) as MaxPerCompany) : null);
+            }}
+            aria-label="Maximum de contacts par entreprise"
+          >
+            <option value="">Pas de limite</option>
+            {MAX_PER_COMPANY_OPTIONS.map((limit) => (
+              <option key={limit} value={limit}>
+                {limit}
               </option>
             ))}
           </select>

@@ -3,12 +3,52 @@
 export type SelectableContact = {
   sf_contact_id: string;
   sf_account_id: string | null;
+  title?: string | null;
 };
 
 /**
+ * Higher score = preferred when capping contacts per company.
+ * Directeurs / DRH / dirigeants > responsables > adjoints > chargés / chefs de projet.
+ */
+export function titlePriority(title: string | null | undefined): number {
+  if (!title) return 0;
+  const normalized = title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+
+  if (/\b(pdg|ceo|president|gerant|fondateur|fondatrice|chief executive)\b/.test(normalized)) {
+    return 100;
+  }
+  if (/\b(directeur|directrice|drh|df\b|dg\b|vp\b|vice[- ]president)\b/.test(normalized)) {
+    return 90;
+  }
+  if (/\b(head of|responsable)\b/.test(normalized) && !/\badjoint/.test(normalized)) {
+    return 70;
+  }
+  if (/\b(manager|lead)\b/.test(normalized) && !/\b(project|projet)\b/.test(normalized)) {
+    return 65;
+  }
+  if (/\badjoint/.test(normalized)) {
+    return 55;
+  }
+  if (/\b(charge|chef de projet|coordinateur|coordinatrice|gestionnaire)\b/.test(normalized)) {
+    return 30;
+  }
+  return 20;
+}
+
+function compareByTitlePriority(a: SelectableContact, b: SelectableContact): number {
+  const delta = titlePriority(b.title) - titlePriority(a.title);
+  if (delta !== 0) return delta;
+  return a.sf_contact_id.localeCompare(b.sf_contact_id);
+}
+
+/**
  * Builds a selection set capped at `maxPerCompany` contacts sharing the same
- * account id. Contacts without an account id are each treated as their own group.
- * Order of `contacts` is preserved (first seen wins).
+ * account id. Within each company, higher-priority titles (directeur /
+ * responsable…) are preferred. Contacts without an account id are each their
+ * own group.
  */
 export function selectIdsWithCompanyCap(
   contacts: SelectableContact[],
@@ -16,23 +56,28 @@ export function selectIdsWithCompanyCap(
   eligibleIds?: Set<string>,
 ): Set<string> {
   const selected = new Set<string>();
+  const eligible = contacts.filter(
+    (contact) => !eligibleIds || eligibleIds.has(contact.sf_contact_id),
+  );
+
   if (maxPerCompany === null || maxPerCompany <= 0) {
-    for (const contact of contacts) {
-      if (!eligibleIds || eligibleIds.has(contact.sf_contact_id)) {
-        selected.add(contact.sf_contact_id);
-      }
-    }
+    for (const contact of eligible) selected.add(contact.sf_contact_id);
     return selected;
   }
 
-  const counts = new Map<string, number>();
-  for (const contact of contacts) {
-    if (eligibleIds && !eligibleIds.has(contact.sf_contact_id)) continue;
+  const byAccount = new Map<string, SelectableContact[]>();
+  for (const contact of eligible) {
     const key = contact.sf_account_id || `contact:${contact.sf_contact_id}`;
-    const current = counts.get(key) ?? 0;
-    if (current >= maxPerCompany) continue;
-    counts.set(key, current + 1);
-    selected.add(contact.sf_contact_id);
+    const group = byAccount.get(key);
+    if (group) group.push(contact);
+    else byAccount.set(key, [contact]);
+  }
+
+  for (const group of byAccount.values()) {
+    const ranked = [...group].sort(compareByTitlePriority);
+    for (const contact of ranked.slice(0, maxPerCompany)) {
+      selected.add(contact.sf_contact_id);
+    }
   }
   return selected;
 }
