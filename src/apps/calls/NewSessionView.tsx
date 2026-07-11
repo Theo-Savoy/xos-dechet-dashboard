@@ -18,6 +18,8 @@ type NewSessionViewProps = {
   onFiltersChange: (next: FilterTree) => void;
   contactLimit: ContactLimit;
   onContactLimitChange: (limit: ContactLimit) => void;
+  maxPerCompany: MaxPerCompany | null;
+  onMaxPerCompanyChange: (value: MaxPerCompany | null) => void;
   loading: boolean;
   previewLoading: boolean;
   error: string | null;
@@ -62,6 +64,8 @@ export function NewSessionView({
   onFiltersChange,
   contactLimit,
   onContactLimitChange,
+  maxPerCompany,
+  onMaxPerCompanyChange,
   loading,
   previewLoading,
   error,
@@ -83,7 +87,6 @@ export function NewSessionView({
   const [sessionType, setSessionType] = useState<SessionType>("prospection");
   const [dedupMode, setDedupMode] = useState<DedupMode>("avertir");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [maxPerCompany, setMaxPerCompany] = useState<MaxPerCompany | null>(null);
   const [capHint, setCapHint] = useState<string | null>(null);
 
   const inSessionOf = useMemo(
@@ -104,10 +107,10 @@ export function NewSessionView({
     setSelectedIds(selectIdsWithCompanyCap(preview, maxPerCompany, eligibleIds));
     setCapHint(
       maxPerCompany
-        ? `Max ${maxPerCompany}/entreprise — priorité aux directeurs / responsables.`
+        ? `Aperçu : max ${maxPerCompany}/entreprise, jusqu'à ${contactLimit} contacts (priorité directeurs / responsables).`
         : null,
     );
-  }, [preview, eligibleIds, maxPerCompany]);
+  }, [preview, eligibleIds, maxPerCompany, contactLimit]);
 
   const selectedContacts = useMemo(
     () => preview.filter((contact) => selectedIds.has(contact.sf_contact_id)),
@@ -175,7 +178,7 @@ export function NewSessionView({
         contactLimit={contactLimit}
         onContactLimitChange={onContactLimitChange}
         maxPerCompany={maxPerCompany}
-        onMaxPerCompanyChange={setMaxPerCompany}
+        onMaxPerCompanyChange={onMaxPerCompanyChange}
         onPreview={onPreview}
         presets={presets}
         presetsLoading={presetsLoading}

@@ -9,6 +9,8 @@ import {
 } from "./_crm/salesforce.js";
 import mapping from "./_crm/mapping.js";
 import { FONCTION_PRESETS } from "../src/crm/index.ts";
+import { parseListContactsBody } from "./_calls/listContacts.js";
+import { buildPreviewContactList } from "./_calls/selection.js";
 import { POST } from "./calls.js";
 
 const { mockVerifyJWT } = vi.hoisted(() => ({
@@ -334,6 +336,41 @@ describe("POST /api/calls action=list_contacts", () => {
     expect((await res.json()).error).toBe("invalid_preset_id");
   });
 
+  it("returns 400 for invalid max_per_company", async () => {
+    const res = await POST(makeReq({ filters: {}, max_per_company: 9 }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_max_per_company");
+  });
+
+  it("buildPreviewContactList fills total limit with per-company cap", () => {
+    const contacts = [];
+    for (let company = 0; company < 40; company += 1) {
+      for (let slot = 0; slot < 5; slot += 1) {
+        contacts.push({
+          sf_contact_id: `c-${company}-${slot}`,
+          sf_account_id: `a-${company}`,
+          title: slot === 0 ? "Directeur" : `Chargé ${slot}`,
+        });
+      }
+    }
+    const preview = buildPreviewContactList(contacts, 100, 3);
+    expect(preview).toHaveLength(100);
+    const counts = new Map();
+    for (const contact of preview) {
+      counts.set(contact.sf_account_id, (counts.get(contact.sf_account_id) ?? 0) + 1);
+    }
+    for (const count of counts.values()) {
+      expect(count).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it("parseListContactsBody accepts max_per_company", () => {
+    expect(parseListContactsBody({ filters: {}, max_per_company: 3 })).toEqual({
+      filters: { limit: undefined },
+      maxPerCompany: 3,
+    });
+  });
+
   it("returns 500 when profile lookup fails", async () => {
     mockMaybeSingle.mockResolvedValue({ data: null, error: { message: "db error" } });
     const res = await POST(makeReq({ filters: {} }));
@@ -366,6 +403,60 @@ describe("POST /api/calls action=list_contacts", () => {
     });
     expect(body.dedup).toEqual([]);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies max_per_company before the contact limit on wide fetch", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const records = [
+      {
+        Id: "003000000000001AAA",
+        Name: "Alice Martin",
+        MobilePhone: "+33600000001",
+        Title: "Chargé de formation",
+        AccountId: "001000000000001AAA",
+        Account: { Id: "001000000000001AAA", Name: "ACME" },
+        Tasks: { totalSize: 0, records: [] },
+      },
+      {
+        Id: "003000000000002AAA",
+        Name: "Bob Durand",
+        MobilePhone: "+33600000002",
+        Title: "Directeur formation",
+        AccountId: "001000000000001AAA",
+        Account: { Id: "001000000000001AAA", Name: "ACME" },
+        Tasks: { totalSize: 0, records: [] },
+      },
+      {
+        Id: "003000000000003AAA",
+        Name: "Carla Petit",
+        MobilePhone: "+33600000003",
+        Title: null,
+        AccountId: "001000000000002AAA",
+        Account: { Id: "001000000000002AAA", Name: "BETA" },
+        Tasks: { totalSize: 0, records: [] },
+      },
+    ];
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records }), { status: 200 }));
+
+    mockFrom.mockImplementation((table) => {
+      if (table === "call_sessions") {
+        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+      }
+      return { select: mockSelect };
+    });
+
+    const res = await POST(makeReq({ filters: baseFilters, limit: 2, max_per_company: 1 }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.contacts).toHaveLength(2);
+    expect(body.contacts.map((contact) => contact.sf_contact_id).sort()).toEqual([
+      "003000000000002AAA",
+      "003000000000003AAA",
+    ]);
+    const soql = decodeURIComponent(String(fetchSpy.mock.calls[1][0]).replace(/\+/g, " "));
+    expect(soql).toContain(`LIMIT ${SOQL_FETCH_CAP}`);
   });
 
   it("returns dedup entries for contacts already in active sessions", async () => {

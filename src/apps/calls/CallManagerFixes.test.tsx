@@ -470,6 +470,8 @@ describe("preview selection and enriched rows", () => {
         onFiltersChange={vi.fn()}
         contactLimit={200}
         onContactLimitChange={vi.fn()}
+        maxPerCompany={null}
+        onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
         error={null}
@@ -502,18 +504,8 @@ describe("preview selection and enriched rows", () => {
     );
   });
 
-  it("caps selection to N contacts from the same company, preferring directors", async () => {
-    const user = userEvent.setup();
-    const sameCompanyPreview = [
-      {
-        sf_contact_id: "003000000000001",
-        sf_account_id: "001AAA",
-        contact_name: "Alice Martin",
-        account_name: "Acme",
-        phone: "0102030405",
-        title: "Chargé de formation",
-        linkedin_url: null,
-      },
+  it("selects all preview contacts when max per company was applied at fetch time", () => {
+    const cappedPreview = [
       {
         sf_contact_id: "003000000000002",
         sf_account_id: "001AAA",
@@ -540,10 +532,12 @@ describe("preview selection and enriched rows", () => {
         onFiltersChange={vi.fn()}
         contactLimit={200}
         onContactLimitChange={vi.fn()}
+        maxPerCompany={1}
+        onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
         error={null}
-        preview={sameCompanyPreview}
+        preview={cappedPreview}
         dedup={[]}
         presets={[]}
         presetsLoading={false}
@@ -558,15 +552,8 @@ describe("preview selection and enriched rows", () => {
       />,
     );
 
-    expect(screen.getByText("3 sélectionnés / 3")).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText("Maximum de contacts par entreprise"), "1");
-    expect(screen.getByText("2 sélectionnés / 3")).toBeTruthy();
-
-    const aliceRow = screen.getByText("Alice Martin").closest("li");
-    const bobRow = screen.getByText("Bob Durand").closest("li");
-    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
-    expect((within(bobRow!).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-    expect((within(aliceRow!).getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("2 sélectionnés / 2")).toBeTruthy();
+    expect(screen.getByText(/max 1\/entreprise/i)).toBeTruthy();
   });
 });
 
@@ -598,6 +585,8 @@ describe("dedup modes in preview selection", () => {
     onFiltersChange: vi.fn(),
     contactLimit: 200 as const,
     onContactLimitChange: vi.fn(),
+    maxPerCompany: null as null,
+    onMaxPerCompanyChange: vi.fn(),
     loading: false,
     previewLoading: false,
     error: null,
@@ -644,6 +633,8 @@ describe("error announcements", () => {
         onFiltersChange={vi.fn()}
         contactLimit={200}
         onContactLimitChange={vi.fn()}
+        maxPerCompany={null}
+        onMaxPerCompanyChange={vi.fn()}
         loading={false}
         previewLoading={false}
         error="Échec d'enregistrement de la liste d'appels (base de données)"

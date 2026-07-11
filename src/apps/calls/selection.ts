@@ -44,6 +44,60 @@ function compareByTitlePriority(a: SelectableContact, b: SelectableContact): num
   return a.sf_contact_id.localeCompare(b.sf_contact_id);
 }
 
+export function accountKey(contact: SelectableContact): string {
+  return contact.sf_account_id || `contact:${contact.sf_contact_id}`;
+}
+
+/**
+ * Builds a preview list of up to `totalLimit` contacts while respecting
+ * `maxPerCompany` per account. Within each company, higher-priority titles are
+ * preferred; across companies, contacts are taken round-robin in CRM order.
+ */
+export function buildPreviewContactList<T extends SelectableContact>(
+  contacts: T[],
+  totalLimit: number,
+  maxPerCompany: number | null,
+): T[] {
+  if (contacts.length === 0) return [];
+  if (maxPerCompany === null || maxPerCompany <= 0) {
+    return contacts.slice(0, totalLimit);
+  }
+
+  const companyOrder: string[] = [];
+  const seenCompanies = new Set<string>();
+  for (const contact of contacts) {
+    const key = accountKey(contact);
+    if (!seenCompanies.has(key)) {
+      seenCompanies.add(key);
+      companyOrder.push(key);
+    }
+  }
+
+  const byAccount = new Map<string, T[]>();
+  for (const contact of contacts) {
+    const key = accountKey(contact);
+    const group = byAccount.get(key);
+    if (group) group.push(contact);
+    else byAccount.set(key, [contact]);
+  }
+
+  const rankedByAccount = new Map<string, T[]>();
+  for (const [key, group] of byAccount) {
+    rankedByAccount.set(key, [...group].sort(compareByTitlePriority));
+  }
+
+  const result: T[] = [];
+  for (let round = 0; round < maxPerCompany && result.length < totalLimit; round += 1) {
+    for (const key of companyOrder) {
+      if (result.length >= totalLimit) break;
+      const ranked = rankedByAccount.get(key);
+      if (!ranked || round >= ranked.length) continue;
+      result.push(ranked[round]!);
+    }
+  }
+  return result;
+}
+
 /**
  * Builds a selection set capped at `maxPerCompany` contacts sharing the same
  * account id. Within each company, higher-priority titles (directeur /

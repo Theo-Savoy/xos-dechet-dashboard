@@ -7,7 +7,11 @@ import {
   filterTargetContacts,
   hasRelanceQueryFilters,
   searchContacts,
+  SOQL_FETCH_CAP,
 } from "../_crm/salesforce.js";
+import { buildPreviewContactList } from "./selection.js";
+
+const MAX_PER_COMPANY_OPTIONS = [1, 2, 3, 5];
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -27,7 +31,17 @@ export function parseListContactsBody(body) {
   if (body.preset_id !== undefined && (!Number.isInteger(body.preset_id) || body.preset_id < 1)) {
     return { error: "invalid_preset_id" };
   }
-  return { filters: { ...body.filters, limit: body.limit ?? body.filters.limit } };
+  if (
+    body.max_per_company !== undefined
+    && body.max_per_company !== null
+    && (!Number.isInteger(body.max_per_company) || !MAX_PER_COMPANY_OPTIONS.includes(body.max_per_company))
+  ) {
+    return { error: "invalid_max_per_company" };
+  }
+  return {
+    filters: { ...body.filters, limit: body.limit ?? body.filters.limit },
+    maxPerCompany: body.max_per_company ?? null,
+  };
 }
 
 async function fetchProfile(client, userId) {
@@ -105,15 +119,22 @@ export async function listContacts(client, userId, body) {
   const tokenResult = await fetchSFToken();
   if (tokenResult.error) return { error: tokenResult.error, status: 502 };
 
-  const soql = buildTargetQuery(parsed.filters, mapping, profile.sfUserId);
+  const maxPerCompany = parsed.maxPerCompany;
+  const requestedLimit = boundedLimit(parsed.filters.limit);
+  const wideFetch = hasRelanceQueryFilters(parsed.filters) || maxPerCompany !== null;
+  const queryFilters = wideFetch ? { ...parsed.filters, limit: SOQL_FETCH_CAP } : parsed.filters;
+
+  const soql = buildTargetQuery(queryFilters, mapping, profile.sfUserId);
   const search = await searchContacts(tokenResult.accessToken, soql);
   if (search.error) return { error: search.error, status: 502 };
 
   const filtered = filterTargetContacts(search.records, parsed.filters, mapping);
-  const requestedLimit = boundedLimit(parsed.filters.limit);
-  const contacts = normalizeContacts(
-    hasRelanceQueryFilters(parsed.filters) ? filtered.slice(0, requestedLimit) : filtered,
-  );
+  const normalized = normalizeContacts(filtered);
+  const contacts = maxPerCompany !== null
+    ? buildPreviewContactList(normalized, requestedLimit, maxPerCompany)
+    : hasRelanceQueryFilters(parsed.filters)
+      ? normalized.slice(0, requestedLimit)
+      : normalized;
   const dedup = await findDedup(client, contacts.map((contact) => contact.sf_contact_id));
   return { contacts, dedup };
 }

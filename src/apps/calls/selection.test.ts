@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canSelectContact, selectIdsWithCompanyCap, titlePriority } from "./selection";
+import { buildPreviewContactList, canSelectContact, selectIdsWithCompanyCap, titlePriority } from "./selection";
 
 const contacts = [
   { sf_contact_id: "c1", sf_account_id: "a1", title: "Chargé de formation" },
@@ -15,6 +15,52 @@ describe("titlePriority", () => {
     expect(titlePriority("Responsable RH")).toBeGreaterThan(titlePriority("Chargé de formation"));
     expect(titlePriority("DRH adjoint")).toBeGreaterThan(titlePriority("Chef de projet"));
     expect(titlePriority(null)).toBe(0);
+  });
+});
+
+describe("buildPreviewContactList", () => {
+  it("returns up to totalLimit without a per-company cap", () => {
+    const many = Array.from({ length: 10 }, (_, index) => ({
+      sf_contact_id: `c${index}`,
+      sf_account_id: `a${index}`,
+      title: null,
+    }));
+    expect(buildPreviewContactList(many, 5, null)).toHaveLength(5);
+  });
+
+  it("fills totalLimit across companies with max per company, not fewer contacts", () => {
+    const contacts = [];
+    for (let company = 0; company < 40; company += 1) {
+      for (let slot = 0; slot < 5; slot += 1) {
+        contacts.push({
+          sf_contact_id: `c-${company}-${slot}`,
+          sf_account_id: `a-${company}`,
+          title: slot === 0 ? "Directeur" : `Chargé ${slot}`,
+        });
+      }
+    }
+
+    const preview = buildPreviewContactList(contacts, 100, 3);
+    expect(preview).toHaveLength(100);
+
+    const perCompany = new Map<string, number>();
+    for (const contact of preview) {
+      const key = contact.sf_account_id!;
+      perCompany.set(key, (perCompany.get(key) ?? 0) + 1);
+    }
+    for (const count of perCompany.values()) {
+      expect(count).toBeLessThanOrEqual(3);
+    }
+    expect(perCompany.size).toBeGreaterThan(30);
+  });
+
+  it("prefers directeurs within each company when capping", () => {
+    const contacts = [
+      { sf_contact_id: "c1", sf_account_id: "a1", title: "Chargé de formation" },
+      { sf_contact_id: "c2", sf_account_id: "a1", title: "Directeur formation" },
+      { sf_contact_id: "c3", sf_account_id: "a2", title: null },
+    ];
+    expect(buildPreviewContactList(contacts, 10, 1).map((c) => c.sf_contact_id).sort()).toEqual(["c2", "c3"]);
   });
 });
 

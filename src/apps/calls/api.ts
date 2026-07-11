@@ -1,4 +1,4 @@
-import type { CallTargetPreset, DedupEntry, FilterTree, ResultatCall } from "../../crm";
+import type { CallTargetPreset, DedupEntry, FilterTree, MaxPerCompany, ResultatCall } from "../../crm";
 import type {
   CallStats,
   ContactContext,
@@ -90,7 +90,7 @@ export type ContactListResult = {
 export async function fetchContactList(
   token: string,
   filters: FilterTree,
-  opts?: { presetId?: number; limit?: number },
+  opts?: { presetId?: number; limit?: number; maxPerCompany?: MaxPerCompany | null },
 ): Promise<ContactListResult> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -99,6 +99,7 @@ export async function fetchContactList(
       filters,
       preset_id: opts?.presetId,
       limit: opts?.limit ?? 200,
+      ...(opts?.maxPerCompany ? { max_per_company: opts.maxPerCompany } : {}),
     }),
   });
 }

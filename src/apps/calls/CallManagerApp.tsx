@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
-import { emptyFilterTree, normalizeFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree } from "../../crm";
+import { emptyFilterTree, normalizeFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree, type MaxPerCompany } from "../../crm";
 import {
   completeSession,
   createFollowUpSession,
@@ -76,6 +76,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
 
   const [filters, setFilters] = useState<FilterTree>(emptyFilterTree());
   const [contactLimit, setContactLimit] = useState<ContactLimit>(200);
+  const [maxPerCompany, setMaxPerCompany] = useState<MaxPerCompany | null>(null);
   const [preview, setPreview] = useState<ContactPreview[]>([]);
   const [dedup, setDedup] = useState<DedupEntry[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -180,6 +181,16 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     invalidatePreview();
   };
 
+  const handleContactLimitChange = (limit: ContactLimit) => {
+    setContactLimit(limit);
+    invalidatePreview();
+  };
+
+  const handleMaxPerCompanyChange = (value: MaxPerCompany | null) => {
+    setMaxPerCompany(value);
+    invalidatePreview();
+  };
+
   const handlePreview = async () => {
     if (!token) return;
     const requestId = previewRequest.current + 1;
@@ -187,7 +198,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setPreviewLoading(true);
     setNewError(null);
     try {
-      const data = await fetchContactList(token, filters, { limit: contactLimit });
+      const data = await fetchContactList(token, filters, { limit: contactLimit, maxPerCompany });
       if (previewRequest.current !== requestId) return;
       setPreview(data.contacts);
       setDedup(data.dedup);
@@ -511,6 +522,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             setView("new");
             setFilters(emptyFilterTree());
             setContactLimit(200);
+            setMaxPerCompany(null);
             setPreview([]);
             setDedup([]);
             setNewError(null);
@@ -527,7 +539,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           contactLimit={contactLimit}
-          onContactLimitChange={setContactLimit}
+          onContactLimitChange={handleContactLimitChange}
+          maxPerCompany={maxPerCompany}
+          onMaxPerCompanyChange={handleMaxPerCompanyChange}
           loading={createLoading}
           previewLoading={previewLoading}
           error={newError}
