@@ -530,4 +530,51 @@ textarea {
   border-radius: 6px;
 }
 
+/* Salesforce connection status in menubar */
+.xos-menubar__session-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.xos-menubar__sf-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  transition: all 0.25s ease;
+  font-family: var(--xos-font-display);
+}
+
+.xos-menubar__sf-status--linked {
+  background: rgba(110, 255, 187, 0.08);
+  border: 1px solid rgba(110, 255, 187, 0.2);
+  color: #6effbb;
+  box-shadow: 0 0 8px rgba(110, 255, 187, 0.15);
+}
+
+.xos-menubar__sf-status--unlinked {
+  background: rgba(255, 94, 87, 0.08);
+  border: 1px solid rgba(255, 94, 87, 0.2);
+  color: #ff5e57;
+  box-shadow: 0 0 8px rgba(255, 94, 87, 0.15);
+}
+
+.xos-menubar__sf-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 680px) {
+  .xos-menubar__sf-text {
+    display: none;
+  }
+  .xos-menubar__sf-status {
+    padding: 3px 6px;
+  }
+}
+
+
 

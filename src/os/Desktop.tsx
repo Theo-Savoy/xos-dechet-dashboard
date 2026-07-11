@@ -96,10 +96,18 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
             height={334}
           />
         </span>
-        <span className="xos-menubar__session" title={userEmail}>
-          <span className="xos-menubar__status" aria-hidden="true" />
-          {userEmail}
-        </span>
+        <div className="xos-menubar__session-group">
+          <span className="xos-menubar__session" title={userEmail}>
+            <span className="xos-menubar__status" aria-hidden="true" />
+            {userEmail}
+          </span>
+          <span className={`xos-menubar__sf-status ${sfLinked ? 'xos-menubar__sf-status--linked' : 'xos-menubar__sf-status--unlinked'}`}>
+            <svg className="xos-menubar__sf-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+            </svg>
+            <span className="xos-menubar__sf-text">{sfLinked ? "Salesforce connecté" : "Salesforce non lié"}</span>
+          </span>
+        </div>
         <button
           type="button"
           className="xos-menubar__logout"
