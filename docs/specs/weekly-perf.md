@@ -260,12 +260,14 @@ Weekly Perf doit permettre de **retrouver toutes les infos du tableur de suivi a
 | Nombre de RDV effectués | `pulse.meetings` (Events, `ActivityDate`) | ✅ déjà en 3.1 |
 | Nombre d'opportunités détectées | `pipeline.generated_count` (Opportunity `CreatedDate`) | ✅ déjà en 3.1 |
 | Montant HT signé sur la semaine | `pipeline.won_amount` (`IsWon`, `CloseDate` ∈ semaine) | ✅ déjà en 3.1 |
-| Montant sur-mesure / catalogue / conseil / ventes exceptionnelles | breakdown du signé par `Type_de_vente__c` — **nouvelle clé mapping CRM** (`saleTypes`), valeurs org réelles à confirmer (Catalogue, Sur-mesure, Conseil, LMS, XOS+ ↔ « exceptionnelles » ?) | 🆕 3.3 |
-| Dont ventes ARR | champ SF à identifier — **question Théo** (champ dédié ? type de vente ? produit ?) | ❓ bloquant |
-| Forecast sur le trimestre | définition à acter — **question Théo** (somme pondérée des opps ouvertes du trimestre ? champ forecast ? saisie manuelle ?) | ❓ bloquant |
+| Montant sur-mesure / catalogue / conseil / ventes exceptionnelles | breakdown du signé par `Type_de_vente__c` (picklist vérifiée 2026-07-11 : Catalogue, Sur-mesure, Conseil, LMS, XOS+). **Défaut proposé** : « ventes exceptionnelles » = LMS + XOS+ regroupés (véto Théo possible) | 🆕 3.3 |
+| Dont ventes ARR | **acté 2026-07-11** : `Type_de_vente__c = 'Catalogue'` AND `Type_de_commission__c ∈ {'Abonnement 2 ans','Abonnement 3 ans','Abonnement 4 ans','Abonnement 5 ans'}` (picklist vérifiée ; « Abonnement 1 an » exclu) | 🆕 3.3 |
+| Forecast sur le trimestre | **acté 2026-07-11** : signé du **trimestre fiscal en cours** (FY juillet–juin) + Σ(`Amount` × `Probability`/100) des opps **ouvertes** avec `CloseDate` ∈ trimestre fiscal courant | 🆕 3.3 |
 | Montant de pipe sur-mesure | opps ouvertes `Type_de_vente__c = Sur-mesure`, somme `Amount` (règle V6 : `CloseDate ∈ [aujourd'hui, +180 j]`) | 🆕 3.3 |
-| Target | absente de SF → **Supabase** (`settings` clé `targets.{sf_user_id}.{quarter}` ou table dédiée), éditable dans le Hub (manager+admin) — **valeurs à fournir par Théo** | 🆕 3.3 |
+| Target | **acté 2026-07-11** : **Supabase `settings`** (clé `weekly_targets`, map `sf_user_id → { "FY26-Q1": montant }`), **éditable Hub** (manager+admin, CRUD settings existant) ; valeurs **mock** au départ | 🆕 3.3 |
 | Total / Moyenne | calculés côté client sur la fenêtre affichée | 🆕 3.3 (UI) |
+
+**Année fiscale XOS : juillet → juin** (acté 2026-07-11) — Q1 = juil–sept, Q2 = oct–déc, Q3 = janv–mars, Q4 = avr–juin. Vaut aussi pour Business Review.
 
 ### 9.2 API (extension `api/perf`)
 
@@ -278,8 +280,6 @@ Weekly Perf doit permettre de **retrouver toutes les infos du tableur de suivi a
 - **Toggle « Tableau »** : grille métrique × semaines fidèle au tableur (totaux + moyennes calculés, zéro `#DIV/0!`), pour une transition douce depuis Sheets.
 - Les métriques spec v1 (propositions, effort) restent, visuellement secondaires par rapport aux métriques du rituel.
 
-### 9.4 Questions ouvertes (bloquent 3.3, pas 3.2)
+### 9.4 Questions ouvertes — ✅ résolues 2026-07-11 (réponses Théo intégrées au § 9.1)
 
-1. **ARR** : comment « Dont ventes ARR » est-il identifiable dans SF ?
-2. **Forecast trimestre** : définition exacte (le tableur montre une valeur par semaine qui évolue → recalcul hebdo d'une projection ? source ?).
-3. **Targets** : valeurs par commercial × trimestre à saisir (proposition : édition dans le Hub, stockage `settings`).
+Seul reste ouvert (non bloquant, défaut posé) : « ventes exceptionnelles » = LMS + XOS+ regroupés — véto possible.

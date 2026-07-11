@@ -71,7 +71,7 @@ Table `shared_analyses` : `id`, `created_by` (profile), `recipient_id` (profile,
 
 ## 7. Découpage en lots (remplace les lots 6.x initiaux)
 
-- **6.0 Audit** — étendu : FY XOS (bornes fiscales ?), définitions CA signé, profondeur d'historique pour N-2, valeurs réelles `Type_de_vente__c` / `Resultat_call__c` (déjà en partie couvertes par le travail Hermes — réutiliser `references/` du skill), volumétrie/coût SOQL des requêtes longues. **Validation Théo** — bloque la suite.
+- **6.0 Audit** — étendu : ~~FY XOS~~ **acté : juillet–juin** (2026-07-11, cf. `weekly-perf.md` § 9.1), définitions CA signé, profondeur d'historique pour N-2, valeurs réelles `Type_de_vente__c` (vérifiées 2026-07-11 : Catalogue, Sur-mesure, Conseil, LMS, XOS+) / `Resultat_call__c`, volumétrie/coût SOQL des requêtes longues. **Validation Théo** — bloque la suite.
 - **6.1 `api/review.js`** + migration `shared_analyses` + mapping (types de vente si absents).
 - **6.2 UI** `src/apps/review/` + registry + partage bout en bout.
 
