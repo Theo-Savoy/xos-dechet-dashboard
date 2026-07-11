@@ -27,6 +27,13 @@ export const appRegistry: AppManifest[] = [
     defaultSize: { w: 960, h: 620 },
   },
   {
+    id: "weekly",
+    title: "Weekly Perf",
+    icon: "◔",
+    component: lazy(() => import("../apps/weekly/WeeklyApp")),
+    defaultSize: { w: 1040, h: 680 },
+  },
+  {
     id: "hub",
     title: "Hub",
     icon: "◌",
