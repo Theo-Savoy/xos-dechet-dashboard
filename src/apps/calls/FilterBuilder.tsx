@@ -16,6 +16,7 @@ import {
   type FilterTree,
   type MaxPerCompany,
 } from "../../crm";
+import { getOpportunityFilterGuidance } from "../../crm/opportunityFilters";
 import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
 
 type FilterBuilderProps = {
@@ -136,6 +137,7 @@ export function FilterBuilder({
   const entrepriseCount = countEntrepriseFilters(filters.entreprise);
   const contactCount = countContactFilters(filters.contact);
   const relanceCount = countRelanceFilters(filters.relance);
+  const oppGuidance = getOpportunityFilterGuidance(filters.entreprise);
 
   return (
     <GlassCard className="calls-filterbuilder">
@@ -231,13 +233,23 @@ export function FilterBuilder({
               label="Opportunité ouverte"
               value={filters.entreprise.opp_ouverte}
               onChange={(opp_ouverte) => setEntreprise({ opp_ouverte })}
+              disabledValues={oppGuidance.disabled.opp_ouverte}
+              disabledReasons={oppGuidance.disabledReasons.opp_ouverte}
             />
             <TriState
               label="Opportunité perdue"
               value={filters.entreprise.opp_perdue}
               onChange={(opp_perdue) => setEntreprise({ opp_perdue })}
+              disabledValues={oppGuidance.disabled.opp_perdue}
+              disabledReasons={oppGuidance.disabledReasons.opp_perdue}
             />
           </div>
+          {(oppGuidance.hint || oppGuidance.note) && (
+            <div className="calls-fb-opp-guidance" role="note">
+              {oppGuidance.hint && <p>{oppGuidance.hint}</p>}
+              {oppGuidance.note && <p className="calls-fb-opp-guidance__note">{oppGuidance.note}</p>}
+            </div>
+          )}
           <label className="calls-field">
             <span>Compte principal (ID CRM, cible le groupe)</span>
             <input
@@ -291,6 +303,9 @@ export function FilterBuilder({
       <details className="calls-fb-section">
         <SectionSummary title="Relance" count={relanceCount} />
         <div className="calls-fb-section__body">
+          <p className="calls-fb-hint">
+            Filtres d&apos;historique d&apos;appel appliqués après la requête CRM (limite Salesforce sur les tâches).
+          </p>
           <label className="calls-checkbox">
             <input
               type="checkbox"

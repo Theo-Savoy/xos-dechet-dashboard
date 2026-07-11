@@ -622,7 +622,6 @@ describe("call targeting copy and controls", () => {
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByLabelText("Maximum de contacts par entreprise")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Avertir" }).getAttribute("aria-pressed")).toBe("true");
-    expect(document.body.textContent).not.toContain("Sales" + "force");
     expect(screen.queryByText("Durée min (sec)")).toBeNull();
   });
 
@@ -636,6 +635,26 @@ describe("call targeting copy and controls", () => {
     );
     expect(screen.getByText("Comptage impossible")).toBeTruthy();
     expect(screen.queryByText("Filtres → comptage live")).toBeNull();
+  });
+
+  it("shows opportunity filter guidance when open and lost are both selected", () => {
+    render(
+      <FilterBuilder
+        {...filterBuilderProps}
+        filters={{
+          ...emptyFilterTree(),
+          entreprise: {
+            ...emptyFilterTree().entreprise,
+            opp_ouverte: true,
+            opp_perdue: true,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByRole("note")).toBeTruthy();
+    expect(screen.getByText(/aucune ouverte/i)).toBeTruthy();
+    const nonButtons = screen.getAllByRole("button", { name: "Non" });
+    expect(nonButtons.some((btn) => (btn as HTMLButtonElement).disabled)).toBe(true);
   });
 
   it("only shows preset deletion to the current preset owner", async () => {

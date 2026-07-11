@@ -2158,6 +2158,38 @@
   color: #ffffff;
 }
 
+.calls-tristate__opt--disabled,
+.calls-tristate__opt:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.calls-fb-opp-guidance {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--xos-accent) 25%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 8%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.calls-fb-opp-guidance p {
+  margin: 0;
+}
+
+.calls-fb-opp-guidance__note {
+  margin-top: 0.35rem !important;
+  color: var(--xos-text-muted);
+}
+
+.calls-fb-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--xos-text-muted);
+  line-height: 1.35;
+}
+
 .calls-taginput {
   display: flex;
   flex-wrap: wrap;
