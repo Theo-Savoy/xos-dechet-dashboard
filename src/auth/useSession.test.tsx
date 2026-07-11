@@ -7,25 +7,27 @@ const mockSession = {
   user: { email: "theo@xos-learning.fr" },
   access_token: "test-token-abc",
   provider_refresh_token: "sf-provider-refresh",
-} as const;
+};
 
-let getSessionResolver: ((value: { data: { session: typeof mockSession | null } }) => void) | null =
+type MockSession = typeof mockSession;
+
+let getSessionResolver: ((value: { data: { session: MockSession | null } }) => void) | null =
   null;
 let getSessionRejecter: ((reason: unknown) => void) | null = null;
 let bridgeResolver: ((value: Response) => void) | null = null;
 let bridgeRejecter: ((reason: unknown) => void) | null = null;
-let capturedAuthCallback: ((event: string, session: typeof mockSession | null) => void) | null = null;
+let capturedAuthCallback: ((event: string, session: MockSession | null) => void) | null = null;
 
 const { getSession, onAuthStateChange } = vi.hoisted(() => ({
   getSession: vi.fn(
     () =>
-      new Promise<{ data: { session: typeof mockSession | null } }>((resolve, reject) => {
+      new Promise<{ data: { session: MockSession | null } }>((resolve, reject) => {
         getSessionResolver = resolve;
         getSessionRejecter = reject;
       }),
   ),
   onAuthStateChange: vi.fn(
-    (cb: (event: string, session: typeof mockSession | null) => void) => {
+    (cb: (event: string, session: MockSession | null) => void) => {
       capturedAuthCallback = cb;
       return { data: { subscription: { unsubscribe: vi.fn() } } };
     },
