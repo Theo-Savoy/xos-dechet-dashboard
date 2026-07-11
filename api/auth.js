@@ -23,7 +23,12 @@ export async function POST(request) {
 
   let body = null;
   try { body = await request.json(); } catch { body = null; }
+  console.log("POST /api/auth called for user:", user?.email);
+  console.log("salesforce_refresh_token received in body:", !!body?.salesforce_refresh_token);
+  console.log("body keys:", body ? Object.keys(body) : "null");
+
   if (typeof body?.salesforce_refresh_token === "string" && body.salesforce_refresh_token) {
+    console.log("Attempting to store Salesforce refresh token for user:", user.email);
     const client = getServiceClient();
     if (client) {
       const result = await storeSalesforceRefreshToken({
@@ -31,7 +36,10 @@ export async function POST(request) {
         user,
         refreshToken: body.salesforce_refresh_token,
       });
+      console.log("storeSalesforceRefreshToken result:", result);
       if (result.error) console.error(`Salesforce automatic link failed: ${result.error}`);
+    } else {
+      console.error("storeSalesforceRefreshToken failed: supabase client is null");
     }
   }
 
