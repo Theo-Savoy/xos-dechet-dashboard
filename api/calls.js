@@ -4,7 +4,7 @@ import { listContacts } from "./_calls/listContacts.js";
 import { hydrateSessionContactsFromCrm } from "./_calls/hydrateContacts.js";
 import { deletePreset, listPresets, savePreset } from "./_calls/presets.js";
 import mapping from "./_crm/mapping.js";
-import { buildLightningUrl, createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
+import { buildLightningUrl, createEvent, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
 
 const SF_ID = /^[a-zA-Z0-9]{15,18}$/;
 const VALID_RESULTS = mapping.objects.task.results;
@@ -746,21 +746,6 @@ export async function POST(request) {
 
     const taskId = sfResult.record?.id;
     const wantsRecall = typeof recall_at === "string" && recall_at;
-    let recallTaskId = null;
-    if (wantsRecall && do_not_call !== true) {
-      const recall = await createRecallTask(
-        tokenResult.accessToken,
-        {
-          contactId: contact.sf_contact_id,
-          accountId: contact.sf_account_id,
-          recallAt: recall_at,
-          ownerId: profileResult.sfUserId || undefined,
-          actorName: actorName(user, profileResult),
-        },
-        mapping,
-      );
-      if (!recall.error) recallTaskId = recall.record?.id || null;
-    }
 
     if (do_not_call === true) {
       await updateContactDoNotCall(tokenResult.accessToken, contact.sf_contact_id, true, mapping);
@@ -793,9 +778,8 @@ export async function POST(request) {
       changes: {
         resultat,
         comments: callComments,
-        recall_at: wantsRecall ? recall_at : null,
+        recall_at: wantsRecall && do_not_call !== true ? recall_at : null,
         do_not_call: do_not_call === true,
-        recall_task_id: recallTaskId,
       },
       targets: [{ id: contact.sf_contact_id, type: "Contact", session_contact_id: contact_id, session_id }],
       result: { success: true, taskId },

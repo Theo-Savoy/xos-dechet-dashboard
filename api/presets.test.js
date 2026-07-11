@@ -14,7 +14,6 @@ vi.mock("./_crm/salesforce.js", () => ({
   fetchSFToken: vi.fn(),
   logCall: vi.fn(),
   createEvent: vi.fn(),
-  createRecallTask: vi.fn(),
   updateContactDoNotCall: vi.fn(),
   fetchContactContext: vi.fn(),
   buildLightningUrl: (objectType, recordId) =>

@@ -33,7 +33,6 @@ vi.mock("./_crm/salesforce.js", () => ({
   fetchSFToken: mockFetchSFToken,
   logCall: mockLogCall,
   createEvent: mockCreateEvent,
-  createRecallTask: vi.fn().mockResolvedValue({ record: { id: "00Trecall" } }),
   updateContactDoNotCall: vi.fn().mockResolvedValue({ ok: true }),
   fetchContactBasicsByIds: mockFetchContactBasicsByIds,
   fetchContactContext: vi.fn().mockResolvedValue({
@@ -568,6 +567,29 @@ describe("POST /api/calls", () => {
       expect(body.ok).toBe(true);
       expect(body.needs_event).toBe(true);
       expect(body.sf_task_id).toBe("00T123");
+    });
+
+    it("stores recall_at without creating a Salesforce recall task", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: sessionRow, error: null })
+        .mockResolvedValueOnce({ data: contactRow, error: null })
+        .mockResolvedValueOnce({ data: { sf_user_id: "005000000000001AAA", full_name: "Jean Dupont" }, error: null })
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      mockLogCall.mockResolvedValue({ record: { id: "00T456" } });
+
+      const res = await POST(makeReq("POST", {
+        action: "log_call",
+        session_id: 1,
+        contact_id: 101,
+        resultat: SEMANTIC.followUpNoAnswer,
+        recall_at: "2026-07-20",
+      }));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: true, sf_task_id: "00T456" });
+      expect(mockLogCall).toHaveBeenCalledTimes(1);
     });
 
     it("returns 500 when local persistence fails after SF success", async () => {

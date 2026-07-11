@@ -374,27 +374,6 @@ export async function updateContactDoNotCall(token, contactId, value, mapping = 
   return { ok: true };
 }
 
-/** Future-dated Task so the commercial sees the recall in SF. */
-export async function createRecallTask(
-  token,
-  { contactId, accountId, recallAt, ownerId, actorName = "Utilisateur Inconnu" },
-  mapping = defaultMapping,
-) {
-  const task = mapping.objects.task;
-  const fields = task.fields;
-  const payload = {
-    [fields.subtype]: task.subtypeValue,
-    [fields.whoId]: contactId,
-    [fields.status]: task.statusValue,
-    [fields.activityDate]: recallAt,
-    [fields.subject]: `Rappel — à rappeler le ${recallAt}`,
-    [fields.description]: `Rappel planifié depuis X OS Call Manager.\n\n[via X OS par ${actorName}]`,
-  };
-  if (accountId) payload[fields.whatId] = accountId;
-  if (ownerId) payload[fields.ownerId] = ownerId;
-  return createSObject(token, task.name, payload);
-}
-
 export async function createEvent(token, { subject, startDateTime, durationMin, whoId, whatId, ownerId, invitees = [] }, mapping = defaultMapping) {
   const event = mapping.objects.event;
   const fields = event.fields;
