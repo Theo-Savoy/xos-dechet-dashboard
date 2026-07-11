@@ -215,7 +215,7 @@ export function NewSessionView({
             )}
             <ul className="calls-preview__list">
               <li className="calls-preview__list-header" aria-hidden="true">
-                <span />
+                <span className="calls-preview__select" />
                 <span>Contact</span>
                 <span>Poste</span>
                 <span>Entreprise</span>
@@ -251,8 +251,10 @@ export function NewSessionView({
                     ) : (
                       <span>—</span>
                     )}
-                    {dup && (
+                    {dup ? (
                       <Tag variant="alert">Déjà en séance — {dup}</Tag>
+                    ) : (
+                      <span />
                     )}
                   </li>
                 );
