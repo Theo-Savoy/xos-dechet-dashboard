@@ -283,6 +283,8 @@ export function RunnerView({
 
   const sfContactUrl =
     contactContext?.contact_record_url ?? focusedContact?.sf_contact_url ?? null;
+  const displayEmail = focusedContact?.email ?? contactContext?.email ?? null;
+  const displayTitle = focusedContact?.title ?? contactContext?.title ?? null;
 
   useEffect(() => {
     if (awaitingEvent) setMode("detail");
@@ -672,6 +674,7 @@ export function RunnerView({
                 aria-label="Filtrer la liste"
               />
             </div>
+            <div className="calls-cockpit-list__scroll">
             <ul className="calls-cockpit-list__rows">
               <li className="calls-cockpit-list__header" aria-hidden="true">
                 <span />
@@ -707,13 +710,13 @@ export function RunnerView({
                   <button type="button" className="calls-cockpit-list__name" onClick={() => openDetail(contact.id)}>
                     <strong title={contact.contact_name}>{contact.contact_name}</strong>
                   </button>
-                  <span className="calls-cockpit-list__cell" title={contact.title ?? undefined}>
+                  <span className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap" title={contact.title ?? undefined}>
                     {contact.title ?? "—"}
                   </span>
-                  <span className="calls-cockpit-list__cell" title={contact.account_name ?? undefined}>
+                  <span className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap" title={contact.account_name ?? undefined}>
                     {contact.account_name ?? "—"}
                   </span>
-                  <span className="calls-cockpit-list__cell" title={contact.email ?? undefined}>
+                  <span className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap" title={contact.email ?? undefined}>
                     {contact.email ? (
                       <a
                         href={`mailto:${contact.email}`}
@@ -750,6 +753,7 @@ export function RunnerView({
                 <li className="calls-cockpit-list__empty">Aucun contact pour ce filtre.</li>
               )}
             </ul>
+            </div>
           </GlassCard>
         </div>
       ) : focusedContact ? (
@@ -761,8 +765,8 @@ export function RunnerView({
                 {(focusedContact.attempt_count ?? 0) > 0 && (
                   <Tag variant="muted">Tentative {focusedContact.attempt_count}</Tag>
                 )}
-                {focusedContact.title && (
-                  <p className="calls-contact-card__title">{focusedContact.title}</p>
+                {displayTitle && (
+                  <p className="calls-contact-card__title">{displayTitle}</p>
                 )}
                 <p className="calls-contact-card__account">
                   {focusedContact.account_name ?? "Compte inconnu"}
@@ -800,10 +804,10 @@ export function RunnerView({
               <p className="calls-contact-card__no-phone">Aucun numéro mobile</p>
             )}
 
-            {focusedContact.email ? (
+            {displayEmail ? (
               <div className="calls-contact-card__email">
-                <a href={`mailto:${focusedContact.email}`} className="calls-email-link">
-                  {focusedContact.email}
+                <a href={`mailto:${displayEmail}`} className="calls-email-link">
+                  {displayEmail}
                 </a>
               </div>
             ) : (

@@ -208,6 +208,31 @@ describe("RunnerView", () => {
     expect(screen.getByRole("link", { name: "bob@acme.fr" }).getAttribute("href")).toBe("mailto:bob@acme.fr");
   });
 
+  it("falls back to CRM context email on the contact fiche", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null, email: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        contactContext={{
+          contact_record_url: null,
+          account_record_url: null,
+          email: "bob@acme.fr",
+          title: null,
+          npa: false,
+          tasks: [],
+          opportunities: [],
+        }}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    expect(screen.getByRole("link", { name: "bob@acme.fr" }).getAttribute("href")).toBe("mailto:bob@acme.fr");
+  });
+
   it("bulk-logs the same outcome for selected contacts", async () => {
     const user = userEvent.setup();
     const onLogMany = vi.fn();

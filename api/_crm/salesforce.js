@@ -254,6 +254,33 @@ export function buildLightningUrl(objectType, recordId) {
   return `${instanceUrl()}/lightning/r/${objectType}/${recordId}/view`;
 }
 
+/** Batch-fetch email/title for session contact hydration. */
+export async function fetchContactBasicsByIds(token, contactIds, mapping = defaultMapping) {
+  const cf = mapping.objects.contact.fields;
+  const ids = [...new Set((contactIds || []).filter((id) => typeof id === "string" && id))];
+  if (!ids.length) return { byId: new Map() };
+
+  const soql = [
+    `SELECT ${cf.id}, ${cf.email}, ${cf.title}`,
+    `FROM ${mapping.objects.contact.name}`,
+    `WHERE ${cf.id} IN (${ids.map((id) => `'${escapeSOQL(id)}'`).join(", ")})`,
+  ].join(" ");
+
+  const search = await searchContacts(token, soql);
+  if (search.error) return { error: search.error };
+
+  const byId = new Map();
+  for (const record of search.records || []) {
+    const id = record[cf.id];
+    if (!id) continue;
+    byId.set(id, {
+      email: record[cf.email] ?? null,
+      title: record[cf.title] ?? null,
+    });
+  }
+  return { byId };
+}
+
 /** Live Task history + open/closed opportunities + NPA for the runner cockpit. */
 export async function fetchContactContext(token, { contactId, accountId }, mapping = defaultMapping) {
   const contact = mapping.objects.contact;
@@ -265,7 +292,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
   const of = opportunity.fields;
 
   const contactSoql = [
-    `SELECT ${cf.doNotCall}`,
+    `SELECT ${cf.doNotCall}, ${cf.email}, ${cf.title}`,
     `FROM ${contact.name}`,
     `WHERE ${cf.id} = '${escapeSOQL(contactId)}'`,
     `LIMIT 1`,
@@ -317,6 +344,8 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
   return {
     contact_record_url: buildLightningUrl(contact.name, contactId),
     account_record_url: accountId ? buildLightningUrl(account.name, accountId) : null,
+    email: contactRow?.[cf.email] ?? null,
+    title: contactRow?.[cf.title] ?? null,
     npa,
     tasks: (tasksResult.records || []).map((record) => ({
       id: record[tf.id],

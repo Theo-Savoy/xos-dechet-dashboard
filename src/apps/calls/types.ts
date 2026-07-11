@@ -77,6 +77,8 @@ export type ContactOpportunityItem = {
 export type ContactContext = {
   contact_record_url: string | null;
   account_record_url: string | null;
+  email?: string | null;
+  title?: string | null;
   npa: boolean;
   tasks: ContactTaskHistoryItem[];
   opportunities: ContactOpportunityItem[];

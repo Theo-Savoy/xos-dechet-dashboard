@@ -295,9 +295,9 @@ export function NewSessionView({
                       <Cell className="calls-preview__name" title={contact.contact_name}>
                         <strong>{contact.contact_name}</strong>
                       </Cell>
-                      <Cell title={contact.title}>{contact.title ?? "—"}</Cell>
-                      <Cell title={contact.account_name}>{contact.account_name ?? "—"}</Cell>
-                      <Cell title={contact.email}>
+                      <Cell className="calls-preview__cell--wrap" title={contact.title}>{contact.title ?? "—"}</Cell>
+                      <Cell className="calls-preview__cell--wrap" title={contact.account_name}>{contact.account_name ?? "—"}</Cell>
+                      <Cell className="calls-preview__cell--wrap" title={contact.email}>
                         {contact.email ? (
                           <a href={`mailto:${contact.email}`} className="calls-preview__email">
                             {contact.email}

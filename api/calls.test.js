@@ -12,11 +12,12 @@ import {
 } from "./calls.js";
 import mapping from "./_crm/mapping.js";
 
-const { mockVerifyJWT, mockFetchSFToken, mockLogCall, mockCreateEvent } = vi.hoisted(() => ({
+const { mockVerifyJWT, mockFetchSFToken, mockLogCall, mockCreateEvent, mockFetchContactBasicsByIds } = vi.hoisted(() => ({
   mockVerifyJWT: vi.fn(),
   mockFetchSFToken: vi.fn(),
   mockLogCall: vi.fn(),
   mockCreateEvent: vi.fn(),
+  mockFetchContactBasicsByIds: vi.fn(),
 }));
 
 vi.mock("./_auth.js", () => ({
@@ -34,9 +35,12 @@ vi.mock("./_crm/salesforce.js", () => ({
   createEvent: mockCreateEvent,
   createRecallTask: vi.fn().mockResolvedValue({ record: { id: "00Trecall" } }),
   updateContactDoNotCall: vi.fn().mockResolvedValue({ ok: true }),
+  fetchContactBasicsByIds: mockFetchContactBasicsByIds,
   fetchContactContext: vi.fn().mockResolvedValue({
     contact_record_url: "https://example.salesforce.com/lightning/r/Contact/003/view",
     account_record_url: null,
+    email: null,
+    title: null,
     npa: false,
     tasks: [],
     opportunities: [],
@@ -260,13 +264,15 @@ describe("GET /api/calls", () => {
   });
 
   it("returns session detail with contacts", async () => {
+    mockFetchSFToken.mockResolvedValue({ accessToken: "sf-token" });
+    mockFetchContactBasicsByIds.mockResolvedValue({ byId: new Map() });
     mockDb
       .mockResolvedValueOnce({
         data: { id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" },
         error: null,
       })
       .mockResolvedValueOnce({
-        data: [{ id: 101, position: 0, sf_contact_id: "003000000000001", contact_name: "Marie", status: "pending" }],
+        data: [{ id: 101, position: 0, sf_contact_id: "003000000000001", contact_name: "Marie", status: "pending", email: "marie@acme.fr", title: "DRH" }],
         error: null,
       });
 
@@ -275,6 +281,39 @@ describe("GET /api/calls", () => {
     const body = await res.json();
     expect(body.session.name).toBe("Prospection");
     expect(body.contacts).toHaveLength(1);
+    expect(body.contacts[0].email).toBe("marie@acme.fr");
+  });
+
+  it("hydrates missing email from CRM when opening a session", async () => {
+    mockFetchSFToken.mockResolvedValue({ accessToken: "sf-token" });
+    mockFetchContactBasicsByIds.mockResolvedValue({
+      byId: new Map([["003000000000001", { email: "marie@acme.fr", title: "DRH" }]]),
+    });
+    mockDb
+      .mockResolvedValueOnce({
+        data: { id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{
+          id: 101,
+          position: 0,
+          sf_contact_id: "003000000000001",
+          contact_name: "Marie",
+          status: "pending",
+          email: null,
+          title: null,
+        }],
+        error: null,
+      })
+      .mockResolvedValue({ data: null, error: null });
+
+    const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.contacts[0].email).toBe("marie@acme.fr");
+    expect(body.contacts[0].title).toBe("DRH");
+    expect(mockFetchContactBasicsByIds).toHaveBeenCalled();
   });
 
   it("returns 500 when detail contacts lookup fails", async () => {
@@ -420,7 +459,7 @@ describe("POST /api/calls", () => {
       expect((await res.json()).error).toBe("invalid_scheduled_for");
     });
 
-    it("persists title and linkedin_url on session contacts", async () => {
+    it("persists title, email and linkedin_url on session contacts", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 12, name: "Prospection Lyon", status: "active", created_at: "2026-01-01T00:00:00Z", scheduled_for: "2026-07-10" }, error: null })
         .mockResolvedValueOnce({
@@ -430,6 +469,7 @@ describe("POST /api/calls", () => {
             sf_contact_id: "003000000000001",
             contact_name: "Marie Dupont",
             title: "RF",
+            email: "marie@acme.fr",
             linkedin_url: "https://linkedin.com/in/marie",
             status: "pending",
           }],
@@ -444,12 +484,14 @@ describe("POST /api/calls", () => {
           sf_contact_id: "003000000000001",
           contact_name: "Marie Dupont",
           title: "RF",
+          email: "marie@acme.fr",
           linkedin_url: "https://linkedin.com/in/marie",
         }],
       }));
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.contacts[0].title).toBe("RF");
+      expect(body.contacts[0].email).toBe("marie@acme.fr");
       expect(body.contacts[0].linkedin_url).toBe("https://linkedin.com/in/marie");
     });
   });

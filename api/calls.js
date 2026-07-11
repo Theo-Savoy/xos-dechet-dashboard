@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { verifyJWT } from "./_auth.js";
 import { listContacts } from "./_calls/listContacts.js";
+import { hydrateSessionContactsFromCrm } from "./_calls/hydrateContacts.js";
 import { deletePreset, listPresets, savePreset } from "./_calls/presets.js";
 import mapping from "./_crm/mapping.js";
 import { buildLightningUrl, createEvent, createRecallTask, fetchContactContext, fetchSFToken, logCall, updateContactDoNotCall } from "./_crm/salesforce.js";
@@ -388,7 +389,7 @@ export async function GET(request) {
       return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers });
     }
 
-    const { data: contacts, error: contactsError } = await client
+    const { data: contactsRaw, error: contactsError } = await client
       .from("call_session_contacts")
       .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
       .eq("session_id", sessionId)
@@ -396,6 +397,14 @@ export async function GET(request) {
 
     if (contactsError) {
       return new Response(JSON.stringify({ error: "contacts_lookup_failed" }), { status: 500, headers });
+    }
+
+    let contacts = contactsRaw || [];
+    if (contacts.some((contact) => !contact.email || !contact.title)) {
+      const tokenResult = await fetchSFToken();
+      if (!tokenResult.error) {
+        contacts = await hydrateSessionContactsFromCrm(client, contacts, tokenResult.accessToken, mapping);
+      }
     }
 
     const { owner, ...sessionData } = session;
