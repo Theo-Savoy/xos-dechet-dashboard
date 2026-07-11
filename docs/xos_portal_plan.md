@@ -68,6 +68,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   │   ├── weekly/      Weekly Perf
 │   │   ├── calls/       Call Manager (séances de prospection)
 │   │   ├── arena/       Gamification
+│   │   ├── review/      Business Review (macro, N-1/N-2, partage d'analyses)
 │   │   ├── copilot/     Copilot (pipeline, alertes, adoption CRM)
 │   │   ├── agent/       Chat Agent XOS (UI custom → Slack API ; Hermes = app Slack)
 │   │   └── hub/         Paramètres & statut
@@ -83,7 +84,7 @@ Le portail adoptera une esthétique **Dark Mode Premium & Glassmorphism** inspir
 │   ├── auth.js          pont cookie legacy + OAuth SF (?flow=salesforce)
 │   ├── calls.js         routeur Call Manager → api/_calls/* (sessions, ciblage, presets, rappels, team)
 │   ├── _calls/ _crm/    helpers non exposés (adapter CRM, actions, caches)
-│   └── à venir : status (Hub) · perf (Weekly) · chat + slack/* (Agent) · arena/* · copilot
+│   └── à venir : chat + slack/* (Agent) · arena/* · copilot · review (Business Review)
 ├── middleware.js        auth edge : session Supabase OU Basic Auth legacy
 └── supabase/migrations/ schéma Postgres
 ```
@@ -127,7 +128,7 @@ L'application actuelle de détection et traitement en lot des opportunités déf
 *   **Intégration** : fenêtre X OS contenant une **iframe** vers `/dashboard.html`, servi et fonctionnant exactement comme aujourd'hui (mêmes endpoints, même comportement). Accès direct à l'URL conservé. Migration React ultérieure hors périmètre.
 
 ### 2. 📈 Weekly Perf (Cockpit Hebdomadaire) — *Nouveau*
-Suivi hebdomadaire de la performance commerciale pour piloter le rythme de vente.
+Suivi hebdomadaire de la performance commerciale pour piloter le rythme de vente. *(Décision 2026-07-11 : Weekly reste **micro/hebdo** — le macro multi-périodes vit dans **Business Review**, deux apps distinctes.)*
 *   **Le "Pulse"** : par commercial et par semaine — appels (Tasks type appel), RDV (Events), propositions envoyées (opportunités entrées en étape "Proposition envoyée" sur la période, via `OpportunityHistory`).
 *   **Pipeline Généré vs Gagné** : somme des montants des opps créées vs gagnées par semaine (graphique comparatif) + taux de closing.
 *   **Le Taux d'Effort** : nombre de progressions d'étape (primaire) + ratio sur opps ouvertes (secondaire), via `OpportunityHistory`.
@@ -186,6 +187,13 @@ Le cockpit **prescriptif** du commercial : là où Weekly Perf regarde en arriè
 *   **Stratégies de prospection** : analyse du portefeuille (segments à meilleur taux de gain, comptes à opp perdue ré-attaquables) → suggestions concrètes sous forme de **presets de séance Call Manager pré-remplis**.
 *   **Adoption & qualité CRM** : mon usage du CRM — appels loggés, Events, contacts et comptes créés sur fenêtre glissante (mêmes définitions que Weekly Perf, pas de deuxième vérité), comparés à ma propre période précédente — et **complétude des champs critiques** de mes enregistrements (opps, contacts, comptes ; liste des champs dans le mapping CRM, jamais en dur). La lecture équipe de ces indicateurs reste hors Copilot (Weekly Perf, et challenges Arena qui les consommeront — lot 5.1).
 *   **Contrat** : `docs/specs/copilot.md`. **Précondition** : audit SOQL (lot 9.0) — calibrage des seuils et validation Théo avant toute UI.
+
+### 9. 📊 Business Review (Cockpit Macro) — *Nouveau — Phase 6 (re-spécifiée 2026-07-11)*
+Le cockpit **macro** du pilotage, complément deux-apps de Weekly Perf (décision 2026-07-11) : portage X OS du dashboard V6 construit côté Hermes.
+*   **Périodes & comparaisons** : granularité Semaine / Mois / Trimestre / Année, navigation historique libre, comparaison automatique même période **N-1** (et N-2) ; tous les KPIs suivent la période sélectionnée.
+*   **Analyses** : CA signé et pipeline par commercial (filtres pilotés par les profils), répartition CA par type de vente, funnel SDR (`Resultat_call__c`), opportunités à l'attention (sans action / clés / chaudes, score de pertinence).
+*   **Partage d'analyses** : un manager/admin partage une vue configurée (période + filtres + note) avec un commercial — table `shared_analyses`, données recalculées à l'ouverture ; le commercial ne voit que « Partagées avec moi », pas d'explorateur macro libre.
+*   **Contrat** : `docs/specs/business-review.md`. **Précondition** : audit 6.0 (FY, CA signé, profondeur N-2, picklists) — validation Théo avant l'UI.
 
 ---
 

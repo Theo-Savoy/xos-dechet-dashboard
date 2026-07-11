@@ -42,12 +42,13 @@ Moteur de **règles déterministes** calculées depuis Tasks, Events, `Opportuni
 ### 2.3 Stratégies de prospection
 - Analyse du portefeuille : segments (secteur × effectif) à meilleur taux de gain, comptes à opp perdue ré-attaquables, contacts jamais appelés dans les segments porteurs.
 - Chaque suggestion = un **preset de séance Call Manager pré-rempli** (payload de filtres v2 existant) : « 20 contacts secteur X jamais appelés » → bouton « Lancer la séance ». On capitalise sur le moteur de ciblage v2, rien de nouveau côté écriture.
+- **Analyse des séances passées** *(précision Théo 2026-07-11)* : l'historique **de mes séances** Call Manager (sessions Postgres + résultats d'appels SF `Resultat_call__c`) alimente les recommandations — taux de décroché/RDV par segment et par créneau, audiences qui ont marché → « refaire une séance comme celle du 3/07 », relances des contacts « à rappeler » échus. Lecture seule des tables sessions existantes, aucune nouvelle collecte.
 
 ### 2.4 Adoption & qualité CRM *(ajout validé 2026-07-11)*
 Répond à : **le CRM est-il bien utilisé ?**
 - **Volumes d'usage par commercial**, fenêtre glissante (semaine courante + `adoption_window_weeks` = 4 semaines) : appels loggés (Tasks type appel — **définition Weekly Perf**), RDV (Events), **contacts créés**, **comptes créés**. Comparaison : sa propre période précédente + médiane équipe.
 - **Complétude des champs critiques** : % de remplissage par objet, sur les enregistrements dont le commercial est Owner (opps ouvertes, contacts, comptes actifs). Liste des champs dans le **mapping CRM** (§ 5), jamais en dur.
-- **Vues** : « Moi » (tous) / « Équipe » (manager+admin) — même modèle que Weekly Perf. La vue équipe donne un mini-score d'adoption par commercial (volumes + complétude), sans classement public (la gamification, c'est Arena — ces indicateurs alimenteront ses challenges, lot 5.1).
+- **Vue strictement personnelle** (cf. § 1) : mes volumes, mes jauges. Seule référence externe autorisée : la **médiane équipe anonyme** (agrégat calculé côté serveur, jamais les chiffres d'un collègue). La lecture équipe de ces indicateurs vit dans Weekly Perf ; le classement, dans Arena (lot 5.1).
 - ⚠️ **Attribution des créations à trancher à l'audit 9.0** : `CreatedById` = utilisateur d'intégration sur les chemins X OS (avant liaison OAuth 8.1b) → probablement compter par `OwnerId`, à vérifier sur les données réelles.
 
 ## 3. Contrat API (draft — figé au lot 9.1 après l'audit)
@@ -56,14 +57,14 @@ Répond à : **le CRM est-il bien utilisé ?**
 
 | Resource | Rôle | Params |
 |---|---|---|
-| `pipeline` | opps ouvertes triées par urgence + bandeau closing | `user` (manager/admin) |
-| `alerts` | alertes par règle, triées par sévérité | `user`, `rules` (filtre optionnel) |
-| `adoption` | volumes d'usage + complétude champs critiques | `view=me\|team`, `weeks` |
-| `strategies` | suggestions {label, explication, preset_payload} | — |
+| `pipeline` | mes opps ouvertes triées par urgence + bandeau closing | — |
+| `alerts` | mes alertes par règle, triées par sévérité | `rules` (filtre optionnel) |
+| `adoption` | mes volumes d'usage + complétude champs critiques (+ médiane équipe anonyme) | `weeks` |
+| `strategies` | suggestions {label, explication, preset_payload} depuis mon portefeuille + mes séances passées | — |
 
-- **Authz** : JWT Supabase requis (`api/_auth.js`) ; `view=team` et `user=` réservés manager+admin (modèle `api/perf`).
+- **Authz** : JWT Supabase requis (`api/_auth.js`) ; **toutes les resources sont scoping JWT** — aucun paramètre ne permet de viser un autre utilisateur (vue strictement personnelle, y compris pour manager/admin).
 - **Cache** : `s-maxage=900` (aligné analytics). Pas d'écriture → pas d'invalidation à gérer.
-- **Erreurs** : 401 sans JWT, 403 vue équipe pour un commercial, 502 SF injoignable — pattern des endpoints existants.
+- **Erreurs** : 401 sans JWT, 502 SF injoignable — pattern des endpoints existants.
 
 ## 4. Découpage en lots
 
@@ -78,7 +79,7 @@ Voir `docs/xos_implementation_plan.md` Phase 9 : **9.0 audit SOQL** (volumétrie
 
 ## 6. UI (`src/apps/copilot/` — lot 9.2)
 
-- Fenêtre X OS (registre dock, `id: "copilot"`), charte glassmorphism, rôles : tous (vue équipe gated).
+- Fenêtre X OS (registre dock, `id: "copilot"`), charte glassmorphism, rôles : tous — contenu **strictement personnel**, identique quel que soit le rôle.
 - **Structure** : colonne gauche = pipeline trié (cards opp compactes : nom, montant, étape, CloseDate avec code couleur) ; zone principale = file d'alertes groupées par règle, chaque carte porte son bouton d'action 1-clic ; onglet ou panneau « Adoption » (tuiles volumes + jauges de complétude, vues Moi/Équipe) ; panneau « Prospection » (suggestions → bouton « Lancer la séance »).
 - **États** : loading squelette, vide (« rien à signaler 🎉 »), erreur SF gracieuse.
 - Détail du plan de design à poser au lot 9.2 (comme `weekly-perf.md` § 5), après l'audit.
@@ -89,7 +90,7 @@ Voir `docs/xos_implementation_plan.md` Phase 9 : **9.0 audit SOQL** (volumétrie
 2. Volumes d'adoption cohérents avec `api/perf` sur la même fenêtre (mêmes définitions → mêmes chiffres).
 3. Action 1-clic de bout en bout : alerte → Task créée dans SF avec `OwnerId` = le commercial connecté + entrée `action_journal`.
 4. Suggestion de prospection → séance Call Manager ouverte avec les bons filtres pré-remplis.
-5. Un commercial ne voit ni la vue équipe ni les données d'un collègue (403).
+5. Aucun utilisateur (même manager/admin) ne peut lire les données Copilot d'un autre : tout paramètre de ciblage est ignoré ou refusé, seules les données du JWT sont servies.
 6. `npx tsc --noEmit`, `eslint`, build OK ; non-régression Cleaner (gate QC standard).
 
 ## 8. Questions ouvertes pour l'audit 9.0
