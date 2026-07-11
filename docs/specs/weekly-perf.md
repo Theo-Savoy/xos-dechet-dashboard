@@ -260,7 +260,7 @@ Weekly Perf doit permettre de **retrouver toutes les infos du tableur de suivi a
 | Nombre de RDV effectués | `pulse.meetings` (Events, `ActivityDate`) | ✅ déjà en 3.1 |
 | Nombre d'opportunités détectées | `pipeline.generated_count` (Opportunity `CreatedDate`) | ✅ déjà en 3.1 |
 | Montant HT signé sur la semaine | `pipeline.won_amount` (`IsWon`, `CloseDate` ∈ semaine) | ✅ déjà en 3.1 |
-| Montant sur-mesure / catalogue / conseil / ventes exceptionnelles | breakdown du signé par `Type_de_vente__c` (picklist vérifiée 2026-07-11 : Catalogue, Sur-mesure, Conseil, LMS, XOS+). **Défaut proposé** : « ventes exceptionnelles » = LMS + XOS+ regroupés (véto Théo possible) | 🆕 3.3 |
+| Montant sur-mesure / catalogue / conseil | breakdown du signé par `Type_de_vente__c` (picklist vérifiée 2026-07-11 : Catalogue, Sur-mesure, Conseil, LMS, XOS+). **« Ventes exceptionnelles » supprimée du suivi** (décision Théo 2026-07-11) : pas de ligne LMS/XOS+ dédiée — ces montants restent comptés dans le CA signé total | 🆕 3.3 |
 | Dont ventes ARR | **acté 2026-07-11** : `Type_de_vente__c = 'Catalogue'` AND `Type_de_commission__c ∈ {'Abonnement 2 ans','Abonnement 3 ans','Abonnement 4 ans','Abonnement 5 ans'}` (picklist vérifiée ; « Abonnement 1 an » exclu) | 🆕 3.3 |
 | Forecast sur le trimestre | **acté 2026-07-11** : signé du **trimestre fiscal en cours** (FY juillet–juin) + Σ(`Amount` × `Probability`/100) des opps **ouvertes** avec `CloseDate` ∈ trimestre fiscal courant | 🆕 3.3 |
 | Montant de pipe sur-mesure | opps ouvertes `Type_de_vente__c = Sur-mesure`, somme `Amount` (règle V6 : `CloseDate ∈ [aujourd'hui, +180 j]`) | 🆕 3.3 |
@@ -280,6 +280,4 @@ Weekly Perf doit permettre de **retrouver toutes les infos du tableur de suivi a
 - **Toggle « Tableau »** : grille métrique × semaines fidèle au tableur (totaux + moyennes calculés, zéro `#DIV/0!`), pour une transition douce depuis Sheets.
 - Les métriques spec v1 (propositions, effort) restent, visuellement secondaires par rapport aux métriques du rituel.
 
-### 9.4 Questions ouvertes — ✅ résolues 2026-07-11 (réponses Théo intégrées au § 9.1)
-
-Seul reste ouvert (non bloquant, défaut posé) : « ventes exceptionnelles » = LMS + XOS+ regroupés — véto possible.
+### 9.4 Questions ouvertes — ✅ toutes résolues 2026-07-11 (réponses Théo intégrées au § 9.1 ; « ventes exceptionnelles » retirée du suivi)
