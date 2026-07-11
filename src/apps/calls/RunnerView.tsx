@@ -496,19 +496,28 @@ export function RunnerView({
                 <Tag variant={statusVariant(focusedContact.status)}>{statusLabel(focusedContact.status)}</Tag>
                 {focusedContact.outcome && <Tag variant="accent">{focusedContact.outcome}</Tag>}
                 {focusedContact.recall_at && <span>Rappel {focusedContact.recall_at}</span>}
-                {contactContext?.npa && <Tag variant="alert">Ne pas rappeler (NPA)</Tag>}
               </div>
+            )}
+            {!contextLoading && contactContext?.npa && (
+              <Tag variant="alert" className="calls-contact-card__npa">
+                Ne pas rappeler (NPA)
+              </Tag>
             )}
           </GlassCard>
 
-          <div className="calls-cockpit-side">
+          <div className={`calls-cockpit-side${contextLoading ? " calls-cockpit-side--loading" : ""}`}>
+            {contextLoading ? (
+              <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+                <p className="calls-muted">Chargement historique & opportunités…</p>
+              </GlassCard>
+            ) : (
+              <>
             <GlassCard className="calls-context-panel">
               <h3>Historique d&apos;appels</h3>
-              {contextLoading && <p className="calls-state">Chargement…</p>}
-              {!contextLoading && contactContext && contactContext.tasks.length === 0 && (
+              {contactContext && contactContext.tasks.length === 0 && (
                 <p className="calls-muted">Aucun appel Salesforce récent.</p>
               )}
-              {!contextLoading && contactContext && contactContext.tasks.length > 0 && (
+              {contactContext && contactContext.tasks.length > 0 && (
                 <ul className="calls-context-list">
                   {contactContext.tasks.map((task) => (
                     <li key={task.id}>
@@ -527,11 +536,10 @@ export function RunnerView({
 
             <GlassCard className="calls-context-panel">
               <h3>Opportunités</h3>
-              {contextLoading && <p className="calls-state">Chargement…</p>}
-              {!contextLoading && contactContext && contactContext.opportunities.length === 0 && (
+              {contactContext && contactContext.opportunities.length === 0 && (
                 <p className="calls-muted">Aucune opportunité sur le compte.</p>
               )}
-              {!contextLoading && contactContext && contactContext.opportunities.length > 0 && (
+              {contactContext && contactContext.opportunities.length > 0 && (
                 <ul className="calls-context-list">
                   {contactContext.opportunities.map((opp) => (
                     <li key={opp.id}>
@@ -547,6 +555,8 @@ export function RunnerView({
                 </ul>
               )}
             </GlassCard>
+              </>
+            )}
           </div>
 
           {awaitingEvent ? (

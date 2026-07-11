@@ -262,6 +262,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const loadContactContext = useCallback(
     async (sessionId: number, contactId: number) => {
       if (!token) return;
+      setContactContext(null);
       setContextLoading(true);
       try {
         setContactContext(await fetchContactContext(token, sessionId, contactId));
