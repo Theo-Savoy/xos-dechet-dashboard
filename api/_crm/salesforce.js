@@ -94,7 +94,9 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
   }
   if (enterprise.opp_perdue === true) {
     conditions.push(`${contact.fields.accountId} IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.stageName} = '${escapeSOQL(opportunity.closedLostStage)}')`);
-    if (enterprise.opp_ouverte !== false) {
+    // Spec: lost + zero open. Skip the NOT IN when opp_ouverte is already true
+    // (accounts with both open and lost) — SF allows at most 2 semi-join subqueries.
+    if (enterprise.opp_ouverte !== true && enterprise.opp_ouverte !== false) {
       conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false)`);
     }
   }
@@ -207,7 +209,10 @@ export async function searchContacts(token, soql) {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) return { error: "sf_query_error" };
+  if (!response.ok) {
+    const message = (await response.text()).slice(0, 500);
+    return { error: "sf_query_error", message };
+  }
   return { records: (await response.json()).records || [] };
 }
 

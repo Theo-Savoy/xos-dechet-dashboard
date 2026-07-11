@@ -54,10 +54,14 @@ export function TriState({
   label,
   value,
   onChange,
+  disabledValues = [],
+  disabledReasons = {},
 }: {
   label: string;
   value: boolean | null;
   onChange: (next: boolean | null) => void;
+  disabledValues?: (boolean | null)[];
+  disabledReasons?: Partial<Record<string, string>>;
 }) {
   const opts: { value: boolean | null; label: string }[] = [
     { value: null, label: "Peu importe" },
@@ -71,17 +75,23 @@ export function TriState({
         <span>{label}</span>
       </div>
       <div className="calls-tristate">
-        {opts.map((opt) => (
-          <button
-            key={String(opt.value)}
-            type="button"
-            className={`calls-tristate__opt${value === opt.value ? " calls-tristate__opt--active" : ""}`}
-            onClick={() => onChange(opt.value)}
-            aria-pressed={value === opt.value}
-          >
-            {opt.label}
-          </button>
-        ))}
+        {opts.map((opt) => {
+          const disabled = disabledValues.includes(opt.value);
+          const key = String(opt.value);
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`calls-tristate__opt${value === opt.value ? " calls-tristate__opt--active" : ""}${disabled ? " calls-tristate__opt--disabled" : ""}`}
+              onClick={() => !disabled && onChange(opt.value)}
+              aria-pressed={value === opt.value}
+              disabled={disabled}
+              title={disabled ? disabledReasons[key] : undefined}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

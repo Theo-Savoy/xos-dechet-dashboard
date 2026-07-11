@@ -25,6 +25,7 @@ type NewSessionViewProps = {
   matchCount: number | null;
   matchCountCapped: boolean;
   matchCountLoading: boolean;
+  matchCountError: string | null;
   error: string | null;
   preview: ContactPreview[];
   dedup: DedupEntry[];
@@ -74,6 +75,7 @@ export function NewSessionView({
   matchCount,
   matchCountCapped,
   matchCountLoading,
+  matchCountError,
   error,
   preview,
   dedup,
@@ -184,6 +186,7 @@ export function NewSessionView({
         matchCount={matchCount}
         matchCountCapped={matchCountCapped}
         matchCountLoading={matchCountLoading}
+        matchCountError={matchCountError}
         contactLimit={contactLimit}
         onContactLimitChange={onContactLimitChange}
         maxPerCompany={maxPerCompany}

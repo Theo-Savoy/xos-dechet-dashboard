@@ -589,6 +589,7 @@ describe("call targeting copy and controls", () => {
     matchCount: null as number | null,
     matchCountCapped: false,
     matchCountLoading: false,
+    matchCountError: null,
     contactLimit: 200 as const,
     onContactLimitChange: vi.fn(),
     maxPerCompany: null as null,
@@ -621,8 +622,39 @@ describe("call targeting copy and controls", () => {
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByLabelText("Maximum de contacts par entreprise")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Avertir" }).getAttribute("aria-pressed")).toBe("true");
-    expect(document.body.textContent).not.toContain("Sales" + "force");
     expect(screen.queryByText("Durée min (sec)")).toBeNull();
+  });
+
+  it("surfaces live count errors instead of the idle placeholder", () => {
+    render(
+      <FilterBuilder
+        {...filterBuilderProps}
+        matchCount={null}
+        matchCountError="Salesforce a refusé la requête"
+      />,
+    );
+    expect(screen.getByText("Comptage impossible")).toBeTruthy();
+    expect(screen.queryByText("Filtres → comptage live")).toBeNull();
+  });
+
+  it("shows opportunity filter guidance when open and lost are both selected", () => {
+    render(
+      <FilterBuilder
+        {...filterBuilderProps}
+        filters={{
+          ...emptyFilterTree(),
+          entreprise: {
+            ...emptyFilterTree().entreprise,
+            opp_ouverte: true,
+            opp_perdue: true,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByRole("note")).toBeTruthy();
+    expect(screen.getByText(/aucune ouverte/i)).toBeTruthy();
+    const nonButtons = screen.getAllByRole("button", { name: "Non" });
+    expect(nonButtons.some((btn) => (btn as HTMLButtonElement).disabled)).toBe(true);
   });
 
   it("only shows preset deletion to the current preset owner", async () => {
@@ -697,6 +729,7 @@ describe("preview selection and enriched rows", () => {
         matchCount={null}
         matchCountCapped={false}
         matchCountLoading={false}
+        matchCountError={null}
         error={null}
         preview={preview}
         dedup={[]}
@@ -762,6 +795,7 @@ describe("preview selection and enriched rows", () => {
         matchCount={null}
         matchCountCapped={false}
         matchCountLoading={false}
+        matchCountError={null}
         error={null}
         preview={cappedPreview}
         dedup={[]}
@@ -818,6 +852,7 @@ describe("dedup modes in preview selection", () => {
     matchCount: null as number | null,
     matchCountCapped: false,
     matchCountLoading: false,
+    matchCountError: null,
     error: null,
     preview,
     dedup,
@@ -869,6 +904,7 @@ describe("error announcements", () => {
         matchCount={null}
         matchCountCapped={false}
         matchCountLoading={false}
+        matchCountError={null}
         error="Échec d'enregistrement de la liste d'appels (base de données)"
         preview={[]}
         dedup={[]}

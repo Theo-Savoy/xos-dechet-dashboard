@@ -70,6 +70,9 @@ export type SessionContact = {
   marked_npa?: boolean;
   sf_contact_url?: string | null;
   sf_account_url?: string | null;
+  /** Present when the contact is shown in the infinite recall queue. */
+  origin_session_id?: number;
+  origin_session_name?: string;
 };
 
 export type ContactTaskHistoryItem = {

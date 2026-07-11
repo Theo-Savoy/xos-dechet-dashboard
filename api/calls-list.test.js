@@ -196,7 +196,7 @@ describe("adapter exports", () => {
     expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
   });
 
-  it("buildTargetQuery opp_ouverte=true + opp_perdue=true produces contradictory conditions without duplicate subqueries", () => {
+  it("buildTargetQuery opp_ouverte=true + opp_perdue=true keeps ≤2 semi-joins (open AND lost)", () => {
     const soql = buildTargetQuery(
       { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: true } },
       mapping,
@@ -204,9 +204,9 @@ describe("adapter exports", () => {
     );
     expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
     expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
-    const notInMatches = soql.match(/AccountId NOT IN \(SELECT AccountId FROM Opportunity WHERE IsClosed = false\)/g);
-    expect(notInMatches).toHaveLength(1);
+    expect(soql).not.toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
+    const semiJoins = soql.match(/AccountId (?:NOT )?IN \(SELECT/g) || [];
+    expect(semiJoins.length).toBeLessThanOrEqual(2);
   });
 
   it("buildTargetQuery opp_ouverte=false + opp_perdue=true has no duplicate NOT IN subquery", () => {

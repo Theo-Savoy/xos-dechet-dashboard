@@ -566,7 +566,13 @@ export async function POST(request) {
   if (action === "list_contacts") {
     const result = await listContacts(client, user.id, body);
     if (result.error) {
-      return new Response(JSON.stringify({ error: result.error }), { status: result.status || 500, headers });
+      return new Response(
+        JSON.stringify({
+          error: result.error,
+          ...(result.message ? { message: result.message } : {}),
+        }),
+        { status: result.status || 500, headers },
+      );
     }
     if (typeof result.count === "number") {
       return new Response(

@@ -8,8 +8,14 @@ import {
   type ResultatCall,
 } from "../../crm";
 import { EventPanel } from "./EventPanel";
+import { EmptyState } from "./EmptyState";
 import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
 import { ProgressBar } from "./ProgressBar";
+import {
+  countRecallDateFilters,
+  matchesRecallDateFilter,
+  type RecallDateFilter,
+} from "./recallQueue";
 import { nextContinuationName } from "./sessionNaming";
 import type { ContactContext, SessionContact, SessionDetail, SessionSummary } from "./types";
 import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
@@ -39,6 +45,8 @@ type RunnerViewProps = {
   hubSessions: SessionSummary[];
   currentContact: SessionContact | null;
   focusedContactId?: number | null;
+  /** Infinite recall queue reuses the same cockpit with date filters. */
+  variant?: "session" | "recalls";
   loading: boolean;
   error: string | null;
   awaitingEvent: SessionContact | null;
@@ -228,6 +236,7 @@ export function RunnerView({
   hubSessions,
   currentContact,
   focusedContactId = null,
+  variant = "session",
   loading,
   error,
   awaitingEvent,
@@ -242,10 +251,13 @@ export function RunnerView({
   onLogEvent,
   onDeferContacts,
 }: RunnerViewProps) {
+  const isRecallQueue = variant === "recalls";
+  const today = todayParisIso();
   const [mode, setMode] = useState<RunnerMode>("list");
   const [focusedId, setFocusedId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [listStatusFilter, setListStatusFilter] = useState<ListStatusFilter>("all");
+  const [recallDateFilter, setRecallDateFilter] = useState<RecallDateFilter>("today");
   const [listQuery, setListQuery] = useState("");
   const [resultat, setResultat] = useState<ResultatCall>(RESULTAT_OPTIONS[0].value);
   const [bulkResultat, setBulkResultat] = useState<ResultatCall>(RESULTAT_OPTIONS[0].value);
@@ -278,10 +290,32 @@ export function RunnerView({
     }),
     [contacts],
   );
+  const recallDateCounts = useMemo(
+    () =>
+      countRecallDateFilters(
+        contacts.map((c) => ({
+          id: c.id,
+          session_id: c.origin_session_id ?? 0,
+          session_name: c.origin_session_name ?? "",
+          session_status: "active" as const,
+          contact_name: c.contact_name,
+          account_name: c.account_name,
+          phone: c.phone,
+          recall_at: c.recall_at ?? "",
+          outcome: c.outcome,
+        })),
+        today,
+      ),
+    [contacts, today],
+  );
   const filteredContacts = useMemo(() => {
     const q = listQuery.trim().toLowerCase();
     return contacts.filter((contact) => {
-      if (listStatusFilter !== "all" && contact.status !== listStatusFilter) return false;
+      if (isRecallQueue) {
+        if (!matchesRecallDateFilter(contact.recall_at, recallDateFilter, today)) return false;
+      } else if (listStatusFilter !== "all" && contact.status !== listStatusFilter) {
+        return false;
+      }
       if (!q) return true;
       const haystack = [
         contact.contact_name,
@@ -289,19 +323,24 @@ export function RunnerView({
         contact.account_name,
         contact.phone,
         contact.email,
+        contact.origin_session_name,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [contacts, listStatusFilter, listQuery]);
+  }, [contacts, listStatusFilter, listQuery, isRecallQueue, recallDateFilter, today]);
   const pendingSelected = useMemo(
     () => [...selectedIds].filter((id) => pendingContacts.some((c) => c.id === id)),
     [selectedIds, pendingContacts],
   );
+  const visiblePending = useMemo(
+    () => filteredContacts.filter((c) => c.status === "pending"),
+    [filteredContacts],
+  );
   const allPendingSelected =
-    pendingContacts.length > 0 && pendingContacts.every((c) => selectedIds.has(c.id));
+    visiblePending.length > 0 && visiblePending.every((c) => selectedIds.has(c.id));
   const singleSelectedId = pendingSelected.length === 1 ? pendingSelected[0] : null;
   const singleSelectedContact = singleSelectedId
     ? contacts.find((c) => c.id === singleSelectedId) ?? null
@@ -338,6 +377,13 @@ export function RunnerView({
     ?? (contextContactId === focusedContact?.id ? contactContext?.title : null)
     ?? null;
   const contextApplies = contextContactId != null && contextContactId === focusedContact?.id;
+
+  useEffect(() => {
+    if (!isRecallQueue) return;
+    if (recallDateFilter === "today" && recallDateCounts.today === 0 && recallDateCounts.overdue > 0) {
+      setRecallDateFilter("overdue");
+    }
+  }, [isRecallQueue, recallDateFilter, recallDateCounts.today, recallDateCounts.overdue]);
 
   useEffect(() => {
     if (awaitingEvent) setMode("detail");
@@ -404,7 +450,7 @@ export function RunnerView({
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(pendingContacts.map((c) => c.id)));
+    setSelectedIds(new Set(visiblePending.map((c) => c.id)));
   };
 
   const handleDefaultRecallDays = (days: number) => {
@@ -497,11 +543,11 @@ export function RunnerView({
   const called = contacts.filter((c) => c.status === "called").length;
 
   return (
-    <div className="calls-view calls-view--runner">
+    <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}`}>
       <header className="calls-view__header">
         <div>
-          <Tag variant="accent">Cockpit</Tag>
-          <h2>{session.name}</h2>
+          <Tag variant="accent">{isRecallQueue ? "File de rappels" : "Cockpit"}</Tag>
+          <h2>{isRecallQueue ? "Rappels" : session.name}</h2>
         </div>
         <div className="calls-view__actions">
           <div className="calls-mode-toggle" role="group" aria-label="Mode d'affichage">
@@ -528,30 +574,58 @@ export function RunnerView({
         </div>
       </header>
 
-      <div className="calls-cockpit-kpis" aria-label="Indicateurs de séance">
-        <GlassCard className="calls-stat">
-          <span>Contacts</span>
-          <strong className="xos-numeric">{kpis.total}</strong>
-        </GlassCard>
-        <GlassCard className="calls-stat">
-          <span>Restant</span>
-          <strong className="xos-numeric">{kpis.remaining}</strong>
-        </GlassCard>
-        <GlassCard className="calls-stat">
-          <span>Décrochés</span>
-          <strong className="xos-numeric">{kpis.decroches}</strong>
-        </GlassCard>
-        <GlassCard className="calls-stat">
-          <span>Argumentés</span>
-          <strong className="xos-numeric">{kpis.argumentes}</strong>
-        </GlassCard>
-        <GlassCard className="calls-stat">
-          <span>RDV</span>
-          <strong className="xos-numeric">{kpis.rdv}</strong>
-        </GlassCard>
-      </div>
+      {!isRecallQueue && (
+        <>
+          <div className="calls-cockpit-kpis" aria-label="Indicateurs de séance">
+            <GlassCard className="calls-stat">
+              <span>Contacts</span>
+              <strong className="xos-numeric">{kpis.total}</strong>
+            </GlassCard>
+            <GlassCard className="calls-stat">
+              <span>Restant</span>
+              <strong className="xos-numeric">{kpis.remaining}</strong>
+            </GlassCard>
+            <GlassCard className="calls-stat">
+              <span>Décrochés</span>
+              <strong className="xos-numeric">{kpis.decroches}</strong>
+            </GlassCard>
+            <GlassCard className="calls-stat">
+              <span>Argumentés</span>
+              <strong className="xos-numeric">{kpis.argumentes}</strong>
+            </GlassCard>
+            <GlassCard className="calls-stat">
+              <span>RDV</span>
+              <strong className="xos-numeric">{kpis.rdv}</strong>
+            </GlassCard>
+          </div>
 
-      <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
+          <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
+        </>
+      )}
+
+      {isRecallQueue && (
+        <div className="calls-recall-queue__filters" role="group" aria-label="Filtrer les rappels">
+          {(
+            [
+              ["today", "Aujourd'hui", recallDateCounts.today],
+              ["overdue", "En retard", recallDateCounts.overdue],
+              ["upcoming", "À venir", recallDateCounts.upcoming],
+              ["all", "Tous", recallDateCounts.all],
+            ] as const
+          ).map(([value, label, count]) => (
+            <button
+              key={value}
+              type="button"
+              className={`calls-list-filter-chip${recallDateFilter === value ? " calls-list-filter-chip--active" : ""}`}
+              aria-pressed={recallDateFilter === value}
+              onClick={() => setRecallDateFilter(value)}
+            >
+              {label}
+              <span className="xos-numeric">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <GlassCard className="calls-error">
@@ -559,7 +633,19 @@ export function RunnerView({
         </GlassCard>
       )}
 
-      {mode === "list" ? (
+      {isRecallQueue && contacts.length === 0 && !loading ? (
+        <GlassCard className="calls-empty calls-empty--hero">
+          <EmptyState
+            title="Rien à rappeler"
+            description="Inbox zero — dès qu'un appel planifie un rappel, il atterrit ici, prêt à être traité comme une séance."
+            action={
+              <Button variant="secondary" onClick={onBack}>
+                Retour au hub
+              </Button>
+            }
+          />
+        </GlassCard>
+      ) : mode === "list" ? (
         <div className="calls-cockpit-list-wrap">
           {pendingSelected.length > 0 && (
             <GlassCard className="calls-bulk-bar">
@@ -631,20 +717,22 @@ export function RunnerView({
                       ? "Enregistrement…"
                       : `Consigner pour ${pendingSelected.length}`}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => openDefer(pendingSelected)}
-                    disabled={loading}
-                    title={`Reporter vers « ${continuationLabel} »`}
-                  >
-                    Non contacté
-                  </Button>
+                  {!isRecallQueue && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => openDefer(pendingSelected)}
+                      disabled={loading}
+                      title={`Reporter vers « ${continuationLabel} »`}
+                    >
+                      Non contacté
+                    </Button>
+                  )}
                 </div>
               )}
             </GlassCard>
           )}
 
-          {deferIds && (
+          {deferIds && !isRecallQueue && (
             <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
               <strong>
                 Non contacté → {continuationLabel}
@@ -702,52 +790,58 @@ export function RunnerView({
 
           <GlassCard className="calls-cockpit-list">
             <div className="calls-cockpit-list__toolbar">
-              <h3>Liste de la séance</h3>
+              <h3>{isRecallQueue ? "Contacts à rappeler" : "Liste de la séance"}</h3>
               <div className="calls-preview__actions">
                 <Button
                   variant="secondary"
-                  disabled={loading || pendingContacts.length === 0}
+                  disabled={loading || visiblePending.length === 0}
                   onClick={toggleSelectAllPending}
                 >
                   {allPendingSelected
                     ? "Tout désélectionner"
-                    : `Sélectionner les à faire (${pendingContacts.length})`}
+                    : `Sélectionner les à faire (${visiblePending.length})`}
                 </Button>
               </div>
             </div>
             <div className="calls-cockpit-list__filters">
-              <div className="calls-list-filter-chips" role="group" aria-label="Filtrer par statut">
-                {(
-                  [
-                    ["all", "Tous", statusCounts.all],
-                    ["pending", "À faire", statusCounts.pending],
-                    ["called", "Appelés", statusCounts.called],
-                    ["skipped", "Non contactés", statusCounts.skipped],
-                  ] as const
-                ).map(([value, label, count]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`calls-list-filter-chip${listStatusFilter === value ? " calls-list-filter-chip--active" : ""}`}
-                    aria-pressed={listStatusFilter === value}
-                    onClick={() => setListStatusFilter(value)}
-                  >
-                    {label}
-                    <span className="calls-list-filter-chip__count xos-numeric">{count}</span>
-                  </button>
-                ))}
-              </div>
+              {!isRecallQueue && (
+                <div className="calls-list-filter-chips" role="group" aria-label="Filtrer par statut">
+                  {(
+                    [
+                      ["all", "Tous", statusCounts.all],
+                      ["pending", "À faire", statusCounts.pending],
+                      ["called", "Appelés", statusCounts.called],
+                      ["skipped", "Non contactés", statusCounts.skipped],
+                    ] as const
+                  ).map(([value, label, count]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`calls-list-filter-chip${listStatusFilter === value ? " calls-list-filter-chip--active" : ""}`}
+                      aria-pressed={listStatusFilter === value}
+                      onClick={() => setListStatusFilter(value)}
+                    >
+                      {label}
+                      <span className="calls-list-filter-chip__count xos-numeric">{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <input
                 type="search"
                 className="calls-input calls-cockpit-list__search"
-                placeholder="Filtrer nom, poste, entreprise, tél…"
+                placeholder={
+                  isRecallQueue
+                    ? "Filtrer nom, entreprise, séance…"
+                    : "Filtrer nom, poste, entreprise, tél…"
+                }
                 value={listQuery}
                 onChange={(e) => setListQuery(e.target.value)}
                 aria-label="Filtrer la liste"
               />
             </div>
             <div className="calls-cockpit-list__scroll">
-            <ul className="calls-cockpit-list__rows">
+            <ul className={`calls-cockpit-list__rows${isRecallQueue ? " calls-cockpit-list__rows--recalls" : ""}`}>
               <li className="calls-cockpit-list__header" aria-hidden="true">
                 <span />
                 <span>Contact</span>
@@ -755,14 +849,14 @@ export function RunnerView({
                 <span>Entreprise</span>
                 <span>Email</span>
                 <span>Tél.</span>
-                <span>Statut</span>
+                <span>{isRecallQueue ? "Séance" : "Statut"}</span>
                 <span>Rappel</span>
               </li>
               {filteredContacts.map((contact) => {
                 const status = listStatusDisplay(contact);
                 return (
                 <li
-                  key={contact.id}
+                  key={isRecallQueue ? `${contact.origin_session_id}-${contact.id}` : contact.id}
                   className={[
                     contact.status !== "pending" ? "calls-cockpit-list__row--done" : "",
                     selectedIds.has(contact.id) ? "calls-cockpit-list__row--selected" : "",
@@ -814,15 +908,35 @@ export function RunnerView({
                       "—"
                     )}
                   </span>
-                  <span className="calls-cockpit-list__status" title={status.label}>
-                    <Tag variant={status.variant}>{status.label}</Tag>
+                  {isRecallQueue ? (
+                    <span
+                      className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap"
+                      title={contact.origin_session_name}
+                    >
+                      {contact.origin_session_name ?? "—"}
+                    </span>
+                  ) : (
+                    <span className="calls-cockpit-list__status" title={status.label}>
+                      <Tag variant={status.variant}>{status.label}</Tag>
+                    </span>
+                  )}
+                  <span className="calls-cockpit-list__cell xos-numeric">
+                    {contact.recall_at ? formatIsoDateFr(contact.recall_at) : "—"}
                   </span>
-                  <span className="calls-cockpit-list__cell xos-numeric">{contact.recall_at ? formatIsoDateFr(contact.recall_at) : "—"}</span>
                 </li>
                 );
               })}
               {filteredContacts.length === 0 && (
-                <li className="calls-cockpit-list__empty">Aucun contact pour ce filtre.</li>
+                <li className="calls-cockpit-list__empty">
+                  {isRecallQueue ? (
+                    <EmptyState
+                      title="Calme plat sur ce filtre"
+                      description="Aucun rappel ici — essayez « En retard », « À venir » ou « Tous »."
+                    />
+                  ) : (
+                    "Aucun contact pour ce filtre."
+                  )}
+                </li>
               )}
             </ul>
             </div>
@@ -833,6 +947,9 @@ export function RunnerView({
           <GlassCard className="calls-contact-card">
             <div className="calls-contact-card__top">
               <div>
+                {isRecallQueue && focusedContact.origin_session_name && (
+                  <Tag variant="accent">{focusedContact.origin_session_name}</Tag>
+                )}
                 <h3>{focusedContact.contact_name}</h3>
                 {(focusedContact.attempt_count ?? 0) > 0 && (
                   <Tag variant="muted">Tentative {focusedContact.attempt_count}</Tag>
@@ -1017,18 +1134,20 @@ export function RunnerView({
                   <Button onClick={handleSubmit} disabled={loading}>
                     {loading ? "Enregistrement…" : "Logguer & suivant"}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => openDefer([focusedContact.id])}
-                    disabled={loading}
-                    title={`Reporter vers « ${continuationLabel} »`}
-                  >
-                    Non contacté
-                  </Button>
+                  {!isRecallQueue && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => openDefer([focusedContact.id])}
+                      disabled={loading}
+                      title={`Reporter vers « ${continuationLabel} »`}
+                    >
+                      Non contacté
+                    </Button>
+                  )}
                 </div>
               )}
 
-              {resultat === "RDV planifié" && (
+              {resultat === "RDV planifié" && !isRecallQueue && (
                 <div className="calls-runner-actions">
                   <Button
                     variant="secondary"
@@ -1041,7 +1160,7 @@ export function RunnerView({
                 </div>
               )}
 
-              {deferIds && mode === "detail" && (
+              {deferIds && mode === "detail" && !isRecallQueue && (
                 <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
                   <strong>Non contacté → {continuationLabel}</strong>
                   <p className="calls-defer-panel__empty">

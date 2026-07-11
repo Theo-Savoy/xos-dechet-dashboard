@@ -1385,11 +1385,38 @@
   max-width: 14rem;
 }
 
-.calls-view--recalls .calls-contact-card__top {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
+.calls-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 1.5rem 1rem 1.25rem;
+  text-align: center;
+}
+
+.calls-empty-state__art {
+  color: var(--xos-accent);
+  margin-bottom: 0.25rem;
+}
+
+.calls-empty-state h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-family: var(--xos-font-display);
+}
+
+.calls-empty-state p {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--xos-text-muted);
+  line-height: 1.45;
+}
+
+.calls-cockpit-list__rows--recalls {
+  --calls-col-status: 9rem;
+}
+
+.calls-cockpit-list__empty .calls-empty-state {
+  padding: 2rem 1rem;
 }
 
 .calls-context-inline {
@@ -2129,6 +2156,38 @@
 .calls-tristate__opt--active {
   background: var(--xos-accent);
   color: #ffffff;
+}
+
+.calls-tristate__opt--disabled,
+.calls-tristate__opt:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.calls-fb-opp-guidance {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--xos-accent) 25%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 8%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.calls-fb-opp-guidance p {
+  margin: 0;
+}
+
+.calls-fb-opp-guidance__note {
+  margin-top: 0.35rem !important;
+  color: var(--xos-text-muted);
+}
+
+.calls-fb-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--xos-text-muted);
+  line-height: 1.35;
 }
 
 .calls-taginput {

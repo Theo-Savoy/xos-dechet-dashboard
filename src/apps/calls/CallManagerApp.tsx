@@ -25,7 +25,7 @@ import {
 import { resolveContextContactId } from "./runnerContext";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
-import { RecallQueueView } from "./RecallQueueView";
+import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
 import type {
@@ -62,7 +62,9 @@ function errorMessage(err: unknown): string {
       const hint = err.details?.trim();
       return hint
         ? `Salesforce a refusé l'opération : ${hint.slice(0, 220)}`
-        : "Salesforce a refusé l'enregistrement.";
+        : err.code === "sf_query_error"
+          ? "Salesforce a refusé la requête (filtres trop complexes ou champ invalide)."
+          : "Salesforce a refusé l'enregistrement.";
     }
     return `Erreur API (${err.code})`;
   }
@@ -90,6 +92,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [matchCount, setMatchCount] = useState<number | null>(null);
   const [matchCountCapped, setMatchCountCapped] = useState(false);
   const [matchCountLoading, setMatchCountLoading] = useState(false);
+  const [matchCountError, setMatchCountError] = useState<string | null>(null);
   const previewRequest = useRef(0);
   const matchCountRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
@@ -110,7 +113,6 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [contextLoading, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
-  const [focusedRecall, setFocusedRecall] = useState<RecallInboxItem | null>(null);
 
   const loadSessions = useCallback(async () => {
     if (!token) return;
@@ -207,10 +209,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           if (matchCountRequest.current !== requestId) return;
           setMatchCount(data.count);
           setMatchCountCapped(data.capped);
-        } catch {
+          setMatchCountError(null);
+        } catch (err) {
           if (matchCountRequest.current !== requestId) return;
           setMatchCount(null);
           setMatchCountCapped(false);
+          setMatchCountError(errorMessage(err));
         } finally {
           if (matchCountRequest.current === requestId) setMatchCountLoading(false);
         }
@@ -378,7 +382,23 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   );
 
   useEffect(() => {
-    if (view !== "runner" || !activeSession) return;
+    if (view !== "runner" && view !== "recalls") return;
+    if (view === "runner" && !activeSession) return;
+
+    if (view === "recalls") {
+      const focused = focusedContactId != null
+        ? contacts.find((c) => c.id === focusedContactId)
+        : contacts.find((c) => c.status === "pending") ?? null;
+      if (!focused?.origin_session_id) {
+        setContactContext(null);
+        setContextContactId(null);
+        return;
+      }
+      void loadContactContext(focused.origin_session_id, focused.id);
+      return;
+    }
+
+    if (!activeSession) return;
     const targetId = resolveContextContactId(contacts, awaitingEvent?.id, focusedContactId);
     if (!targetId) {
       setContactContext(null);
@@ -388,28 +408,23 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     void loadContactContext(activeSession.id, targetId);
   }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
 
-  useEffect(() => {
-    if (view !== "recalls" || !focusedRecall) {
-      if (view !== "recalls") return;
-      setContactContext(null);
-      setContextContactId(null);
-      return;
-    }
-    void loadContactContext(focusedRecall.session_id, focusedRecall.id);
-  }, [view, focusedRecall?.session_id, focusedRecall?.id, loadContactContext]);
-
   const openRecalls = useCallback(async () => {
     if (!token) return;
     setRunnerError(null);
-    setFocusedRecall(null);
+    setFocusedContactId(null);
+    setAwaitingEvent(null);
     setContactContext(null);
     setContextContactId(null);
     setRecallsLoading(true);
+    setActiveSession(RECALL_QUEUE_SESSION);
     setView("recalls");
     try {
-      setRecalls(await fetchRecalls(token));
+      const list = await fetchRecalls(token);
+      setRecalls(list);
+      setContacts(recallsToSessionContacts(list));
     } catch (err) {
       setRunnerError(errorMessage(err));
+      setContacts([]);
     } finally {
       setRecallsLoading(false);
     }
@@ -419,73 +434,46 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     if (!token) return [];
     const list = await fetchRecalls(token);
     setRecalls(list);
+    setContacts(recallsToSessionContacts(list));
     return list;
   };
 
-  const handleRecallLogAndNext = async (item: RecallInboxItem, payload: LogPayload) => {
-    if (!token) return;
-    setRunnerLoading(true);
-    setRunnerError(null);
-    try {
-      const result = await logCall(token, item.session_id, item.id, payload.resultat, {
-        comments: payload.comments,
-        recallAt: payload.recallAt,
-        doNotCall: payload.doNotCall,
-      });
-      if (result.needs_event) {
-        setRunnerError("Finalisez le RDV depuis la fiche pour enregistrer l'événement.");
-      }
-      await refreshRecallsQueue();
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
+  const resolveLogTarget = (contactId: number): { sessionId: number; contactId: number } | null => {
+    if (view === "recalls") {
+      const contact = contacts.find((c) => c.id === contactId);
+      if (!contact?.origin_session_id) return null;
+      return { sessionId: contact.origin_session_id, contactId };
     }
-  };
-
-  const handleRecallLogRdvAndNext = async (
-    item: RecallInboxItem,
-    payload: LogPayload,
-    event: { start: string; durationMin: number; invitees: string[] },
-  ) => {
-    if (!token) return;
-    setRunnerLoading(true);
-    setRunnerError(null);
-    try {
-      const result = await logCall(token, item.session_id, item.id, "RDV planifié", {
-        comments: payload.comments,
-        doNotCall: payload.doNotCall,
-      });
-      if (result.needs_event) {
-        await logEvent(token, item.session_id, item.id, event.start, event.durationMin, event.invitees);
-      }
-      await refreshRecallsQueue();
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
-    }
+    if (!activeSession) return null;
+    return { sessionId: activeSession.id, contactId };
   };
 
   const handleLogAndNext = async (contactId: number, payload: LogPayload) => {
-    if (!token || !activeSession) return;
+    if (!token) return;
+    const target = resolveLogTarget(contactId);
+    if (!target) return;
 
     setRunnerLoading(true);
     setRunnerError(null);
     try {
-      const result = await logCall(token, activeSession.id, contactId, payload.resultat, {
+      const result = await logCall(token, target.sessionId, target.contactId, payload.resultat, {
         comments: payload.comments,
         recallAt: payload.recallAt,
         doNotCall: payload.doNotCall,
       });
+      if (view === "recalls") {
+        setFocusedContactId(null);
+        await refreshRecallsQueue();
+        return;
+      }
       if (result.needs_event) {
-        const refreshed = await fetchSession(token, activeSession.id);
+        const refreshed = await fetchSession(token, target.sessionId);
         const updatedCurrent = refreshed.contacts.find((c) => c.id === contactId);
         setContacts(refreshed.contacts);
         setAwaitingEvent(updatedCurrent ?? null);
       } else {
         setFocusedContactId(null);
-        await advanceOrComplete(activeSession.id);
+        await advanceOrComplete(target.sessionId);
       }
     } catch (err) {
       setRunnerError(errorMessage(err));
@@ -499,20 +487,22 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     payload: LogPayload,
     event: { start: string; durationMin: number; invitees: string[] },
   ) => {
-    if (!token || !activeSession) return;
+    if (!token) return;
+    const target = resolveLogTarget(contactId);
+    if (!target) return;
 
     setRunnerLoading(true);
     setRunnerError(null);
     try {
-      const result = await logCall(token, activeSession.id, contactId, "RDV planifié", {
+      const result = await logCall(token, target.sessionId, target.contactId, "RDV planifié", {
         comments: payload.comments,
         doNotCall: payload.doNotCall,
       });
       if (result.needs_event) {
         await logEvent(
           token,
-          activeSession.id,
-          contactId,
+          target.sessionId,
+          target.contactId,
           event.start,
           event.durationMin,
           event.invitees,
@@ -520,11 +510,16 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       }
       setAwaitingEvent(null);
       setFocusedContactId(null);
-      await advanceOrComplete(activeSession.id);
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+        return;
+      }
+      await advanceOrComplete(target.sessionId);
     } catch (err) {
       setRunnerError(errorMessage(err));
+      if (view === "recalls") return;
       try {
-        const refreshed = await fetchSession(token, activeSession.id);
+        const refreshed = await fetchSession(token, target.sessionId);
         setContacts(refreshed.contacts);
         const updated = refreshed.contacts.find((c) => c.id === contactId);
         if (updated?.outcome === "RDV planifié" && !updated.sf_event_id) {
@@ -599,7 +594,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   };
 
   const handleLogMany = async (contactIds: number[], payload: LogPayload) => {
-    if (!token || !activeSession || contactIds.length === 0) return;
+    if (!token || contactIds.length === 0) return;
     if (payload.resultat === "RDV planifié") {
       setRunnerError("Sélectionnez un seul contact pour planifier un RDV.");
       return;
@@ -609,16 +604,31 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setRunnerError(null);
     try {
       for (const contactId of contactIds) {
-        await logCall(token, activeSession.id, contactId, payload.resultat, {
+        const target = resolveLogTarget(contactId);
+        if (!target) continue;
+        await logCall(token, target.sessionId, target.contactId, payload.resultat, {
           comments: payload.comments,
           recallAt: payload.recallAt,
           doNotCall: payload.doNotCall,
         });
       }
-      await advanceOrComplete(activeSession.id);
       setFocusedContactId(null);
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+        return;
+      }
+      if (activeSession) await advanceOrComplete(activeSession.id);
     } catch (err) {
       setRunnerError(errorMessage(err));
+      if (view === "recalls") {
+        try {
+          await refreshRecallsQueue();
+        } catch {
+          /* keep */
+        }
+        return;
+      }
+      if (!activeSession) return;
       try {
         const refreshed = await fetchSession(token, activeSession.id);
         setContacts(refreshed.contacts);
@@ -654,7 +664,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setDedup([]);
     setNewError(null);
     setAwaitingEvent(null);
-    setFocusedRecall(null);
+    setFocusedContactId(null);
     void loadSessions();
   };
 
@@ -686,6 +696,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             setDedup([]);
             setMatchCount(null);
             setMatchCountCapped(false);
+            setMatchCountError(null);
             setNewError(null);
             void loadPresets();
           }}
@@ -709,6 +720,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           matchCount={matchCount}
           matchCountCapped={matchCountCapped}
           matchCountLoading={matchCountLoading}
+          matchCountError={matchCountError}
           error={newError}
           preview={preview}
           dedup={dedup}
@@ -727,14 +739,15 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         />
       )}
 
-      {view === "runner" && activeSession && (
+      {(view === "runner" || view === "recalls") && activeSession && (
         <RunnerView
           session={activeSession}
           contacts={contacts}
           hubSessions={sessions}
           currentContact={findNextPending(contacts)}
           focusedContactId={focusedContactId}
-          loading={runnerLoading}
+          variant={view === "recalls" ? "recalls" : "session"}
+          loading={runnerLoading || (view === "recalls" && recallsLoading)}
           error={runnerError}
           awaitingEvent={awaitingEvent}
           contactContext={contactContext}
@@ -751,23 +764,6 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           }
           onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
-        />
-      )}
-
-      {view === "recalls" && (
-        <RecallQueueView
-          recalls={recalls}
-          loading={runnerLoading || recallsLoading}
-          error={runnerError}
-          contactContext={contactContext}
-          contextContactId={contextContactId}
-          contextLoading={contextLoading}
-          onBack={goToSessions}
-          onFocusContact={setFocusedRecall}
-          onLogAndNext={(item, payload) => void handleRecallLogAndNext(item, payload)}
-          onLogRdvAndNext={(item, payload, event) =>
-            void handleRecallLogRdvAndNext(item, payload, event)
-          }
         />
       )}
 

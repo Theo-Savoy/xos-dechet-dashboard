@@ -128,7 +128,9 @@ export async function listContacts(client, userId, body) {
 
   const soql = buildTargetQuery(queryFilters, mapping, profile.sfUserId);
   const search = await searchContacts(tokenResult.accessToken, soql);
-  if (search.error) return { error: search.error, status: 502 };
+  if (search.error) {
+    return { error: search.error, message: search.message, status: 502 };
+  }
 
   const filtered = filterTargetContacts(search.records, parsed.filters, mapping);
   if (countOnly) {
