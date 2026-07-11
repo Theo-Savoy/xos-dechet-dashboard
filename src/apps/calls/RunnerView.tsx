@@ -7,9 +7,10 @@ import {
   type ResultatCall,
 } from "../../crm";
 import { EventPanel } from "./EventPanel";
+import { DatePicker } from "./formControls";
 import { ProgressBar } from "./ProgressBar";
-import type { ContactContext, SessionContact, SessionDetail } from "./types";
-import { RESULTAT_OPTIONS } from "./types";
+import type { ContactContext, SessionContact, SessionDetail, SessionSummary } from "./types";
+import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 
 const RECALL_DAYS_KEY = "xos-calls-default-recall-days";
 
@@ -22,11 +23,17 @@ type LogPayload = {
   doNotCall: boolean;
 };
 
+type DeferPayload = {
+  scheduledFor: string;
+  targetSessionId: number | null;
+};
+
 type ListStatusFilter = "all" | "pending" | "called" | "skipped";
 
 type RunnerViewProps = {
   session: SessionDetail;
   contacts: SessionContact[];
+  hubSessions: SessionSummary[];
   currentContact: SessionContact | null;
   loading: boolean;
   error: string | null;
@@ -43,8 +50,7 @@ type RunnerViewProps = {
   ) => void;
   onLogMany: (contactIds: number[], payload: LogPayload) => void;
   onLogEvent: (start: string, durationMin: number, invitees: string[]) => void;
-  onSkip: (contactId: number) => void;
-  onSkipMany: (contactIds: number[]) => void;
+  onDeferContacts: (contactIds: number[], payload: DeferPayload) => void;
 };
 
 function addDaysIso(days: number): string {
@@ -64,25 +70,18 @@ function readDefaultRecallDays(): number {
   }
 }
 
-function statusLabel(status: SessionContact["status"]): string {
-  if (status === "called") return "Appelé";
-  if (status === "skipped") return "Non joint";
-  return "À faire";
-}
-
-function statusVariant(status: SessionContact["status"]): "accent" | "default" | "warning" {
-  if (status === "called") return "default";
-  if (status === "skipped") return "warning";
-  return "accent";
-}
-
-function outcomeVariant(
-  outcome: ResultatCall | null | undefined,
-): "success" | "warning" | "accent" | "muted" {
-  if (!outcome) return "muted";
-  if (outcome === "RDV planifié") return "success";
-  if (outcome === "Appel non décroché" || outcome === "Message répondeur") return "warning";
-  return "accent";
+function listStatusDisplay(contact: SessionContact): {
+  label: string;
+  variant: "success" | "warning" | "accent" | "muted" | "default";
+} {
+  if (contact.status === "pending") return { label: "À faire", variant: "accent" };
+  if (contact.status === "skipped") return { label: "Non contacté", variant: "warning" };
+  if (contact.outcome === "RDV planifié") return { label: contact.outcome, variant: "success" };
+  if (contact.outcome === "Appel non décroché" || contact.outcome === "Message répondeur") {
+    return { label: contact.outcome, variant: "warning" };
+  }
+  if (contact.outcome) return { label: contact.outcome, variant: "accent" };
+  return { label: "Appelé", variant: "default" };
 }
 
 function computeKpis(contacts: SessionContact[]) {
@@ -115,7 +114,7 @@ function ResultButtons({
             className={`calls-result-btn${value === opt.value ? " calls-result-btn--active" : ""}`}
             aria-pressed={value === opt.value}
             disabled={disabled}
-            title={disabled ? "Disponible uniquement en fiche individuelle" : undefined}
+            title={disabled ? "Sélectionnez un seul contact pour planifier un RDV" : undefined}
             onClick={() => onChange(opt.value)}
           >
             {opt.label}
@@ -129,6 +128,7 @@ function ResultButtons({
 export function RunnerView({
   session,
   contacts,
+  hubSessions,
   currentContact,
   loading,
   error,
@@ -141,8 +141,7 @@ export function RunnerView({
   onLogRdvAndNext,
   onLogMany,
   onLogEvent,
-  onSkip,
-  onSkipMany,
+  onDeferContacts,
 }: RunnerViewProps) {
   const [mode, setMode] = useState<RunnerMode>("list");
   const [focusedId, setFocusedId] = useState<number | null>(null);
@@ -158,6 +157,9 @@ export function RunnerView({
   const [bulkRecallAt, setBulkRecallAt] = useState(() => addDaysIso(readDefaultRecallDays()));
   const [doNotCall, setDoNotCall] = useState(false);
   const [bulkDoNotCall, setBulkDoNotCall] = useState(false);
+  const [deferIds, setDeferIds] = useState<number[] | null>(null);
+  const [deferDate, setDeferDate] = useState(() => addDaysIso(readDefaultRecallDays()));
+  const [deferTargetId, setDeferTargetId] = useState<number | null>(null);
 
   const kpis = useMemo(() => computeKpis(contacts), [contacts]);
   const needsRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat) && !doNotCall;
@@ -186,6 +188,20 @@ export function RunnerView({
   );
   const allPendingSelected =
     pendingContacts.length > 0 && pendingContacts.every((c) => selectedIds.has(c.id));
+  const singleSelectedId = pendingSelected.length === 1 ? pendingSelected[0] : null;
+  const singleSelectedContact = singleSelectedId
+    ? contacts.find((c) => c.id === singleSelectedId) ?? null
+    : null;
+  const deferCandidates = useMemo(
+    () =>
+      hubSessions.filter(
+        (s) =>
+          s.id !== session.id
+          && s.status === "active"
+          && s.scheduled_for === deferDate,
+      ),
+    [hubSessions, session.id, deferDate],
+  );
 
   const focusedContact = useMemo(() => {
     if (awaitingEvent) return awaitingEvent;
@@ -296,10 +312,38 @@ export function RunnerView({
     setBulkRecallAt(addDaysIso(defaultRecallDays));
   };
 
-  const handleBulkSkip = () => {
-    if (pendingSelected.length === 0) return;
-    onSkipMany(pendingSelected);
+  const openDefer = (ids: number[]) => {
+    if (ids.length === 0) return;
+    setDeferIds(ids);
+    setDeferDate(addDaysIso(defaultRecallDays));
+    setDeferTargetId(null);
+  };
+
+  const confirmDefer = () => {
+    if (!deferIds?.length) return;
+    onDeferContacts(deferIds, {
+      scheduledFor: deferDate,
+      targetSessionId: deferTargetId,
+    });
+    setDeferIds(null);
     setSelectedIds(new Set());
+  };
+
+  const handleBulkRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
+    if (!singleSelectedId) return;
+    onLogRdvAndNext(
+      singleSelectedId,
+      {
+        resultat: "RDV planifié",
+        comments: bulkComments,
+        recallAt: null,
+        doNotCall: bulkDoNotCall,
+      },
+      { start, durationMin, invitees },
+    );
+    setSelectedIds(new Set());
+    setBulkComments("");
+    setBulkDoNotCall(false);
   };
 
   const called = contacts.filter((c) => c.status === "called").length;
@@ -376,7 +420,11 @@ export function RunnerView({
                   {pendingSelected.length} contact{pendingSelected.length > 1 ? "s" : ""} sélectionné
                   {pendingSelected.length > 1 ? "s" : ""}
                 </strong>
-                <span className="calls-muted">Même résultat pour toute la sélection</span>
+                <span className="calls-muted">
+                  {singleSelectedId
+                    ? "Consigner, planifier un RDV, ou reporter en follow-up"
+                    : "Même résultat pour toute la sélection"}
+                </span>
               </div>
               <div className="calls-fb-control">
                 <div className="calls-fb-control__label">
@@ -385,20 +433,12 @@ export function RunnerView({
                 <ResultButtons
                   value={bulkResultat}
                   onChange={setBulkResultat}
-                  disabledValues={["RDV planifié"]}
+                  disabledValues={singleSelectedId ? [] : ["RDV planifié"]}
                 />
               </div>
               {bulkNeedsRecall && (
                 <div className="calls-fb-row">
-                  <label className="calls-field">
-                    <span>Date de rappel</span>
-                    <input
-                      type="date"
-                      className="calls-input"
-                      value={bulkRecallAt}
-                      onChange={(e) => setBulkRecallAt(e.target.value)}
-                    />
-                  </label>
+                  <DatePicker label="Date de rappel" value={bulkRecallAt} onChange={setBulkRecallAt} />
                   <label className="calls-field">
                     <span>Défaut rappel (jours)</span>
                     <input
@@ -430,17 +470,96 @@ export function RunnerView({
                   placeholder="Note commune pour la sélection…"
                 />
               </label>
+              {bulkResultat === "RDV planifié" && singleSelectedContact ? (
+                <EventPanel
+                  contactName={singleSelectedContact.contact_name}
+                  loading={loading}
+                  onSubmit={handleBulkRdvSubmit}
+                  submitLabel="Logguer appel + RDV & suivant"
+                  heading={`Détails du RDV — ${singleSelectedContact.contact_name}`}
+                  className="calls-event-panel--inline"
+                />
+              ) : (
+                <div className="calls-runner-actions">
+                  <Button onClick={handleBulkLog} disabled={loading || bulkResultat === "RDV planifié"}>
+                    {loading
+                      ? "Enregistrement…"
+                      : `Consigner pour ${pendingSelected.length}`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => openDefer(pendingSelected)}
+                    disabled={loading}
+                  >
+                    Non contacté
+                  </Button>
+                </div>
+              )}
+              {bulkResultat === "RDV planifié" && singleSelectedContact && (
+                <div className="calls-runner-actions">
+                  <Button
+                    variant="secondary"
+                    onClick={() => openDefer(pendingSelected)}
+                    disabled={loading}
+                  >
+                    Non contacté
+                  </Button>
+                </div>
+              )}
+            </GlassCard>
+          )}
+
+          {deferIds && (
+            <div className="calls-defer-panel" role="region" aria-label="Reporter en follow-up">
+              <strong>
+                Non contacté — {deferIds.length} contact{deferIds.length > 1 ? "s" : ""}
+              </strong>
+              <p className="calls-defer-panel__empty">
+                Associer à une séance existante à cette date, ou en créer une nouvelle.
+              </p>
+              <DatePicker label="Date de follow-up" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
+              {deferCandidates.length > 0 ? (
+                <ul className="calls-defer-panel__candidates">
+                  {deferCandidates.map((candidate) => (
+                    <li key={candidate.id}>
+                      <button
+                        type="button"
+                        className={`calls-defer-panel__candidate${deferTargetId === candidate.id ? " calls-defer-panel__candidate--active" : ""}`}
+                        onClick={() => setDeferTargetId(candidate.id)}
+                      >
+                        <span>
+                          <strong>{candidate.name}</strong>
+                          <small> · {sessionTypeLabel(candidate.session_type)}</small>
+                        </span>
+                        <span className="xos-numeric">{candidate.pending} restants</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="calls-defer-panel__empty">Aucune séance active à cette date.</p>
+              )}
               <div className="calls-runner-actions">
-                <Button onClick={handleBulkLog} disabled={loading || bulkResultat === "RDV planifié"}>
+                <Button
+                  onClick={confirmDefer}
+                  disabled={loading}
+                >
                   {loading
                     ? "Enregistrement…"
-                    : `Consigner pour ${pendingSelected.length}`}
+                    : deferTargetId
+                      ? "Associer à la séance"
+                      : "Créer une séance de relance"}
                 </Button>
-                <Button variant="secondary" onClick={handleBulkSkip} disabled={loading}>
-                  Non joints (essayés)
+                {deferTargetId != null && (
+                  <Button variant="secondary" onClick={() => setDeferTargetId(null)} disabled={loading}>
+                    Créer plutôt une nouvelle
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => setDeferIds(null)} disabled={loading}>
+                  Annuler
                 </Button>
               </div>
-            </GlassCard>
+            </div>
           )}
 
           <GlassCard className="calls-cockpit-list">
@@ -463,7 +582,7 @@ export function RunnerView({
                     ["all", "Tous"],
                     ["pending", "À faire"],
                     ["called", "Appelés"],
-                    ["skipped", "Non joints"],
+                    ["skipped", "Non contactés"],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -494,10 +613,11 @@ export function RunnerView({
                 <span>Entreprise</span>
                 <span>Téléphone</span>
                 <span>Statut</span>
-                <span>Résultat</span>
                 <span>Rappel</span>
               </li>
-              {filteredContacts.map((contact) => (
+              {filteredContacts.map((contact) => {
+                const status = listStatusDisplay(contact);
+                return (
                 <li
                   key={contact.id}
                   className={[
@@ -525,26 +645,26 @@ export function RunnerView({
                   <span className="calls-cockpit-list__cell" title={contact.account_name ?? undefined}>
                     {contact.account_name ?? "—"}
                   </span>
-                  {contact.phone ? (
-                    <a
-                      href={`tel:${contact.phone}`}
-                      className="calls-cockpit-list__phone xos-numeric"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {contact.phone}
-                    </a>
-                  ) : (
-                    <span className="calls-cockpit-list__cell">—</span>
-                  )}
-                  <Tag variant={statusVariant(contact.status)}>{statusLabel(contact.status)}</Tag>
-                  {contact.outcome ? (
-                    <Tag variant={outcomeVariant(contact.outcome)}>{contact.outcome}</Tag>
-                  ) : (
-                    <span className="calls-cockpit-list__cell">—</span>
-                  )}
-                  <span className="xos-numeric">{contact.recall_at ?? "—"}</span>
+                  <span className="calls-cockpit-list__cell">
+                    {contact.phone ? (
+                      <a
+                        href={`tel:${contact.phone}`}
+                        className="calls-cockpit-list__phone xos-numeric"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {contact.phone}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </span>
+                  <span className="calls-cockpit-list__status">
+                    <Tag variant={status.variant}>{status.label}</Tag>
+                  </span>
+                  <span className="calls-cockpit-list__cell xos-numeric">{contact.recall_at ?? "—"}</span>
                 </li>
-              ))}
+                );
+              })}
               {filteredContacts.length === 0 && (
                 <li className="calls-cockpit-list__empty">Aucun contact pour ce filtre.</li>
               )}
@@ -601,10 +721,9 @@ export function RunnerView({
 
             {focusedContact.status !== "pending" && (
               <div className="calls-contact-card__meta">
-                <Tag variant={statusVariant(focusedContact.status)}>{statusLabel(focusedContact.status)}</Tag>
-                {focusedContact.outcome && (
-                  <Tag variant={outcomeVariant(focusedContact.outcome)}>{focusedContact.outcome}</Tag>
-                )}
+                <Tag variant={listStatusDisplay(focusedContact).variant}>
+                  {listStatusDisplay(focusedContact).label}
+                </Tag>
                 {focusedContact.recall_at && <span>Rappel {focusedContact.recall_at}</span>}
               </div>
             )}
@@ -688,15 +807,7 @@ export function RunnerView({
 
               {needsRecall && (
                 <div className="calls-fb-row">
-                  <label className="calls-field">
-                    <span>Date de rappel</span>
-                    <input
-                      type="date"
-                      className="calls-input"
-                      value={recallAt}
-                      onChange={(e) => setRecallAt(e.target.value)}
-                    />
-                  </label>
+                  <DatePicker label="Date de rappel" value={recallAt} onChange={setRecallAt} />
                   <label className="calls-field">
                     <span>Défaut rappel (jours)</span>
                     <input
@@ -747,11 +858,11 @@ export function RunnerView({
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => onSkip(focusedContact.id)}
+                    onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title="Essayé sans succès — inclus en relance, compteur +1"
+                    title="Reporter vers une séance de follow-up (sans incrémenter le compteur)"
                   >
-                    Non joint
+                    Non contacté
                   </Button>
                 </div>
               )}
@@ -760,12 +871,48 @@ export function RunnerView({
                 <div className="calls-runner-actions">
                   <Button
                     variant="secondary"
-                    onClick={() => onSkip(focusedContact.id)}
+                    onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title="Essayé sans succès — inclus en relance, compteur +1"
+                    title="Reporter vers une séance de follow-up (sans incrémenter le compteur)"
                   >
-                    Non joint
+                    Non contacté
                   </Button>
+                </div>
+              )}
+
+              {deferIds && mode === "detail" && (
+                <div className="calls-defer-panel" role="region" aria-label="Reporter en follow-up">
+                  <strong>Non contacté — follow-up</strong>
+                  <DatePicker label="Date de follow-up" value={deferDate} onChange={(d) => { setDeferDate(d); setDeferTargetId(null); }} />
+                  {deferCandidates.length > 0 ? (
+                    <ul className="calls-defer-panel__candidates">
+                      {deferCandidates.map((candidate) => (
+                        <li key={candidate.id}>
+                          <button
+                            type="button"
+                            className={`calls-defer-panel__candidate${deferTargetId === candidate.id ? " calls-defer-panel__candidate--active" : ""}`}
+                            onClick={() => setDeferTargetId(candidate.id)}
+                          >
+                            <span>
+                              <strong>{candidate.name}</strong>
+                              <small> · {sessionTypeLabel(candidate.session_type)}</small>
+                            </span>
+                            <span className="xos-numeric">{candidate.pending} restants</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="calls-defer-panel__empty">Aucune séance active à cette date.</p>
+                  )}
+                  <div className="calls-runner-actions">
+                    <Button onClick={confirmDefer} disabled={loading}>
+                      {deferTargetId ? "Associer à la séance" : "Créer une séance de relance"}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setDeferIds(null)} disabled={loading}>
+                      Annuler
+                    </Button>
+                  </div>
                 </div>
               )}
             </GlassCard>
@@ -787,4 +934,4 @@ export function RunnerView({
   );
 }
 
-export type { LogPayload };
+export type { LogPayload, DeferPayload };

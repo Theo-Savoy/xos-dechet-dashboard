@@ -85,6 +85,7 @@ describe("EventPanel", () => {
 describe("RunnerView", () => {
   const runnerProps = {
     session,
+    hubSessions: [] as [],
     loading: false,
     error: null as string | null,
     contactContext: null,
@@ -94,8 +95,7 @@ describe("RunnerView", () => {
     onLogAndNext: vi.fn(),
     onLogRdvAndNext: vi.fn(),
     onLogEvent: vi.fn(),
-    onSkip: vi.fn(),
-    onSkipMany: vi.fn(),
+    onDeferContacts: vi.fn(),
     onLogMany: vi.fn(),
   };
 
@@ -146,7 +146,7 @@ describe("RunnerView", () => {
     );
 
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
-    expect(screen.getByText("Appelé")).toBeTruthy();
+    expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.getAllByText("À faire").length).toBeGreaterThan(0);
   });
 
@@ -184,7 +184,52 @@ describe("RunnerView", () => {
     expect(screen.getByText("Téléphone")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "0102030405" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Responsable formation").length).toBeGreaterThan(0);
-    expect(screen.getByText("Non joints")).toBeTruthy();
+    expect(screen.getByText("Non contactés")).toBeTruthy();
+    expect(screen.queryByText("Résultat")).toBeNull();
+  });
+
+  it("bulk-logs the same outcome for selected contacts", async () => {
+    const user = userEvent.setup();
+    const onLogMany = vi.fn();
+    const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
+    const pendingB = { ...bob, id: 3, contact_name: "Claire", status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogMany={onLogMany}
+        contacts={[pendingA, pendingB]}
+        currentContact={pendingA}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByLabelText("Sélectionner Claire"));
+    await user.click(screen.getByRole("button", { name: "Appel décroché" }));
+    await user.click(screen.getByRole("button", { name: "Consigner pour 2" }));
+
+    expect(onLogMany).toHaveBeenCalledWith(
+      [2, 3],
+      expect.objectContaining({ resultat: "Appel décroché" }),
+    );
+  });
+
+  it("opens defer panel for Non contacté", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByRole("button", { name: "Non contacté" }));
+    expect(screen.getByText(/Associer à une séance existante/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Créer une séance de relance" })).toBeTruthy();
   });
 });
 

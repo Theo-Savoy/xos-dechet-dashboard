@@ -791,6 +791,50 @@ describe("POST /api/calls", () => {
     });
   });
 
+  describe("defer_contacts", () => {
+    it("creates a relance session when no target is provided", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "Base", status: "active" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{
+            id: 101,
+            sf_contact_id: "003000000000001",
+            contact_name: "Alice",
+            status: "pending",
+            attempt_count: 0,
+          }],
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({
+          data: {
+            id: 20,
+            name: "Relance — Base",
+            status: "active",
+            created_at: "2026-01-01T00:00:00Z",
+            scheduled_for: "2026-07-15",
+            session_type: "relance",
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 301, sf_contact_id: "003000000000001", contact_name: "Alice", status: "pending", attempt_count: 0 }],
+          error: null,
+        });
+
+      const res = await POST(
+        makeReq("POST", {
+          action: "defer_contacts",
+          session_id: 1,
+          contact_ids: [101],
+          scheduled_for: "2026-07-15",
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).target_session.session_type).toBe("relance");
+    });
+  });
+
   describe("complete_session", () => {
     it("returns 400 when session already completed", async () => {
       mockDb.mockResolvedValueOnce({ data: { id: 1, owner: "user-123", status: "completed" }, error: null });

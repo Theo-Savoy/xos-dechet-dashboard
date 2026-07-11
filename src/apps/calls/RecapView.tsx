@@ -54,11 +54,11 @@ export function RecapView({
           <strong className="xos-numeric">{rdv.length}</strong>
         </GlassCard>
         <GlassCard className="calls-stat">
-          <span>Non joints</span>
+          <span>Non contactés</span>
           <strong className="xos-numeric">{skipped.length}</strong>
         </GlassCard>
         <GlassCard className="calls-stat">
-          <span>Non contactés</span>
+          <span>Restants à faire</span>
           <strong className="xos-numeric">{pending.length}</strong>
         </GlassCard>
       </div>
@@ -92,12 +92,12 @@ export function RecapView({
 
       {skipped.length > 0 && (
         <GlassCard className="calls-recap-list">
-          <h3>Non joints — essayés sans succès (compteur +1, inclus en relance)</h3>
+          <h3>Non contactés — reportés en follow-up</h3>
           <ul>
             {skipped.map((contact) => (
               <li key={contact.id}>
                 <strong>{contact.contact_name}</strong>
-                <Tag variant="warning">Non joint</Tag>
+                <Tag variant="warning">Non contacté</Tag>
               </li>
             ))}
           </ul>
@@ -106,7 +106,7 @@ export function RecapView({
 
       {pending.length > 0 && (
         <GlassCard className="calls-recap-list">
-          <h3>Non contactés — pas encore essayés (inclus en relance, sans incrément)</h3>
+          <h3>Encore à faire dans cette séance</h3>
           <ul>
             {pending.map((contact) => (
               <li key={contact.id}>

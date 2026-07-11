@@ -6,6 +6,7 @@ import {
   createFollowUpSession,
   createPreset,
   createSession,
+  deferContacts,
   deletePreset,
   deleteSession,
   fetchContactContext,
@@ -16,7 +17,6 @@ import {
   fetchStats,
   logCall,
   logEvent,
-  skipContact,
   updateSession,
   CallsApiError,
 } from "./api";
@@ -402,32 +402,31 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
-  const handleSkip = async (contactId: number) => {
-    if (!token || !activeSession) return;
-
-    setRunnerLoading(true);
-    setRunnerError(null);
-    try {
-      await skipContact(token, activeSession.id, contactId);
-      await advanceOrComplete(activeSession.id);
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
-    }
-  };
-
-  const handleSkipMany = async (contactIds: number[]) => {
+  const handleDeferContacts = async (
+    contactIds: number[],
+    payload: { scheduledFor: string; targetSessionId: number | null },
+  ) => {
     if (!token || !activeSession || contactIds.length === 0) return;
     setRunnerLoading(true);
     setRunnerError(null);
     try {
-      for (const contactId of contactIds) {
-        await skipContact(token, activeSession.id, contactId);
-      }
+      await deferContacts(
+        token,
+        activeSession.id,
+        contactIds,
+        payload.scheduledFor,
+        payload.targetSessionId,
+      );
+      await loadSessions();
       await advanceOrComplete(activeSession.id);
     } catch (err) {
       setRunnerError(errorMessage(err));
+      try {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+      } catch {
+        /* keep */
+      }
     } finally {
       setRunnerLoading(false);
     }
@@ -436,7 +435,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const handleLogMany = async (contactIds: number[], payload: LogPayload) => {
     if (!token || !activeSession || contactIds.length === 0) return;
     if (payload.resultat === "RDV planifié") {
-      setRunnerError("Le RDV se planifie contact par contact (fiche individuelle).");
+      setRunnerError("Sélectionnez un seul contact pour planifier un RDV.");
       return;
     }
 
@@ -553,6 +552,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         <RunnerView
           session={activeSession}
           contacts={contacts}
+          hubSessions={sessions}
           currentContact={findNextPending(contacts)}
           loading={runnerLoading}
           error={runnerError}
@@ -568,8 +568,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onLogEvent={(start, durationMin, invitees) =>
             void handleLogEvent(start, durationMin, invitees)
           }
-          onSkip={(contactId) => void handleSkip(contactId)}
-          onSkipMany={(ids) => void handleSkipMany(ids)}
+          onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
         />
       )}

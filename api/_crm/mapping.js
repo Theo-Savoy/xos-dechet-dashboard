@@ -95,6 +95,7 @@ const mapping = {
         mobilePhone: "MobilePhone",
         decisionLevel: "Niveau_de_d_cision__c",
         doNotCall: "NPA__c",
+        inactive: "Inactif__c",
       },
       decisionLevels: ["+", "=", "-"],
       fonctionPresets: [

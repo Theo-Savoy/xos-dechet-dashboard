@@ -208,6 +208,25 @@ export async function skipContact(
   });
 }
 
+export async function deferContacts(
+  token: string,
+  sessionId: number,
+  contactIds: number[],
+  scheduledFor: string,
+  targetSessionId?: number | null,
+): Promise<{ target_session: SessionDetail; contacts?: SessionContact[] }> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "defer_contacts",
+      session_id: sessionId,
+      contact_ids: contactIds,
+      scheduled_for: scheduledFor,
+      ...(typeof targetSessionId === "number" ? { target_session_id: targetSessionId } : {}),
+    }),
+  });
+}
+
 export async function completeSession(token: string, sessionId: number): Promise<void> {
   await apiFetch(token, "/api/calls", {
     method: "POST",

@@ -101,6 +101,8 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
 
   if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
   if (contactFilters.exclure_npa !== false) conditions.push(`${contact.fields.doNotCall} = false`);
+  // Contacts inactifs = inutilisables pour le Call Manager
+  if (contact.fields.inactive) conditions.push(`${contact.fields.inactive} = false`);
   const decisionLevels = stringList(contactFilters.niveau_decision);
   if (decisionLevels.length) conditions.push(`${contact.fields.decisionLevel} IN (${escapedList(decisionLevels)})`);
   conditions.push(...buildFonctionConditions(stringList(contactFilters.fonctions), mapping));

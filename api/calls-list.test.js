@@ -97,6 +97,7 @@ describe("adapter exports", () => {
     expect(soql).toContain(`Account.${mapping.objects.account.fields.industry} IN ('Finance')`);
     expect(soql).toContain(`${mapping.objects.contact.fields.mobilePhone} != null`);
     expect(soql).toContain(`${mapping.objects.contact.fields.doNotCall} = false`);
+    expect(soql).toContain(`${mapping.objects.contact.fields.inactive} = false`);
     expect(soql).toContain(`${mapping.objects.contact.fields.title}`);
     expect(soql).toContain(`${mapping.objects.contact.fields.linkedin}`);
     expect(soql).not.toMatch(/NOT IN \(SELECT .* FROM Task/);

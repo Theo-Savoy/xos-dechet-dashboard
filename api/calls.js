@@ -962,7 +962,7 @@ export async function POST(request) {
       .from("call_session_contacts")
       .update({
         status: "skipped",
-        attempt_count: (Number.isInteger(contactCheck.contact.attempt_count) ? contactCheck.contact.attempt_count : 0) + 1,
+        // Non contacté = pas d'essai dans cette séance → pas d'incrément
       })
       .eq("id", contact_id);
 
@@ -971,6 +971,158 @@ export async function POST(request) {
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+  }
+
+  if (action === "defer_contacts") {
+    const {
+      session_id,
+      contact_ids,
+      scheduled_for: scheduledForInput,
+      target_session_id: targetSessionId,
+    } = body;
+
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+    if (!Array.isArray(contact_ids) || contact_ids.length === 0 || contact_ids.some((id) => typeof id !== "number" || !Number.isInteger(id) || id < 1)) {
+      return new Response(JSON.stringify({ error: "invalid_contact_ids" }), { status: 400, headers });
+    }
+    if (!isValidScheduledFor(scheduledForInput)) {
+      return new Response(JSON.stringify({ error: "invalid_scheduled_for" }), { status: 400, headers });
+    }
+    if (
+      targetSessionId !== undefined
+      && targetSessionId !== null
+      && (typeof targetSessionId !== "number" || !Number.isInteger(targetSessionId) || targetSessionId < 1)
+    ) {
+      return new Response(JSON.stringify({ error: "invalid_target_session_id" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionOwner(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+
+    const { data: sourceContacts, error: sourceError } = await client
+      .from("call_session_contacts")
+      .select("id, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, attempt_count")
+      .eq("session_id", session_id)
+      .in("id", contact_ids);
+
+    if (sourceError) {
+      return new Response(JSON.stringify({ error: "contacts_lookup_failed" }), { status: 500, headers });
+    }
+    if (!sourceContacts || sourceContacts.length !== contact_ids.length) {
+      return new Response(JSON.stringify({ error: "contact_not_in_session" }), { status: 404, headers });
+    }
+    if (sourceContacts.some((contact) => contact.status !== "pending")) {
+      return new Response(JSON.stringify({ error: "contact_not_pending" }), { status: 400, headers });
+    }
+
+    const { error: skipError } = await client
+      .from("call_session_contacts")
+      .update({ status: "skipped" })
+      .in("id", contact_ids)
+      .eq("session_id", session_id);
+
+    if (skipError) {
+      return new Response(JSON.stringify({ error: "contact_update_failed" }), { status: 500, headers });
+    }
+
+    const payloadContacts = sourceContacts.map((contact) => ({
+      sf_contact_id: contact.sf_contact_id,
+      sf_account_id: contact.sf_account_id,
+      contact_name: contact.contact_name,
+      account_name: contact.account_name,
+      phone: contact.phone,
+      title: contact.title,
+      linkedin_url: contact.linkedin_url,
+      attempt_count: Number.isInteger(contact.attempt_count) ? contact.attempt_count : 0,
+    }));
+
+    let targetSession = null;
+    let targetContacts = null;
+
+    if (typeof targetSessionId === "number") {
+      const targetCheck = await assertSessionOwner(client, targetSessionId, user.id);
+      if (targetCheck.error) {
+        return new Response(JSON.stringify({ error: targetCheck.error }), { status: targetCheck.status, headers });
+      }
+      if (targetCheck.session.status !== "active") {
+        return new Response(JSON.stringify({ error: "target_session_not_active" }), { status: 400, headers });
+      }
+      if (targetSessionId === session_id) {
+        return new Response(JSON.stringify({ error: "invalid_target_session_id" }), { status: 400, headers });
+      }
+
+      const { data: existingRows, error: existingError } = await client
+        .from("call_session_contacts")
+        .select("position, sf_contact_id")
+        .eq("session_id", targetSessionId)
+        .order("position", { ascending: false });
+
+      if (existingError) {
+        return new Response(JSON.stringify({ error: "contacts_lookup_failed" }), { status: 500, headers });
+      }
+
+      const existingIds = new Set((existingRows || []).map((row) => row.sf_contact_id));
+      const toInsert = payloadContacts.filter((contact) => !existingIds.has(contact.sf_contact_id));
+      const startPosition = existingRows?.[0]?.position != null ? existingRows[0].position + 1 : 0;
+
+      if (toInsert.length > 0) {
+        const rows = toInsert.map((contact, index) => ({
+          session_id: targetSessionId,
+          position: startPosition + index,
+          sf_contact_id: contact.sf_contact_id,
+          sf_account_id: contact.sf_account_id || null,
+          contact_name: contact.contact_name,
+          account_name: contact.account_name || null,
+          phone: contact.phone || null,
+          title: contact.title || null,
+          linkedin_url: contact.linkedin_url || null,
+          status: "pending",
+          attempt_count: contact.attempt_count,
+          marked_npa: false,
+        }));
+        const { error: insertError } = await client.from("call_session_contacts").insert(rows);
+        if (insertError) {
+          return new Response(JSON.stringify({ error: "session_contacts_insert_failed" }), { status: 500, headers });
+        }
+      }
+
+      const { data: refreshedTarget, error: refreshError } = await client
+        .from("call_sessions")
+        .select("id, name, status, created_at, scheduled_for, session_type")
+        .eq("id", targetSessionId)
+        .single();
+      if (refreshError || !refreshedTarget) {
+        return new Response(JSON.stringify({ error: "session_lookup_failed" }), { status: 500, headers });
+      }
+      targetSession = refreshedTarget;
+    } else {
+      const created = await insertSessionWithContacts(
+        client,
+        user.id,
+        `Relance — ${sessionCheck.session.name}`,
+        payloadContacts,
+        scheduledForInput,
+        { sessionType: "relance" },
+      );
+      if (created.error) {
+        return new Response(JSON.stringify({ error: created.error }), { status: created.status, headers });
+      }
+      targetSession = created.session;
+      targetContacts = created.contacts;
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        target_session: targetSession,
+        contacts: targetContacts,
+      }),
+      { status: 200, headers },
+    );
   }
 
   if (action === "complete_session") {

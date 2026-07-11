@@ -9,9 +9,9 @@ import {
 } from "../../crm";
 import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
+import { DatePicker, SessionTypePicker } from "./formControls";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
 import type { ContactPreview, SessionType } from "./types";
-import { SESSION_TYPE_OPTIONS } from "./types";
 
 type NewSessionViewProps = {
   filters: FilterTree;
@@ -219,30 +219,8 @@ export function NewSessionView({
                 className="calls-input"
               />
             </label>
-            <label className="calls-field">
-              <span>Date de séance</span>
-              <input
-                type="date"
-                value={scheduledFor}
-                onChange={(e) => setScheduledFor(e.target.value)}
-                className="calls-input"
-              />
-            </label>
-            <label className="calls-field">
-              <span>Type de séance</span>
-              <select
-                className="calls-input"
-                value={sessionType}
-                onChange={(e) => setSessionType(e.target.value as SessionType)}
-                aria-label="Type de séance"
-              >
-                {SESSION_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DatePicker label="Date de séance" value={scheduledFor} onChange={setScheduledFor} />
+            <SessionTypePicker value={sessionType} onChange={setSessionType} />
             <Button
               onClick={handleCreate}
               disabled={loading || !sessionName.trim() || selectedContacts.length === 0}

@@ -1,6 +1,7 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { ProgressBar } from "./ProgressBar";
+import { DatePicker, SessionTypePicker } from "./formControls";
 import type { CallStats, PeriodKpis, SessionSummary, SessionType } from "./types";
 import { SESSION_TYPE_OPTIONS, sessionTypeLabel } from "./types";
 
@@ -329,7 +330,7 @@ export function SessionsView({
                 <ProgressBar called={session.called} total={session.total} />
                 {session.skipped > 0 && (
                   <small className="calls-session-card__skipped">
-                    {session.skipped} non joint{session.skipped > 1 ? "s" : ""}
+                    {session.skipped} non contacté{session.skipped > 1 ? "s" : ""}
                   </small>
                 )}
                 <div className="calls-session-card__actions">
@@ -432,29 +433,8 @@ export function SessionsView({
                 onChange={(e) => setEditName(e.target.value)}
               />
             </label>
-            <label className="calls-field">
-              <span>Date</span>
-              <input
-                type="date"
-                className="calls-input"
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-              />
-            </label>
-            <label className="calls-field">
-              <span>Type</span>
-              <select
-                className="calls-input"
-                value={editType}
-                onChange={(e) => setEditType(e.target.value as SessionType)}
-              >
-                {SESSION_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DatePicker label="Date" value={editDate} onChange={setEditDate} />
+            <SessionTypePicker value={editType} onChange={setEditType} />
             <div className="calls-runner-actions">
               <Button onClick={() => void saveEdit()} disabled={saving || !editName.trim()}>
                 {saving ? "Enregistrement…" : "Enregistrer"}
