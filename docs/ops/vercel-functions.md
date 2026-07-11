@@ -1,10 +1,10 @@
-# Ops — Fonctions Vercel (plafond Hobby = 12)
+# Ops — Fonctions Vercel (plafond Hobby = 12 ; 8/12 utilisées)
 
 **Constat 2026-07-11** : le plan Hobby Vercel limite à **12 Serverless Functions**.
 
 **Mise à jour** : consolidations **B** et **C** appliquées (`search` + `log` → `launcher`, `sso-bridge` + `auth/salesforce` → `auth`).
 
-## Inventaire actuel (handlers HTTP) — post consolidation C
+## Inventaire actuel (handlers HTTP) — post lot Hub 2.3
 
 | # | Fichier | Rôle | Touché par |
 |---|---|---|---|
@@ -15,7 +15,8 @@
 | 5 | `api/launcher.js` | SOSL + `/log` + `/create` | Cmd+K |
 | 6 | `api/auth.js` | Cookie legacy + OAuth SF (stub → 8.1) | Login |
 | 7 | `api/calls.js` | Sessions + list_contacts + presets | Calls app |
-| 8–12 | **libres** | Hub `status`, Weekly `perf`, réserve | — |
+| 8 | `api/status.js` | Statut Hub, réglages équipe et rôles | Hub 2.3 |
+| 9–12 | **libres** | Weekly `perf`, réserve | — |
 
 Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `api/_calls/*`, `api/_config/*`.
 
@@ -52,7 +53,7 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 
 | Endpoint prévu | Phase | Slot |
 |---|---|---|
-| `status` (Hub) | 2.3 | libre |
+| `status` (Hub) | 2.3 | livré (`api/status.js`) |
 | `perf` (Weekly) | 3.1 | libre |
 | `business-review` | 6.1 | réserve / consolidation C |
 | `arena/*` | 5.1 | Pro ou consolidation C |
@@ -80,5 +81,5 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 
 ## Décision produit
 
-- **Fait** : consolidations **B** et **C** → **7 fonctions**, soit **5 slots libres** pour Hub + Weekly + marge.
+- **Fait** : consolidations **B** et **C**, puis Hub 2.3 → **8 fonctions**, soit **4 slots libres** pour Weekly + marge.
 - **Moyen terme** : la consolidation **D** reste intouchable hors lot Cleaner ; envisager Vercel Pro si les besoins dépassent ces 5 slots.

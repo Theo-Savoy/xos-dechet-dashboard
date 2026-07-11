@@ -6,6 +6,10 @@ export function __resetProfileCache() {
   profileCache.clear();
 }
 
+export function invalidateProfileCache(userId) {
+  profileCache.delete(userId);
+}
+
 export async function getProfile(client, userId) {
   const cached = profileCache.get(userId);
   if (cached && cached.expiresAt > Date.now()) return cached.profile;
@@ -13,7 +17,7 @@ export async function getProfile(client, userId) {
 
   const { data, error } = await client
     .from("profiles")
-    .select("sf_user_id, full_name")
+    .select("sf_user_id, full_name, role")
     .eq("id", userId)
     .maybeSingle();
   if (error) return { error: "profile_lookup_failed" };
@@ -21,6 +25,7 @@ export async function getProfile(client, userId) {
   const profile = {
     sfUserId: data?.sf_user_id || null,
     fullName: data?.full_name || null,
+    role: data?.role || "commercial",
   };
   profileCache.set(userId, { profile, expiresAt: Date.now() + PROFILE_CACHE_TTL_MS });
   return profile;

@@ -26,6 +26,13 @@ export const appRegistry: AppManifest[] = [
     component: lazy(() => import("../apps/calls/CallManagerApp")),
     defaultSize: { w: 960, h: 620 },
   },
+  {
+    id: "hub",
+    title: "Hub",
+    icon: "◌",
+    component: lazy(() => import("../apps/hub/HubApp")),
+    defaultSize: { w: 820, h: 620 },
+  },
   ...(import.meta.env.DEV
     ? [
         {

@@ -13,12 +13,13 @@ describe("appRegistry", () => {
       expect(appRegistry.map((app) => app.id)).toEqual([
         "cleaner",
         "calls",
+        "hub",
         "overview-demo",
         "notes-demo",
         "ui-demo",
       ]);
     } else {
-      expect(appRegistry.map((app) => app.id)).toEqual(["cleaner", "calls"]);
+      expect(appRegistry.map((app) => app.id)).toEqual(["cleaner", "calls", "hub"]);
     }
   });
 
