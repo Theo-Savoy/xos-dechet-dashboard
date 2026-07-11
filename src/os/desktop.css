@@ -38,9 +38,10 @@ textarea {
   position: absolute;
   inset: 0;
   z-index: -1;
-  opacity: 0.22;
+  opacity: 0.15; /* Subtly overlays the grain */
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkAgMAAAAn5clsAAAADFBMVEUAAAD///////////8Gs99GAAAABHRSTlMAAgICl3167wAAAEhJREFUeF7twIEJADAIAwD7/6Nu4C5NCDnIE6W8t8ndg1Pq3gHAAQABwAEAAcABAAHAAQABwAEAAcABAAHAAQABwAEcQyP10aUvWwAAAABJRU5ErkJggg==");
+  background-repeat: repeat;
 }
 
 .xos-menubar {
