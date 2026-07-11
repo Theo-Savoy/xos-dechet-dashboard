@@ -2,22 +2,6 @@
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-  min-width: 320px;
-  margin: 0;
-}
-
-body {
-  overflow: hidden;
-  font-family: var(--xos-font-display);
-  background: var(--xos-bg);
-}
-
 button,
 input,
 textarea {
@@ -25,10 +9,11 @@ textarea {
 }
 
 .xos-desktop {
-  position: relative;
+  position: absolute;
+  inset: 0;
   isolation: isolate;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
   overflow: hidden;
   color: var(--xos-text);
 }
@@ -37,7 +22,7 @@ textarea {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 1;
   opacity: 0.15; /* Subtly overlays the grain */
   pointer-events: none;
   background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkAgMAAAAn5clsAAAADFBMVEUAAAD///////////8Gs99GAAAABHRSTlMAAgICl3167wAAAEhJREFUeF7twIEJADAIAwD7/6Nu4C5NCDnIE6W8t8ndg1Pq3gHAAQABwAEAAcABAAHAAQABwAEAAcABAAHAAQABwAEcQyP10aUvWwAAAABJRU5ErkJggg==");
@@ -121,6 +106,7 @@ textarea {
 .xos-window-layer {
   position: absolute;
   inset: 48px 0 94px;
+  z-index: 10;
   transition: inset 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 

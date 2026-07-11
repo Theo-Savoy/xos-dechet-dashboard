@@ -100,7 +100,7 @@ describe("App — bridgeError state", () => {
 
   it("renders Desktop when session is ready", () => {
     mockUseSession.mockReturnValue({
-      session: { user: { email: "theo@xos-learning.fr" }, access_token: "tok" } as never,
+      session: { user: { id: "u1", email: "theo@xos-learning.fr" }, access_token: "tok" } as never,
       loading: false,
       bridgeError: false,
     });
@@ -123,7 +123,7 @@ describe("App — bridgeError state", () => {
     }));
 
     mockUseSession.mockReturnValue({
-      session: { user: { email: "theo@xos-learning.fr" }, access_token: "tok" } as never,
+      session: { user: { id: "u1", email: "theo@xos-learning.fr" }, access_token: "tok" } as never,
       loading: false,
       bridgeError: false,
     });
@@ -133,6 +133,41 @@ describe("App — bridgeError state", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("boot-screen")).toBeNull();
     });
+    expect(screen.getByTestId("desktop")).toBeTruthy();
+  });
+
+  it("keeps desktop revealed when session object identity changes for same user", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    mockUseSession.mockReturnValue({
+      session: { user: { id: "u1", email: "theo@xos-learning.fr" }, access_token: "tok-1" } as never,
+      loading: false,
+      bridgeError: false,
+    });
+
+    const { rerender } = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("boot-screen")).toBeNull();
+    });
+
+    mockUseSession.mockReturnValue({
+      session: { user: { id: "u1", email: "theo@xos-learning.fr" }, access_token: "tok-2" } as never,
+      loading: false,
+      bridgeError: false,
+    });
+    rerender(<App />);
+
+    expect(screen.queryByTestId("boot-screen")).toBeNull();
     expect(screen.getByTestId("desktop")).toBeTruthy();
   });
 });

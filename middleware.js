@@ -2,8 +2,9 @@
 // Route / (racine exacte) et /assets/* /fonts/* /favicon* sont publiques :
 //   la SPA charge et LoginScreen gère le magic link email avec PKCE.
 // Le cookie xos_auth est posé soit par POST /login (Basic Auth),
-//   soit par /api/sso-bridge (vérification JWT Supabase → cookie legacy).
-// /api/sso-bridge est public : il porte son propre JWT en Authorization header.
+//   soit par POST /api/auth (vérification JWT Supabase → cookie legacy).
+// /api/auth est public : il porte son propre JWT en Authorization header
+//   (et gère aussi le callback OAuth Salesforce).
 
 export const config = { matcher: "/(.*)" };
 
@@ -42,6 +43,11 @@ function isPublic(pathname) {
   return false;
 }
 
+/** Auth bridge + SF OAuth — JWT/callback handled inside the route, not via cookie. */
+function isAuthBridge(pathname) {
+  return pathname === "/api/auth" || pathname === "/api/sso-bridge";
+}
+
 // Routes protégées par le cookie xos_auth
 function isProtected(pathname) {
   if (pathname === "/dashboard.html") return true;
@@ -69,9 +75,9 @@ export default async function middleware(request) {
     return loginPage(401);
   }
 
-  // /api/sso-bridge porte son propre JWT, pas besoin de cookie
-  if (pathname === "/api/sso-bridge") {
-    return; // laisser passer — l'endpoint gère sa propre auth
+  // /api/auth (ex /api/sso-bridge) porte son propre JWT / gère le callback OAuth
+  if (isAuthBridge(pathname)) {
+    return;
   }
 
   // Routes publiques : SPA + assets
@@ -91,3 +97,5 @@ export default async function middleware(request) {
   // Tout le reste → login
   return loginPage(401);
 }
+
+export { isAuthBridge, isPublic, isProtected };

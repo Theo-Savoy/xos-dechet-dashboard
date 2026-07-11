@@ -75,6 +75,9 @@ export function useSession() {
       if (cancelled) return;
       if (s && !bridged.current) {
         bridge(s, generation.current);
+      } else if (s && bridged.current) {
+        // Refresh tokens in place — never null the session on TOKEN_REFRESHED.
+        setSession(s);
       } else if (!s) {
         generation.current += 1;
         bridged.current = false;

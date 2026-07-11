@@ -84,9 +84,11 @@
 
 /* Fond d'écran : dégradé fluide et animé entre les couleurs de la charte */
 .xos-wallpaper {
-  position: fixed;
+  /* absolute (not fixed): survives ancestor opacity/filter without viewport detach */
+  position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
   background: var(--xos-bg);
   background-image:
     radial-gradient(

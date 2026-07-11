@@ -180,6 +180,34 @@ describe("useSession — auth bridge", () => {
     });
   });
 
+  it("updates session in place on TOKEN_REFRESHED without clearing it", async () => {
+    const { result } = renderHook(() => useSession());
+
+    await act(async () => {
+      getSessionResolver!({ data: { session: mockSession } });
+    });
+    await act(async () => {
+      bridgeResolver!(new Response(null, { status: 200 }));
+    });
+    await waitFor(() => {
+      expect(result.current.session).toBe(mockSession);
+    });
+
+    const refreshed = {
+      ...mockSession,
+      access_token: "refreshed-token",
+    };
+
+    await act(async () => {
+      capturedAuthCallback!("TOKEN_REFRESHED", refreshed);
+    });
+
+    expect(result.current.session).toBe(refreshed);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.bridgeError).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps session null after logout even if a stale bridge resolves ok", async () => {
     const { result } = renderHook(() => useSession());
 
