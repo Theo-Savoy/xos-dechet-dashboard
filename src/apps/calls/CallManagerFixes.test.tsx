@@ -34,6 +34,7 @@ const alice = {
   contact_name: "Alice Martin",
   account_name: "Acme",
   phone: "0102030405",
+  email: "alice@acme.fr",
   title: "Responsable formation",
   linkedin_url: "https://linkedin.com/in/alice",
   status: "called",
@@ -171,7 +172,7 @@ describe("RunnerView", () => {
     expect(screen.queryByRole("button", { name: "Logguer & suivant" })).toBeNull();
   });
 
-  it("exposes poste and phone in the session list", () => {
+  it("exposes poste, email and phone in the session list", () => {
     render(
       <RunnerView
         {...runnerProps}
@@ -182,11 +183,29 @@ describe("RunnerView", () => {
     );
 
     expect(screen.getByText("Poste")).toBeTruthy();
-    expect(screen.getByText("Téléphone")).toBeTruthy();
+    expect(screen.getByText("Email")).toBeTruthy();
+    expect(screen.getByText("Tél.")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "0102030405" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "alice@acme.fr" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Responsable formation").length).toBeGreaterThan(0);
     expect(screen.getByText("Non contactés")).toBeTruthy();
     expect(screen.queryByText("Résultat")).toBeNull();
+  });
+
+  it("shows email on the contact fiche", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null, email: "bob@acme.fr" };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    expect(screen.getByRole("link", { name: "bob@acme.fr" }).getAttribute("href")).toBe("mailto:bob@acme.fr");
   });
 
   it("bulk-logs the same outcome for selected contacts", async () => {

@@ -155,7 +155,7 @@ function RecallFields({
             checked={scheduleRecall}
             onChange={(e) => onScheduleRecallChange(e.target.checked)}
           />
-          Planifier un rappel (le contact a demandé à être rappelé)
+          Planifier un rappel
         </label>
       )}
       {(autoRecall || scheduleRecall) && (
@@ -244,6 +244,7 @@ export function RunnerView({
         contact.title,
         contact.account_name,
         contact.phone,
+        contact.email,
       ]
         .filter(Boolean)
         .join(" ")
@@ -677,7 +678,8 @@ export function RunnerView({
                 <span>Contact</span>
                 <span>Poste</span>
                 <span>Entreprise</span>
-                <span>Téléphone</span>
+                <span>Email</span>
+                <span>Tél.</span>
                 <span>Statut</span>
                 <span>Rappel</span>
               </li>
@@ -703,13 +705,26 @@ export function RunnerView({
                     />
                   </label>
                   <button type="button" className="calls-cockpit-list__name" onClick={() => openDetail(contact.id)}>
-                    <strong>{contact.contact_name}</strong>
+                    <strong title={contact.contact_name}>{contact.contact_name}</strong>
                   </button>
                   <span className="calls-cockpit-list__cell" title={contact.title ?? undefined}>
                     {contact.title ?? "—"}
                   </span>
                   <span className="calls-cockpit-list__cell" title={contact.account_name ?? undefined}>
                     {contact.account_name ?? "—"}
+                  </span>
+                  <span className="calls-cockpit-list__cell" title={contact.email ?? undefined}>
+                    {contact.email ? (
+                      <a
+                        href={`mailto:${contact.email}`}
+                        className="calls-cockpit-list__email"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {contact.email}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
                   </span>
                   <span className="calls-cockpit-list__cell">
                     {contact.phone ? (
@@ -724,7 +739,7 @@ export function RunnerView({
                       "—"
                     )}
                   </span>
-                  <span className="calls-cockpit-list__status">
+                  <span className="calls-cockpit-list__status" title={status.label}>
                     <Tag variant={status.variant}>{status.label}</Tag>
                   </span>
                   <span className="calls-cockpit-list__cell xos-numeric">{contact.recall_at ? formatIsoDateFr(contact.recall_at) : "—"}</span>
@@ -783,6 +798,16 @@ export function RunnerView({
               </div>
             ) : (
               <p className="calls-contact-card__no-phone">Aucun numéro mobile</p>
+            )}
+
+            {focusedContact.email ? (
+              <div className="calls-contact-card__email">
+                <a href={`mailto:${focusedContact.email}`} className="calls-email-link">
+                  {focusedContact.email}
+                </a>
+              </div>
+            ) : (
+              <p className="calls-contact-card__no-email">Aucun email</p>
             )}
 
             {focusedContact.status !== "pending" && (

@@ -266,7 +266,8 @@ export function NewSessionView({
                   <span>Contact</span>
                   <span>Poste</span>
                   <span>Entreprise</span>
-                  <span>Téléphone</span>
+                  <span>Email</span>
+                  <span>Tél.</span>
                   <span>LinkedIn</span>
                   <span>Statut</span>
                 </li>
@@ -296,6 +297,15 @@ export function NewSessionView({
                       </Cell>
                       <Cell title={contact.title}>{contact.title ?? "—"}</Cell>
                       <Cell title={contact.account_name}>{contact.account_name ?? "—"}</Cell>
+                      <Cell title={contact.email}>
+                        {contact.email ? (
+                          <a href={`mailto:${contact.email}`} className="calls-preview__email">
+                            {contact.email}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </Cell>
                       <Cell className="xos-numeric" title={phone}>
                         {phone ?? "—"}
                       </Cell>

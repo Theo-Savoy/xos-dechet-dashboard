@@ -38,6 +38,7 @@ export type SessionContact = {
   contact_name: string;
   account_name: string | null;
   phone: string | null;
+  email?: string | null;
   title: string | null;
   linkedin_url: string | null;
   status: ContactStatus;

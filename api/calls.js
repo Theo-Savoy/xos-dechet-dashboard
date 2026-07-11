@@ -212,6 +212,7 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
     contact_name: contact.contact_name.trim(),
     account_name: contact.account_name || null,
     phone: contact.mobile_phone || contact.phone || null,
+    email: contact.email || null,
     title: contact.title || null,
     linkedin_url: contact.linkedin_url || null,
     status: "pending",
@@ -224,7 +225,7 @@ async function insertSessionWithContacts(client, userId, name, contacts, schedul
   const { data: insertedContacts, error: contactsError } = await client
     .from("call_session_contacts")
     .insert(contactRows)
-    .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
+    .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
     .order("position", { ascending: true });
 
   if (contactsError || !insertedContacts?.length) {
@@ -389,7 +390,7 @@ export async function GET(request) {
 
     const { data: contacts, error: contactsError } = await client
       .from("call_session_contacts")
-      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
+      .select("id, position, sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, status, outcome, comments, sf_task_id, sf_event_id, called_at, recall_at, attempt_count, marked_npa")
       .eq("session_id", sessionId)
       .order("position", { ascending: true });
 
@@ -913,7 +914,7 @@ export async function POST(request) {
 
     const { data: sessionContacts, error: contactsLookupError } = await client
       .from("call_session_contacts")
-      .select("sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, outcome, status, attempt_count")
+      .select("sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, outcome, status, attempt_count")
       .eq("session_id", session_id)
       .order("position", { ascending: true });
 
@@ -1011,7 +1012,7 @@ export async function POST(request) {
 
     const { data: sourceContacts, error: sourceError } = await client
       .from("call_session_contacts")
-      .select("id, sf_contact_id, sf_account_id, contact_name, account_name, phone, title, linkedin_url, status, attempt_count")
+      .select("id, sf_contact_id, sf_account_id, contact_name, account_name, phone, email, title, linkedin_url, status, attempt_count")
       .eq("session_id", session_id)
       .in("id", contact_ids);
 
@@ -1041,6 +1042,7 @@ export async function POST(request) {
       contact_name: contact.contact_name,
       account_name: contact.account_name,
       phone: contact.phone,
+      email: contact.email,
       title: contact.title,
       linkedin_url: contact.linkedin_url,
       attempt_count: Number.isInteger(contact.attempt_count) ? contact.attempt_count : 0,
@@ -1084,6 +1086,7 @@ export async function POST(request) {
           contact_name: contact.contact_name,
           account_name: contact.account_name || null,
           phone: contact.phone || null,
+          email: contact.email || null,
           title: contact.title || null,
           linkedin_url: contact.linkedin_url || null,
           status: "pending",
