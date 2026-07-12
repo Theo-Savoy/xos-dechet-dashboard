@@ -6,12 +6,26 @@ import mapping from "./_crm/mapping.js";
 import { escapeSOQL, fetchSFToken, searchContacts, buildLightningUrl } from "./_crm/salesforce.js";
 import { quarterlyToMonthlyIndicative } from "./_weekly/targets.js";
 
-const CACHE_CONTROL = "public, s-maxage=900, stale-while-revalidate=60";
+const CACHE_CONTROL = "private, max-age=30, stale-while-revalidate=120";
 const TIMEZONE = "Europe/Paris";
 const MAX_WEEKS = 16;
 
-function json(status, body) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": CACHE_CONTROL } });
+function json(status, body, extraHeaders = {}) {
+  const timingMs = body?.context?.timing_ms;
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": CACHE_CONTROL,
+      ...(Number.isFinite(timingMs) ? { "Server-Timing": `perf;dur=${Math.round(timingMs)}` } : {}),
+      ...extraHeaders,
+    },
+  });
+}
+
+function ownerInClause(field, ownerIds) {
+  if (!ownerIds?.length) return "";
+  return ` AND ${field} IN (${ownerIds.map((id) => `'${escapeSOQL(id)}'`).join(", ")})`;
 }
 
 function dateParts(value = new Date()) {
@@ -475,6 +489,9 @@ async function upsertWeekSnapshots(client, quarterLabel, rows, signedByOwner, fo
     quarter: quarterLabel,
     calls: row.calls,
     meetings: row.meetings,
+    proposals: row.proposals || 0,
+    progressions: row.progressions || 0,
+    call_results: row.call_results || {},
     generated_count: row.generated_count,
     generated_amount: row.generated_amount,
     won_count: row.won_count,
@@ -517,11 +534,198 @@ async function loadPeriodHistory(client) {
   return { weeks, quarters: [...quarterSet] };
 }
 
+async function loadWeekSnapshotRows(client, weekStarts) {
+  if (!weekStarts.length) return [];
+  const { data, error } = await client
+    .from("perf_week_snapshots")
+    .select("week_start, sf_user_id, iso_week, quarter, calls, meetings, proposals, progressions, call_results, generated_count, generated_amount, won_count, won_amount, won_catalogue, won_sur_mesure, won_conseil, won_arr_amount, signed_to_date, forecast")
+    .in("week_start", weekStarts);
+  if (error) {
+    if (/perf_week_snapshots|schema cache|does not exist/i.test(error.message || "")) return null;
+    throw new Error("week_snapshot_lookup_failed");
+  }
+  return data || [];
+}
+
+async function tryHistoricalSnapshotResponse({
+  client, profile, teamView, empty, window, quarter, priorQuarter, weekIndex, quarterStarts, effectiveDate, today, resolvedPeriod,
+}) {
+  const currentMonday = mondayFor(effectiveDate);
+  const liveMonday = mondayFor(today);
+  if (currentMonday >= liveMonday) return null;
+
+  const starts = window.starts;
+  const [snapRows, profiles, targets, trackingOverrides, periodHistory] = await Promise.all([
+    loadWeekSnapshotRows(client, starts),
+    teamProfiles(client),
+    settingsValue(client, "weekly_targets"),
+    settingsValue(client, "weekly_tracking"),
+    loadPeriodHistory(client),
+  ]);
+  if (snapRows === null) return null;
+  if (!snapRows.some((row) => row.week_start === currentMonday)) return null;
+  if (resolvedPeriod === "quarter") {
+    const covered = new Set(snapRows.map((row) => row.week_start));
+    if (covered.size < Math.min(3, starts.length || 3)) return null;
+  }
+  if (!profiles) return null;
+
+  let ownerIds = [...new Set(snapRows.map((row) => row.sf_user_id).filter(Boolean))];
+  if (!teamView) ownerIds = profile.sfUserId ? [profile.sfUserId] : [];
+  ownerIds = ownerIds.filter((id) => {
+    const mapped = findBySfId(profiles, id);
+    return !isWeeklyOwnerExcluded(null, mapped?.full_name || "", mapped?.email || "");
+  });
+  if (!teamView && profile.sfUserId && !ownerIds.some((id) => sfIdKey(id) === sfIdKey(profile.sfUserId))) {
+    ownerIds.push(profile.sfUserId);
+  }
+  if (!ownerIds.length) return null;
+
+  const byKey = new Map(snapRows.map((row) => [`${sfIdKey(row.sf_user_id)}:${row.week_start}`, row]));
+  const pulse = [];
+  const pipeline = [];
+  const effort = [];
+  for (const owner of ownerIds) {
+    for (const start of starts) {
+      const snap = byKey.get(`${sfIdKey(owner)}:${start}`);
+      const week = snap?.iso_week || isoWeek(start);
+      const generatedCount = number(snap?.generated_count);
+      const generatedAmount = number(snap?.generated_amount);
+      const wonCount = number(snap?.won_count);
+      const wonAmount = number(snap?.won_amount);
+      pulse.push({
+        sf_user_id: owner,
+        week,
+        week_start: start,
+        calls: number(snap?.calls),
+        meetings: number(snap?.meetings),
+        proposals: number(snap?.proposals),
+        call_results: snap?.call_results && typeof snap.call_results === "object" ? snap.call_results : emptyCallResults(),
+      });
+      pipeline.push({
+        sf_user_id: owner,
+        week,
+        week_start: start,
+        generated_count: generatedCount,
+        generated_amount: generatedAmount,
+        won_count: wonCount,
+        won_amount: wonAmount,
+        won_by_type: {
+          catalogue: number(snap?.won_catalogue),
+          sur_mesure: number(snap?.won_sur_mesure),
+          conseil: number(snap?.won_conseil),
+        },
+        won_arr_amount: number(snap?.won_arr_amount),
+        closing_rate_count: generatedCount ? wonCount / generatedCount : null,
+        closing_rate_amount: generatedAmount ? wonAmount / generatedAmount : null,
+      });
+      effort.push({
+        sf_user_id: owner,
+        week,
+        week_start: start,
+        progressions: number(snap?.progressions),
+        open_opps_at_start: 0,
+        effort_rate: null,
+      });
+    }
+  }
+
+  const quarterRows = ownerIds.map((owner) => {
+    const snap = byKey.get(`${sfIdKey(owner)}:${currentMonday}`);
+    const targetEntry = Object.entries(targets || {}).find(([id]) => sfIdKey(id) === sfIdKey(owner))?.[1];
+    const target = targetEntry == null || targetEntry === "" ? null : number(targetEntry);
+    const signedToDate = number(snap?.signed_to_date);
+    const forecast = number(snap?.forecast);
+    const expected = target === null ? null : target * ((weekIndex + 1) / Math.max(quarterStarts.length, weekIndex + 1));
+    return {
+      sf_user_id: owner,
+      quarter: quarter.label,
+      signed_to_date: signedToDate,
+      weighted_open: 0,
+      forecast,
+      custom_pipe: 0,
+      target,
+      signed_n1: 0,
+      pace_ratio: expected && expected > 0 ? signedToDate / expected : null,
+      expected_to_date: expected,
+      monthly_indicative: [],
+    };
+  });
+
+  const forecastHistory = ownerIds.flatMap((owner) => starts.map((start) => {
+    const snap = byKey.get(`${sfIdKey(owner)}:${start}`);
+    return {
+      sf_user_id: owner,
+      week_start: start,
+      week: snap?.iso_week || isoWeek(start),
+      forecast: snap ? number(snap.forecast) : null,
+      signed_to_date: number(snap?.signed_to_date),
+    };
+  }));
+
+  const paceTarget = quarterRows.map((row) => row.target).filter((value) => value !== null);
+  const targetSum = paceTarget.length ? paceTarget.reduce((sum, value) => sum + value, 0) : null;
+  const pace = buildPace({
+    signed: quarterRows.reduce((sum, row) => sum + row.signed_to_date, 0),
+    forecast: quarterRows.reduce((sum, row) => sum + row.forecast, 0),
+    target: targetSum,
+    signedN1: 0,
+    weekOfQuarter: weekIndex + 1,
+    weeksInQuarter: Math.max(quarterStarts.length, weekIndex + 1),
+    wonCount: 0,
+    expectedToDate: targetSum === null ? null : targetSum * ((weekIndex + 1) / Math.max(quarterStarts.length, weekIndex + 1)),
+  });
+
+  const compareWeekStart = window.starts.length > 1 ? window.starts[window.starts.length - 2] : null;
+  const context = {
+    iso_week: isoWeek(currentMonday),
+    quarter_label: quarter.label,
+    week_of_quarter: weekIndex + 1,
+    weeks_in_quarter: Math.max(quarterStarts.length, weekIndex + 1),
+    compare_week: compareWeekStart ? isoWeek(compareWeekStart) : null,
+    prior_quarter_label: priorQuarter.label,
+    anchor_week_start: currentMonday,
+    live_week_start: liveMonday,
+    live_iso_week: isoWeek(liveMonday),
+    source: "snapshot",
+    lite: false,
+    timing_ms: null,
+  };
+
+  return json(200, {
+    ...empty,
+    owners: ownerIds.map((id) => ownerMeta(
+      profiles,
+      [],
+      id,
+      id === profile.sfUserId || sfIdKey(id) === sfIdKey(profile.sfUserId) ? { name: profile.fullName, role: profile.role } : {},
+      trackingOverrides,
+    )),
+    pulse,
+    pipeline,
+    prior_pulse: [],
+    prior_pipeline: [],
+    effort,
+    quarter: quarterRows,
+    forecast_history: forecastHistory,
+    custom_pipe: empty.custom_pipe,
+    follow_up_opps: [],
+    stagnant_opps: [],
+    pace: { ...pace, monthly_indicative: [] },
+    seasonality: null,
+    period_history: periodHistory,
+    context,
+    week_meta: starts.map((start) => ({ week_start: start, iso_week: isoWeek(start) })),
+    quarter_bounds: { from: quarter.from, to: addDays(quarter.toExclusive, -1), label: quarter.label },
+  });
+}
+
 function aggregateWeeklyRows({
   ownerIds, starts, allowed, tasks, events, histories, generated, won, wonArr,
   task, event, opportunity, opportunityHistory, saleTypeValues, baselineStages,
 }) {
   const data = new Map();
+  const startSet = new Set(starts);
   const row = (owner, start) => {
     const key = `${owner}:${start}`;
     if (!data.has(key)) {
@@ -538,7 +742,7 @@ function aggregateWeeklyRows({
   const inWindow = (record, ownerField, dateField, callback) => {
     const owner = record[ownerField];
     const start = mondayFor(dateKey(record[dateField]));
-    if (allowed(owner) && starts.includes(start)) callback(row(owner, start));
+    if (allowed(owner) && startSet.has(start)) callback(row(owner, start));
   };
   for (const record of tasks) if (record[task.fields.subtype] === task.subtypeValue) inWindow(record, task.fields.ownerId, task.fields.activityDate, (target) => {
     target.calls += 1;
@@ -574,6 +778,7 @@ function aggregateWeeklyRows({
 }
 
 export async function GET(request) {
+  const startedAt = Date.now();
   const user = await verifyJWT(request);
   if (!user) return json(401, { error: "unauthorized" });
   const url = new URL(request.url);
@@ -581,6 +786,7 @@ export async function GET(request) {
   const period = rawPeriod === "quarter" ? "quarter" : rawPeriod === "week" ? "week" : null;
   const rawWeeks = url.searchParams.get("weeks");
   const weeks = rawWeeks === null ? 2 : Number(rawWeeks);
+  const lite = url.searchParams.get("lite") === "1" || url.searchParams.get("lite") === "true";
   // period=week → 2 semaines (S + S−1) ; period=quarter → trimestre fiscal ; weeks=N reste supporté pour tests.
   if (period === null && (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKS)) return json(400, { error: "invalid_weeks" });
 
@@ -627,6 +833,43 @@ export async function GET(request) {
   };
   if (!teamView && !profile.sfUserId) return json(200, { ...empty, warning: "sf_user_unmapped" });
 
+  const priorQuarter = priorFiscalQuarter(effectiveDate);
+  const quarterStarts = fiscalQuarterWeekStarts(quarter);
+  const priorStarts = fiscalQuarterWeekStarts(priorQuarter);
+  const weekIndex = weekOfQuarterIndex(quarterStarts, effectiveDate);
+
+  const liveMondayEarly = mondayFor(today);
+  const currentMondayEarly = mondayFor(effectiveDate);
+  if (currentMondayEarly < liveMondayEarly) {
+    try {
+      const snapshotResponse = await tryHistoricalSnapshotResponse({
+        client,
+        profile,
+        teamView,
+        empty,
+        window,
+        quarter,
+        priorQuarter,
+        weekIndex,
+        quarterStarts,
+        effectiveDate,
+        today,
+        resolvedPeriod,
+      });
+      if (snapshotResponse) {
+        const body = await snapshotResponse.json();
+        if (body?.context) {
+          body.context.timing_ms = Date.now() - startedAt;
+          body.context.lite = false;
+          body.context.source = body.context.source || "snapshot";
+        }
+        return json(200, body);
+      }
+    } catch {
+      // Fallback Salesforce si snapshots incomplets / indisponibles.
+    }
+  }
+
   const tokenResult = await fetchSFToken();
   if (tokenResult.error || !tokenResult.accessToken) return json(502, { error: tokenResult.error || "sf_auth_error" });
   const { task, event, opportunity, opportunityHistory, user: sfUserObject } = mapping.objects;
@@ -637,10 +880,6 @@ export async function GET(request) {
   const fromDateTime = `${window.from}T00:00:00Z`;
   const toDateTime = `${window.toExclusive}T00:00:00Z`;
   const customToExclusive = addDays(today, 181);
-  const priorQuarter = priorFiscalQuarter(effectiveDate);
-  const quarterStarts = fiscalQuarterWeekStarts(quarter);
-  const priorStarts = fiscalQuarterWeekStarts(priorQuarter);
-  const weekIndex = weekOfQuarterIndex(quarterStarts, effectiveDate);
   const saleTypeValues = opportunity.saleTypes;
   const arrWhere = `${opportunity.saleTypeField} = '${escapeSOQL(saleTypeValues.catalogue[0])}' AND ${opportunity.commissionTypeField} IN (${opportunity.arrCommissionTypes.map((value) => `'${escapeSOQL(value)}'`).join(", ")})`;
   const openOppFields = [
@@ -655,55 +894,65 @@ export async function GET(request) {
     "Account.Name",
   ];
   const seasonalityFrom = addDays(quarter.from, -365 * 3);
+
+  // Roster d’abord → scoper les SOQL (surtout openOpps) au lieu de tirer toute l’org.
+  const [profilesEarly, targetsEarly, trackingEarly] = await Promise.all([
+    teamView ? teamProfiles(client) : Promise.resolve([]),
+    settingsValue(client, "weekly_targets"),
+    settingsValue(client, "weekly_tracking").catch(() => ({})),
+  ]);
+  if (teamView && profilesEarly === null) return json(500, { error: "team_lookup_failed" });
+  const scopeOwnerIds = teamView
+    ? [...new Set((profilesEarly || []).map((row) => row.sf_user_id).filter(Boolean))]
+    : (profile.sfUserId ? [profile.sfUserId] : []);
+  const byOwner = (field) => ownerInClause(field, scopeOwnerIds);
+
   try {
-    const [tasks, events, histories, generated, won, wonArr, openOpps, quarterWon, quarterOpen, customOpen, priorQuarterWon, seasonalityRows, profiles, targets, trackingOverrides] = await Promise.all([
-      crmRecords(tokenResult.accessToken, query(task.name, [task.fields.ownerId, task.fields.activityDate, task.fields.subtype, task.fields.result], `${task.fields.subtype} = '${task.subtypeValue}' AND ${task.fields.activityDate} >= ${fromDate} AND ${task.fields.activityDate} < ${toDate}`)),
-      crmRecords(tokenResult.accessToken, query(event.name, [event.fields.ownerId, event.fields.activityDate], `${event.fields.activityDate} >= ${fromDate} AND ${event.fields.activityDate} < ${toDate}`)),
-      // Borné à la fenêtre : l'org compte 17k+ lignes d'historique, le cap SOQL en tronquerait un sous-ensemble arbitraire.
-      crmRecords(tokenResult.accessToken, query(opportunityHistory.name, [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName, opportunityHistory.fields.createdDate, opportunityHistory.fields.createdById], `${opportunityHistory.fields.createdDate} >= ${fromDateTime} AND ${opportunityHistory.fields.createdDate} < ${toDateTime}`, `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.createdDate, opportunity.fields.amount], `${opportunity.fields.createdDate} >= ${fromDateTime} AND ${opportunity.fields.createdDate} < ${toDateTime}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${fromDate} AND ${opportunity.fields.closeDate} < ${toDate}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${fromDate} AND ${opportunity.fields.closeDate} < ${toDate} AND ${arrWhere}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, openOppFields, `${opportunity.fields.isClosed} = false AND ${opportunity.fields.stageName} != '${opportunityHistory.stages.stalledSuspect}'`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${quarter.from} AND ${opportunity.fields.closeDate} < ${quarter.toExclusive}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, quarterOpenFields, `${opportunity.fields.isClosed} = false AND ${opportunity.fields.closeDate} >= ${quarter.from} AND ${opportunity.fields.closeDate} < ${quarter.toExclusive}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.id, opportunity.fields.name, opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.fields.probability, opportunity.fields.expectedRevenue, opportunity.saleTypeField], `${opportunity.fields.isClosed} = false AND ${opportunity.saleTypeField} = '${escapeSOQL(saleTypeValues.sur_mesure[0])}' AND ${opportunity.fields.closeDate} >= ${today} AND ${opportunity.fields.closeDate} < ${customToExclusive}`)),
-      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${priorQuarter.from} AND ${opportunity.fields.closeDate} < ${priorQuarter.toExclusive}`)),
-      crmRecords(tokenResult.accessToken, `SELECT CALENDAR_YEAR(${opportunity.fields.closeDate}) yearNum, CALENDAR_MONTH(${opportunity.fields.closeDate}) monthNum, SUM(${opportunity.fields.amount}) totalAmount FROM ${opportunity.name} WHERE ${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${seasonalityFrom} AND ${opportunity.fields.closeDate} < ${today} GROUP BY CALENDAR_YEAR(${opportunity.fields.closeDate}), CALENDAR_MONTH(${opportunity.fields.closeDate})`).catch(() => []),
-      teamView ? teamProfiles(client) : Promise.resolve([]),
-      settingsValue(client, "weekly_targets"),
-      settingsValue(client, "weekly_tracking").catch(() => ({})),
+    const [tasks, events, histories, generated, won, wonArr, openOpps, quarterWon, quarterOpen, customOpen, priorQuarterWon, seasonalityRows] = await Promise.all([
+      crmRecords(tokenResult.accessToken, query(task.name, [task.fields.ownerId, task.fields.activityDate, task.fields.subtype, task.fields.result], `${task.fields.subtype} = '${task.subtypeValue}' AND ${task.fields.activityDate} >= ${fromDate} AND ${task.fields.activityDate} < ${toDate}${byOwner(task.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(event.name, [event.fields.ownerId, event.fields.activityDate], `${event.fields.activityDate} >= ${fromDate} AND ${event.fields.activityDate} < ${toDate}${byOwner(event.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunityHistory.name, [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName, opportunityHistory.fields.createdDate, opportunityHistory.fields.createdById], `${opportunityHistory.fields.createdDate} >= ${fromDateTime} AND ${opportunityHistory.fields.createdDate} < ${toDateTime}${byOwner(opportunityHistory.fields.createdById)}`, `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.createdDate, opportunity.fields.amount], `${opportunity.fields.createdDate} >= ${fromDateTime} AND ${opportunity.fields.createdDate} < ${toDateTime}${byOwner(opportunity.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${fromDate} AND ${opportunity.fields.closeDate} < ${toDate}${byOwner(opportunity.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${fromDate} AND ${opportunity.fields.closeDate} < ${toDate} AND ${arrWhere}${byOwner(opportunity.fields.ownerId)}`)),
+      lite
+        ? Promise.resolve([])
+        : crmRecords(tokenResult.accessToken, query(opportunity.name, openOppFields, `${opportunity.fields.isClosed} = false AND ${opportunity.fields.stageName} != '${opportunityHistory.stages.stalledSuspect}'${byOwner(opportunity.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${quarter.from} AND ${opportunity.fields.closeDate} < ${quarter.toExclusive}${byOwner(opportunity.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, quarterOpenFields, `${opportunity.fields.isClosed} = false AND ${opportunity.fields.closeDate} >= ${quarter.from} AND ${opportunity.fields.closeDate} < ${quarter.toExclusive}${byOwner(opportunity.fields.ownerId)}`)),
+      lite
+        ? Promise.resolve([])
+        : crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.id, opportunity.fields.name, opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.fields.probability, opportunity.fields.expectedRevenue, opportunity.saleTypeField], `${opportunity.fields.isClosed} = false AND ${opportunity.saleTypeField} = '${escapeSOQL(saleTypeValues.sur_mesure[0])}' AND ${opportunity.fields.closeDate} >= ${today} AND ${opportunity.fields.closeDate} < ${customToExclusive}${byOwner(opportunity.fields.ownerId)}`)),
+      crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${priorQuarter.from} AND ${opportunity.fields.closeDate} < ${priorQuarter.toExclusive}${byOwner(opportunity.fields.ownerId)}`)),
+      lite || resolvedPeriod === "week"
+        ? Promise.resolve([])
+        : crmRecords(tokenResult.accessToken, `SELECT CALENDAR_YEAR(${opportunity.fields.closeDate}) yearNum, CALENDAR_MONTH(${opportunity.fields.closeDate}) monthNum, SUM(${opportunity.fields.amount}) totalAmount FROM ${opportunity.name} WHERE ${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${seasonalityFrom} AND ${opportunity.fields.closeDate} < ${today} GROUP BY CALENDAR_YEAR(${opportunity.fields.closeDate}), CALENDAR_MONTH(${opportunity.fields.closeDate})`).catch(() => []),
     ]);
-    if (profiles === null) return json(500, { error: "team_lookup_failed" });
+    const profiles = profilesEarly || [];
+    const targets = targetsEarly || {};
+    const trackingOverrides = trackingEarly || {};
 
     // Étape de départ des opps vues dans la fenêtre : dernière ligne d'historique
     // pré-fenêtre par opp, sinon la première transition de la fenêtre serait ignorée.
     const windowOppIds = [...new Set(histories.map((record) => record[opportunityHistory.fields.opportunityId]).filter(Boolean))];
     const baselineStages = new Map();
-    for (let index = 0; index < windowOppIds.length; index += 200) {
-      const chunk = windowOppIds.slice(index, index + 200);
-      const rows = await crmRecords(tokenResult.accessToken, query(
-        opportunityHistory.name,
-        [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName],
-        `${opportunityHistory.fields.opportunityId} IN (${chunk.map((id) => `'${escapeSOQL(id)}'`).join(", ")}) AND ${opportunityHistory.fields.createdDate} < ${fromDateTime}`,
-        `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`,
-      ));
+    const baselineChunks = [];
+    for (let index = 0; index < windowOppIds.length; index += 200) baselineChunks.push(windowOppIds.slice(index, index + 200));
+    const baselineResults = await Promise.all(baselineChunks.map((chunk) => crmRecords(tokenResult.accessToken, query(
+      opportunityHistory.name,
+      [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName],
+      `${opportunityHistory.fields.opportunityId} IN (${chunk.map((id) => `'${escapeSOQL(id)}'`).join(", ")}) AND ${opportunityHistory.fields.createdDate} < ${fromDateTime}`,
+      `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`,
+    ))));
+    for (const rows of baselineResults) {
       for (const row of rows) baselineStages.set(row[opportunityHistory.fields.opportunityId], row[opportunityHistory.fields.stageName]);
     }
-    const owners = new Set(teamView ? [] : [profile.sfUserId]);
-    const addOwners = (records, field) => records.forEach((record) => { if (record[field]) owners.add(record[field]); });
-    addOwners(tasks, task.fields.ownerId);
-    addOwners(events, event.fields.ownerId);
-    addOwners(histories, opportunityHistory.fields.createdById);
-    addOwners(generated, opportunity.fields.ownerId);
-    addOwners(won, opportunity.fields.ownerId);
-    addOwners(wonArr, opportunity.fields.ownerId);
-    addOwners(openOpps, opportunity.fields.ownerId);
-    addOwners(quarterWon, opportunity.fields.ownerId);
-    addOwners(quarterOpen, opportunity.fields.ownerId);
-    addOwners(customOpen, opportunity.fields.ownerId);
-    addOwners(priorQuarterWon, opportunity.fields.ownerId);
-    if (!teamView) owners.clear(), owners.add(profile.sfUserId);
+
+    const owners = new Set(scopeOwnerIds);
+    if (!teamView && profile.sfUserId) {
+      owners.clear();
+      owners.add(profile.sfUserId);
+    }
     const candidateOwnerIds = [...owners];
 
     const sfUsers = candidateOwnerIds.length
@@ -722,13 +971,13 @@ export async function GET(request) {
       const mapped = findBySfId(profiles, id);
       return !isWeeklyOwnerExcluded(sfUser, mapped?.full_name || sfUser?.Name || "", mapped?.email || sfUser?.Email || "");
     });
-    // Self-view : ne jamais s'exclure soi-même même si inactif (cas edge).
     if (!teamView && profile.sfUserId && !activeOwnerIds.some((id) => sfIdKey(id) === sfIdKey(profile.sfUserId))) {
       activeOwnerIds.push(profile.sfUserId);
     }
     owners.clear();
     for (const id of activeOwnerIds) owners.add(id);
-    const allowed = (id) => [...owners].some((owner) => sfIdKey(owner) === sfIdKey(id));
+    const allowedIds = new Set([...owners].map((id) => sfIdKey(id)));
+    const allowed = (id) => allowedIds.has(sfIdKey(id));
     const ownerIds = [...owners];
 
     const openByOwner = new Map();
@@ -771,14 +1020,15 @@ export async function GET(request) {
       if (allowed(owner)) customByOwner.set(owner, (customByOwner.get(owner) || 0) + number(record[opportunity.fields.amount]));
     }
 
-    const customPipe = buildCustomPipe(customOpen, opportunity.fields, effectiveDate, owners);
-    const followUpOpps = buildFollowUpOpps(quarterOpen, opportunity.fields, owners);
-    const stagnantOpps = buildStagnantOpps(openOpps, opportunity.fields, owners, effectiveDate, opportunityHistory.stages.stalledSuspect, {
+    const customPipe = lite ? empty.custom_pipe : buildCustomPipe(customOpen, opportunity.fields, effectiveDate, owners);
+    const followUpOpps = lite ? [] : buildFollowUpOpps(quarterOpen, opportunity.fields, owners);
+    const stagnantOpps = lite ? [] : buildStagnantOpps(openOpps, opportunity.fields, owners, effectiveDate, opportunityHistory.stages.stalledSuspect, {
       quarterFrom: quarter.from,
       quarterToExclusive: quarter.toExclusive,
     });
 
-    const seasonality = buildSeasonality(
+    // Saisonnalité = agrégat 3 ans : utile pour le pace trimestre, skip en vue semaine.
+    const seasonality = lite || resolvedPeriod === "week" ? null : buildSeasonality(
       (Array.isArray(seasonalityRows) ? seasonalityRows : []).map((row) => ({
         year: Number(row.yearNum ?? row.expr0),
         month: Number(row.monthNum ?? row.expr1),
@@ -789,7 +1039,7 @@ export async function GET(request) {
 
     let priorPulse = [];
     let priorPipeline = [];
-    if (resolvedPeriod === "quarter" && priorStarts.length) {
+    if (!lite && resolvedPeriod === "quarter" && priorStarts.length) {
       const priorWeekStarts = priorStarts.slice(0, Math.min(weekIndex + 1, priorStarts.length));
       if (priorWeekStarts.length) {
         const pFrom = priorWeekStarts[0];
@@ -797,12 +1047,12 @@ export async function GET(request) {
         const pFromDt = `${pFrom}T00:00:00Z`;
         const pToDt = `${pToEx}T00:00:00Z`;
         const [pTasks, pEvents, pHistories, pGenerated, pWon, pWonArr] = await Promise.all([
-          crmRecords(tokenResult.accessToken, query(task.name, [task.fields.ownerId, task.fields.activityDate, task.fields.subtype, task.fields.result], `${task.fields.subtype} = '${task.subtypeValue}' AND ${task.fields.activityDate} >= ${pFrom} AND ${task.fields.activityDate} < ${pToEx}`)),
-          crmRecords(tokenResult.accessToken, query(event.name, [event.fields.ownerId, event.fields.activityDate], `${event.fields.activityDate} >= ${pFrom} AND ${event.fields.activityDate} < ${pToEx}`)),
-          crmRecords(tokenResult.accessToken, query(opportunityHistory.name, [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName, opportunityHistory.fields.createdDate, opportunityHistory.fields.createdById], `${opportunityHistory.fields.createdDate} >= ${pFromDt} AND ${opportunityHistory.fields.createdDate} < ${pToDt}`, `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`)),
-          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.createdDate, opportunity.fields.amount], `${opportunity.fields.createdDate} >= ${pFromDt} AND ${opportunity.fields.createdDate} < ${pToDt}`)),
-          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${pFrom} AND ${opportunity.fields.closeDate} < ${pToEx}`)),
-          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${pFrom} AND ${opportunity.fields.closeDate} < ${pToEx} AND ${arrWhere}`)),
+          crmRecords(tokenResult.accessToken, query(task.name, [task.fields.ownerId, task.fields.activityDate, task.fields.subtype, task.fields.result], `${task.fields.subtype} = '${task.subtypeValue}' AND ${task.fields.activityDate} >= ${pFrom} AND ${task.fields.activityDate} < ${pToEx}${byOwner(task.fields.ownerId)}`)),
+          crmRecords(tokenResult.accessToken, query(event.name, [event.fields.ownerId, event.fields.activityDate], `${event.fields.activityDate} >= ${pFrom} AND ${event.fields.activityDate} < ${pToEx}${byOwner(event.fields.ownerId)}`)),
+          crmRecords(tokenResult.accessToken, query(opportunityHistory.name, [opportunityHistory.fields.opportunityId, opportunityHistory.fields.stageName, opportunityHistory.fields.createdDate, opportunityHistory.fields.createdById], `${opportunityHistory.fields.createdDate} >= ${pFromDt} AND ${opportunityHistory.fields.createdDate} < ${pToDt}${byOwner(opportunityHistory.fields.createdById)}`, `${opportunityHistory.fields.opportunityId}, ${opportunityHistory.fields.createdDate}`)),
+          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.createdDate, opportunity.fields.amount], `${opportunity.fields.createdDate} >= ${pFromDt} AND ${opportunity.fields.createdDate} < ${pToDt}${byOwner(opportunity.fields.ownerId)}`)),
+          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${pFrom} AND ${opportunity.fields.closeDate} < ${pToEx}${byOwner(opportunity.fields.ownerId)}`)),
+          crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.saleTypeField, opportunity.commissionTypeField], `${opportunity.fields.isWon} = true AND ${opportunity.fields.closeDate} >= ${pFrom} AND ${opportunity.fields.closeDate} < ${pToEx} AND ${arrWhere}${byOwner(opportunity.fields.ownerId)}`)),
         ]);
         const priorRows = aggregateWeeklyRows({
           ownerIds,
@@ -832,6 +1082,8 @@ export async function GET(request) {
           won_amount: entry.won_amount,
           won_by_type: entry.won_by_type,
           won_arr_amount: entry.won_arr_amount,
+          closing_rate_count: entry.generated_count ? entry.won_count / entry.generated_count : null,
+          closing_rate_amount: entry.generated_amount ? entry.won_amount / entry.generated_amount : null,
         }));
       }
     }
@@ -868,22 +1120,31 @@ export async function GET(request) {
     const currentMonday = mondayFor(effectiveDate);
     const isLive = effectiveDate === today;
     if (isLive) {
-      await upsertForecastSnapshots(client, quarterRows.map((entry) => ({
-        week_start: currentMonday,
-        sf_user_id: entry.sf_user_id,
-        quarter: quarter.label,
-        forecast: entry.forecast,
-        signed_to_date: entry.signed_to_date,
-      })));
       const forecastByOwner = new Map(quarterRows.map((entry) => [entry.sf_user_id, entry.forecast]));
-      await upsertWeekSnapshots(client, quarter.label, rows, signedByOwner, forecastByOwner);
+      void Promise.all([
+        upsertForecastSnapshots(client, quarterRows.map((entry) => ({
+          week_start: currentMonday,
+          sf_user_id: entry.sf_user_id,
+          quarter: quarter.label,
+          forecast: entry.forecast,
+          signed_to_date: entry.signed_to_date,
+        }))),
+        upsertWeekSnapshots(client, quarter.label, rows, signedByOwner, forecastByOwner),
+      ]).catch(() => {});
     }
 
-    const storedHistory = await loadForecastHistory(client, quarter.label, ownerIds);
+    const [storedHistory, periodHistory] = await Promise.all([
+      loadForecastHistory(client, quarter.label, ownerIds),
+      loadPeriodHistory(client),
+    ]);
     const historyByOwnerWeek = new Map(storedHistory.map((entry) => [`${sfIdKey(entry.sf_user_id)}:${entry.week_start}`, entry]));
+    const signedByOwnerWeek = new Map();
+    for (const owner of ownerIds) {
+      signedByOwnerWeek.set(owner, signedSeries(window.starts, quarterWon, opportunity.fields.ownerId, opportunity.fields.amount, opportunity.fields.closeDate, owner));
+    }
     const forecastHistory = ownerIds.flatMap((owner) => window.starts.map((start, index) => {
       const stored = historyByOwnerWeek.get(`${sfIdKey(owner)}:${start}`);
-      const signedValues = signedSeries(window.starts, quarterWon, opportunity.fields.ownerId, opportunity.fields.amount, opportunity.fields.closeDate, owner);
+      const signedValues = signedByOwnerWeek.get(owner) || [];
       const live = quarterRows.find((entry) => sfIdKey(entry.sf_user_id) === sfIdKey(owner));
       const isCurrent = start === currentMonday;
       return {
@@ -914,7 +1175,6 @@ export async function GET(request) {
       monthly_indicative: paceTarget ? quarterlyToMonthlyIndicative(paceTarget, quarter.label, seasonality) : [],
     };
 
-    const periodHistory = await loadPeriodHistory(client);
     const compareWeekStart = window.starts.length > 1 ? window.starts[window.starts.length - 2] : null;
     const liveMonday = mondayFor(today);
     const context = {
@@ -927,6 +1187,9 @@ export async function GET(request) {
       anchor_week_start: currentMonday,
       live_week_start: liveMonday,
       live_iso_week: isoWeek(liveMonday),
+      source: "live",
+      lite,
+      timing_ms: Date.now() - startedAt,
     };
 
     return json(200, {

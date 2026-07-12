@@ -210,7 +210,7 @@ describe("Weekly Perf", () => {
   it("requests the current week by default", async () => {
     render(<WeeklyApp />);
     await screen.findByText("Ada Lovelace");
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/perf?period=week", expect.any(Object));
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/perf?period=week&lite=1", expect.any(Object));
   });
 
   it("switches to quarter consolidated view", async () => {

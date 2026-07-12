@@ -27,10 +27,8 @@
   transition: opacity .28s var(--weekly-ease), filter .28s var(--weekly-ease);
 }
 
-.weekly-body--refreshing {
-  opacity: .42;
-  filter: saturate(.85);
-  pointer-events: none;
+.weekly-lazy-mount {
+  min-width: 0;
 }
 
 /* —— Header & toolbar —— */

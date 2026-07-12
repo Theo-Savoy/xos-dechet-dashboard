@@ -114,6 +114,17 @@ beforeEach(() => {
         upsert: () => Promise.resolve({ error: null }),
       };
     }
+    if (table === "perf_week_snapshots") {
+      return {
+        select: () => ({
+          order: () => ({
+            limit: () => Promise.resolve({ data: [], error: null }),
+          }),
+          in: () => Promise.resolve({ data: [], error: null }),
+        }),
+        upsert: () => Promise.resolve({ error: null }),
+      };
+    }
     throw new Error(`Unexpected table ${table}`);
   });
   mockVerifyJWT.mockResolvedValue({ id: "user-a", email: "ada@xos-learning.fr" });
@@ -254,7 +265,7 @@ describe("GET /api/perf", () => {
       won_by_type: { catalogue: 50, sur_mesure: 0, conseil: 0 },
       won_arr_amount: 50,
     });
-    expect(body.quarter).toEqual([{
+    expect(body.quarter[0]).toMatchObject({
       sf_user_id: "005A",
       quarter: "FY27-Q1",
       signed_to_date: 100,
@@ -265,12 +276,16 @@ describe("GET /api/perf", () => {
       signed_n1: 80,
       expected_to_date: expect.any(Number),
       pace_ratio: expect.any(Number),
-    }]);
+    });
     expect(body.follow_up_opps[0]).toMatchObject({ id: "006Q1", expected: 100 });
     expect(body.stagnant_opps.some((row) => row.id === "006OPEN")).toBe(true);
     expect(body.pace).toMatchObject({ week_of_quarter: 1, signed_to_date: 100, signed_n1: 80, target: 60000 });
-    expect(body.seasonality).toMatchObject({ month_of_year: expect.any(Object), month_in_quarter: expect.any(Object) });
+    // Vue semaine : pas d’agrégat saisonnalité 3 ans (gain live) — pace linéaire.
+    expect(body.seasonality).toBeNull();
     expect(body.pulse.find((row) => row.week === "2026-W28")?.call_results).toEqual(expect.any(Object));
+
+    const quarterBody = await (await GET(request("?period=quarter"))).json();
+    expect(quarterBody.seasonality).toMatchObject({ month_of_year: expect.any(Object), month_in_quarter: expect.any(Object) });
   });
 
   it("returns a null target when weekly_targets is absent", async () => {
@@ -278,6 +293,7 @@ describe("GET /api/perf", () => {
       if (table === "profiles") return { select: () => Promise.resolve({ data: teamProfiles, error: null }) };
       if (table === "settings") return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }) };
       if (table === "perf_forecast_snapshots") return { select: () => ({ eq: () => ({ in: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) }), upsert: () => Promise.resolve({ error: null }) };
+      if (table === "perf_week_snapshots") return { select: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }), in: () => Promise.resolve({ data: [], error: null }) }), upsert: () => Promise.resolve({ error: null }) };
       throw new Error(`Unexpected table ${table}`);
     });
     const body = await (await GET(request())).json();
@@ -300,6 +316,7 @@ describe("GET /api/perf", () => {
         };
       }
       if (table === "perf_forecast_snapshots") return { select: () => ({ eq: () => ({ in: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }) }), upsert: () => Promise.resolve({ error: null }) };
+      if (table === "perf_week_snapshots") return { select: () => ({ order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }), in: () => Promise.resolve({ data: [], error: null }) }), upsert: () => Promise.resolve({ error: null }) };
       throw new Error(`Unexpected table ${table}`);
     });
     const body = await (await GET(request())).json();
@@ -383,6 +400,23 @@ describe("GET /api/perf", () => {
 
   it("sets the shared cache policy", async () => {
     const response = await GET(request());
-    expect(response.headers.get("Cache-Control")).toBe("public, s-maxage=900, stale-while-revalidate=60");
+    expect(response.headers.get("Cache-Control")).toBe("private, max-age=30, stale-while-revalidate=120");
+  });
+
+  it("lite mode skips heavy open-opp queries and reports timing", async () => {
+    const soql = [];
+    const original = mockSearchContacts.getMockImplementation();
+    mockSearchContacts.mockImplementation(async (token, queryText) => {
+      soql.push(queryText);
+      return original(token, queryText);
+    });
+    const response = await GET(request("?lite=1"));
+    const body = await response.json();
+    expect(body.context.lite).toBe(true);
+    expect(typeof body.context.timing_ms).toBe("number");
+    expect(response.headers.get("Server-Timing")).toMatch(/perf;dur=\d+/);
+    expect(soql.some((q) => /LastActivityDate|LastStageChangeDate/.test(q))).toBe(false);
+    expect(body.follow_up_opps).toEqual([]);
+    expect(body.stagnant_opps).toEqual([]);
   });
 });

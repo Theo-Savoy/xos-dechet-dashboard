@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { Button, GlassCard, Select, Tag } from "../../components/ui";
@@ -108,6 +108,103 @@ const COPY = {
   close: "Part des opps détectées qui se signent sur le trimestre.",
 } as const;
 
+type TipHostState = {
+  text: string;
+  x: number;
+  y: number;
+  preferredSide: "top" | "bottom";
+  width?: number;
+};
+
+type TipHostApi = {
+  show: (next: TipHostState) => void;
+  hide: () => void;
+  move: (x: number, y: number) => void;
+};
+
+const TipHostContext = createContext<TipHostApi | null>(null);
+
+function TipHost({ children }: { children: ReactNode }) {
+  const [tip, setTip] = useState<TipHostState | null>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
+  const [resolvedSide, setResolvedSide] = useState<"top" | "bottom">("top");
+  const panelRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<TipHostState | null>(null);
+  tipRef.current = tip;
+
+  const api = useMemo<TipHostApi>(() => ({
+    show: (next) => setTip(next),
+    hide: () => setTip(null),
+    move: (x, y) => setTip((current) => (current ? { ...current, x, y } : current)),
+  }), []);
+
+  const placePanel = useCallback(() => {
+    const current = tipRef.current;
+    const panel = panelRef.current?.getBoundingClientRect();
+    if (!current || !panel) return;
+    const margin = 10;
+    const gap = 12;
+    const maxWidth = Math.min(280, window.innerWidth - margin * 2);
+    const width = Math.min(Math.max(current.width || panel.width || 180, 160), maxWidth);
+    let left = current.x + 10;
+    let top = current.y - panel.height - gap;
+    let nextSide: "top" | "bottom" = "top";
+    if (current.preferredSide === "bottom" || top < margin) {
+      top = current.y + gap;
+      nextSide = "bottom";
+    }
+    if (top + panel.height > window.innerHeight - margin) {
+      top = Math.max(margin, current.y - panel.height - gap);
+      nextSide = "top";
+    }
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
+    setResolvedSide(nextSide);
+    setPanelStyle({ top, left, width, maxWidth, visibility: "visible" });
+  }, []);
+
+  useEffect(() => {
+    if (!tip) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTip(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tip]);
+
+  useLayoutEffect(() => {
+    if (!tip) {
+      setPanelStyle({ visibility: "hidden" });
+      return;
+    }
+    placePanel();
+    const onResize = () => placePanel();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [tip, placePanel]);
+
+  return (
+    <TipHostContext.Provider value={api}>
+      {children}
+      {tip && createPortal(
+        <span
+          ref={panelRef}
+          className={`weekly-tip__panel weekly-tip__panel--${resolvedSide}`}
+          role="tooltip"
+          style={{ position: "fixed", top: 0, left: 0, ...panelStyle }}
+        >
+          {tip.text}
+        </span>,
+        document.body,
+      )}
+    </TipHostContext.Provider>
+  );
+}
+
 function Tip({
   text,
   children,
@@ -121,107 +218,50 @@ function Tip({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const [open, setOpen] = useState(false);
-  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
-  const [resolvedSide, setResolvedSide] = useState(side);
+  const host = useContext(TipHostContext);
   const rootRef = useRef<HTMLSpanElement>(null);
-  const panelRef = useRef<HTMLSpanElement>(null);
-  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const openRef = useRef(false);
 
-  const placePanel = useCallback(() => {
-    const panel = panelRef.current?.getBoundingClientRect();
-    if (!panel) return;
-    const trigger = rootRef.current?.getBoundingClientRect();
-    const pointer = pointerRef.current || (trigger
-      ? { x: trigger.left + trigger.width / 2, y: trigger.top }
-      : null);
-    if (!pointer) return;
-    const margin = 10;
-    const gap = 12;
-    const maxWidth = Math.min(280, window.innerWidth - margin * 2);
-    const width = Math.min(Math.max(panel.width || 180, 160), maxWidth);
-    // Curseur en bas à gauche du hint : tip au-dessus, légèrement à droite.
-    let left = pointer.x + 10;
-    let top = pointer.y - panel.height - gap;
-    let nextSide: "top" | "bottom" = "top";
-    if (side === "bottom" || top < margin) {
-      top = pointer.y + gap;
-      nextSide = "bottom";
-    }
-    if (top + panel.height > window.innerHeight - margin) {
-      top = Math.max(margin, pointer.y - panel.height - gap);
-      nextSide = "top";
-    }
-    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-    top = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
-    setResolvedSide(nextSide);
-    setPanelStyle({
-      top,
-      left,
-      width,
-      maxWidth,
-      visibility: "visible",
-    });
-  }, [side]);
+  const showAt = (x: number, y: number) => {
+    openRef.current = true;
+    host?.show({ text, x, y, preferredSide: side });
+  };
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onPointer);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onPointer);
-    };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setPanelStyle({ visibility: "hidden" });
-      return;
-    }
-    placePanel();
-    const onResize = () => placePanel();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onResize, true);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onResize, true);
-    };
-  }, [open, placePanel, text]);
+  const hide = () => {
+    openRef.current = false;
+    host?.hide();
+  };
 
   const trackPointer = (event: React.MouseEvent) => {
-    pointerRef.current = { x: event.clientX, y: event.clientY };
-    if (open) placePanel();
+    if (!openRef.current) return;
+    host?.move(event.clientX, event.clientY);
   };
 
   return (
     <span
       ref={rootRef}
-      className={["weekly-tip", `weekly-tip--${resolvedSide}`, children ? "weekly-tip--anchor" : "weekly-tip--help", className].filter(Boolean).join(" ")}
+      className={["weekly-tip", `weekly-tip--${side}`, children ? "weekly-tip--anchor" : "weekly-tip--help", className].filter(Boolean).join(" ")}
       style={style}
-      onMouseEnter={(event) => {
-        trackPointer(event);
-        setOpen(true);
+      onMouseEnter={(event) => showAt(event.clientX, event.clientY)}
+      onMouseMove={(event) => {
+        if (!openRef.current) showAt(event.clientX, event.clientY);
+        else trackPointer(event);
       }}
-      onMouseMove={trackPointer}
-      onMouseLeave={() => {
-        pointerRef.current = null;
-        setOpen(false);
-      }}
+      onMouseLeave={hide}
     >
       {children ? (
         <span
           className="weekly-tip__target"
           tabIndex={0}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => setOpen(true)}
+          onFocus={() => {
+            const rect = rootRef.current?.getBoundingClientRect();
+            if (rect) showAt(rect.left + rect.width / 2, rect.top);
+          }}
+          onBlur={hide}
+          onClick={() => {
+            const rect = rootRef.current?.getBoundingClientRect();
+            if (rect) showAt(rect.left + rect.width / 2, rect.top);
+          }}
         >
           {children}
         </span>
@@ -230,24 +270,19 @@ function Tip({
           type="button"
           className="weekly-tip__btn"
           aria-label={text}
-          aria-expanded={open}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => setOpen(true)}
+          aria-expanded={false}
+          onFocus={() => {
+            const rect = rootRef.current?.getBoundingClientRect();
+            if (rect) showAt(rect.left + rect.width / 2, rect.top);
+          }}
+          onBlur={hide}
+          onClick={() => {
+            const rect = rootRef.current?.getBoundingClientRect();
+            if (rect) showAt(rect.left + rect.width / 2, rect.top);
+          }}
         >
           <span className="weekly-tip__glyph" aria-hidden="true">?</span>
         </button>
-      )}
-      {open && createPortal(
-        <span
-          ref={panelRef}
-          className={`weekly-tip__panel weekly-tip__panel--${resolvedSide}`}
-          role="tooltip"
-          style={{ position: "fixed", top: 0, left: 0, ...panelStyle }}
-        >
-          {text}
-        </span>,
-        document.body,
       )}
     </span>
   );
@@ -330,6 +365,9 @@ type PerfContext = {
   anchor_week_start: string;
   live_week_start?: string;
   live_iso_week?: string;
+  source?: "live" | "snapshot";
+  lite?: boolean;
+  timing_ms?: number | null;
 };
 type PeriodHistory = { weeks: Array<{ week_start: string; iso_week: string; quarter: string }>; quarters: string[] };
 type PerfResponse = {
@@ -594,17 +632,52 @@ function ConversionRates({
   );
 }
 
-async function perfRequest(period: PeriodMode, anchorWeekStart?: string | null, signal?: AbortSignal) {
+async function perfRequest(period: PeriodMode, anchorWeekStart?: string | null, signal?: AbortSignal, options?: { lite?: boolean }) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("missing_session");
   const params = new URLSearchParams({ period });
   if (anchorWeekStart) params.set("week_start", anchorWeekStart);
+  if (options?.lite) params.set("lite", "1");
   const response = await fetch(`/api/perf?${params}`, {
     headers: { Authorization: `Bearer ${session.access_token}` },
     signal,
   });
   if (!response.ok) throw new Error("perf_unavailable");
   return { payload: await response.json() as PerfResponse, email: session.user.email || null };
+}
+
+type PerfCacheEntry = { payload: PerfResponse; email: string | null };
+type PerfCacheMap = Record<string, PerfCacheEntry>;
+
+function perfCacheKey(period: PeriodMode, weekStart: string | null | undefined) {
+  return `${period}:${weekStart || "live"}`;
+}
+
+function LazyMount({ children, minHeight = "14rem" }: { children: React.ReactNode; minHeight?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (visible) return;
+    const node = ref.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "280px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [visible]);
+  return (
+    <div ref={ref} className="weekly-lazy-mount" style={visible ? undefined : { minHeight }}>
+      {visible ? children : null}
+    </div>
+  );
 }
 
 function roundToMagnitude(value: number) {
@@ -1031,7 +1104,7 @@ function CustomPipeSection({ pipe, owners, sellerIds }: { pipe: CustomPipe; owne
             <YAxis hide />
             <Tooltip content={<MoneyChartTooltip />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
             <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
-            <Bar dataKey="expected" name="CA attendu" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="expected" name="CA attendu" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -1292,14 +1365,17 @@ function DecisionBoard({
   }, [quarterBounds]);
 
   const { ranked, scatterData, chartCount } = useMemo(() => {
-    const stagnantIds = new Set(stagnant.map((opp) => opp.id).filter(Boolean));
+    const stagnantIds = new Set(stagnant.map((opp) => opp.id).filter(Boolean) as string[]);
+    const pushIds = new Set(followUps.map((opp) => opp.id).filter(Boolean) as string[]);
+    const stagnantKeys = new Set(stagnant.map((opp) => opp.id || `${opp.name}-${opp.close_date}`));
+    const pushKeys = new Set(followUps.map((opp) => opp.id || `${opp.name}-${opp.close_date}`));
     const merged = new Map<string, RitualOpp & { kind: "push" | "stagnant" | "both"; close_ts: number; key: string }>();
     for (const opp of [...followUps, ...stagnant]) {
       if (!opp.close_date || !inQuarter(opp.close_date)) continue;
       const key = opp.id || `${opp.name}-${opp.close_date}`;
       const existing = merged.get(key);
-      const isStagnant = stagnantIds.has(opp.id) || stagnant.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
-      const isPush = followUps.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
+      const isStagnant = (opp.id ? stagnantIds.has(opp.id) : false) || stagnantKeys.has(key);
+      const isPush = (opp.id ? pushIds.has(opp.id) : false) || pushKeys.has(key);
       const kind = isStagnant && isPush ? "both" : isStagnant ? "stagnant" : "push";
       if (existing) {
         existing.kind = kind;
@@ -1357,6 +1433,7 @@ function DecisionBoard({
               name="Opps"
               data={scatterData}
               cursor="pointer"
+              isAnimationActive={false}
               onClick={(entry) => {
                 const payload = (entry as { payload?: { key?: string }; key?: string })?.payload || entry;
                 selectOpp((payload as { key?: string })?.key || null);
@@ -1487,9 +1564,9 @@ function ActivityTrendChart({
               <YAxis hide allowDecimals={false} />
               <Tooltip content={<CountChartTooltip />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
               <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
-              <Bar dataKey="rdv" name="RDV" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-              <Bar dataKey="detections" name="Détections" fill="color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-              {showCalls && <Bar dataKey="calls" name="Appels" fill="#7d8aa3" radius={[4, 4, 0, 0]} maxBarSize={28} />}
+              <Bar dataKey="rdv" name="RDV" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+              <Bar dataKey="detections" name="Détections" fill="color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+              {showCalls && <Bar dataKey="calls" name="Appels" fill="#7d8aa3" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1499,16 +1576,25 @@ function ActivityTrendChart({
 }
 
 function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { weeks: Week[]; history: ForecastPoint[]; ownerIds: Set<string>; target: number | null; currentIndex: number }) {
-  const data = weeks.map((week, index) => {
-    const points = history.filter((point) => point.week_start === week.start && ownerIds.has(point.sf_user_id));
-    const forecastValues = points.map((point) => point.forecast).filter((value): value is number => value !== null);
-    const future = index > currentIndex;
-    return {
-      label: shortWeekLabel(week.isoWeek) || week.label,
-      forecast: future ? null : (forecastValues.length ? forecastValues.reduce((sum, value) => sum + value, 0) : null),
-      signed: future ? null : points.reduce((sum, point) => sum + (point.signed_to_date || 0), 0),
-    };
-  });
+  const data = useMemo(() => {
+    const byWeek = new Map<string, ForecastPoint[]>();
+    for (const point of history) {
+      if (!ownerIds.has(point.sf_user_id)) continue;
+      const list = byWeek.get(point.week_start) || [];
+      list.push(point);
+      byWeek.set(point.week_start, list);
+    }
+    return weeks.map((week, index) => {
+      const points = byWeek.get(week.start) || [];
+      const forecastValues = points.map((point) => point.forecast).filter((value): value is number => value !== null);
+      const future = index > currentIndex;
+      return {
+        label: shortWeekLabel(week.isoWeek) || week.label,
+        forecast: future ? null : (forecastValues.length ? forecastValues.reduce((sum, value) => sum + value, 0) : null),
+        signed: future ? null : points.reduce((sum, point) => sum + (point.signed_to_date || 0), 0),
+      };
+    });
+  }, [weeks, history, ownerIds, currentIndex]);
   const hasForecast = data.some((point) => point.forecast !== null);
   const yMax = Math.max(
     target || 0,
@@ -1535,8 +1621,8 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
               label={{ value: targetLabel, position: "insideTopRight", fill: "var(--xos-text-muted)", fontSize: 11 }}
             />
           )}
-          {hasForecast && <Line type="monotone" dataKey="forecast" name="Projeté" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
-          <Line type="monotone" dataKey="signed" name="Signé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />
+          {hasForecast && <Line type="monotone" dataKey="forecast" name="Projeté" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
+          <Line type="monotone" dataKey="signed" name="Signé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -1549,7 +1635,7 @@ function Skeleton() {
 
 export default function WeeklyApp() {
   const [period, setPeriod] = useState<PeriodMode>("week");
-  const [cache, setCache] = useState<Partial<Record<PeriodMode, { payload: PerfResponse; email: string | null }>>>({});
+  const [cache, setCache] = useState<PerfCacheMap>({});
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -1557,39 +1643,107 @@ export default function WeeklyApp() {
   const [displayMode, setDisplayMode] = useState<"cards" | "table">("cards");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("all");
   const [anchorWeekStart, setAnchorWeekStart] = useState<string | null>(null);
-  const prefetchDone = useRef(false);
   const requestSeq = useRef(0);
   const historyCacheRef = useRef<PeriodHistory>({ weeks: [], quarters: [] });
   const cacheRef = useRef(cache);
+  const lastByPeriodRef = useRef<Partial<Record<PeriodMode, PerfCacheEntry>>>({});
+  const prefetchingRef = useRef(new Set<string>());
+  const quarterPrefetchDone = useRef(false);
   cacheRef.current = cache;
 
-  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false, signal, weekStart = anchorWeekStart }: { background?: boolean; signal?: AbortSignal; weekStart?: string | null } = {}) => {
-    const seq = ++requestSeq.current;
-    if (background) setRefreshing(true);
-    else setLoading(true);
-    setError(false);
+  const storeEntry = useCallback((key: string, nextPeriod: PeriodMode, next: PerfCacheEntry) => {
+    if ((next.payload.period_history?.weeks?.length || 0) > 0) {
+      historyCacheRef.current = next.payload.period_history!;
+    }
+    lastByPeriodRef.current[nextPeriod] = next;
+    setCache((current) => (current[key] === next ? current : { ...current, [key]: next }));
+  }, []);
+
+  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, {
+    background = false,
+    signal,
+    weekStart = anchorWeekStart,
+    revalidate = false,
+  }: {
+    background?: boolean;
+    signal?: AbortSignal;
+    weekStart?: string | null;
+    revalidate?: boolean;
+  } = {}) => {
+    const key = perfCacheKey(nextPeriod, weekStart);
+    const seq = revalidate ? requestSeq.current : ++requestSeq.current;
+    if (!revalidate) {
+      if (background) setRefreshing(true);
+      else setLoading(true);
+      setError(false);
+    }
     try {
-      const next = await perfRequest(nextPeriod, weekStart, signal);
-      if (seq !== requestSeq.current) return;
-      if ((next.payload.period_history?.weeks?.length || 0) > 0) {
-        historyCacheRef.current = next.payload.period_history!;
+      // Cold load: lite d’abord (sans openOpps/board lourds), puis hydrate full en fond.
+      const cold = !revalidate && !cacheRef.current[key];
+      const next = await perfRequest(nextPeriod, weekStart, signal, { lite: cold });
+      if (!revalidate && seq !== requestSeq.current) return;
+      storeEntry(key, nextPeriod, next);
+      if (!revalidate) setError(false);
+      if (cold && next.payload.context?.lite) {
+        void (async () => {
+          try {
+            const full = await perfRequest(nextPeriod, weekStart, undefined, { lite: false });
+            if (seq !== requestSeq.current) return;
+            storeEntry(key, nextPeriod, full);
+          } catch {
+            // Hydrate silencieuse — la vue lite reste utilisable.
+          }
+        })();
       }
-      setCache((current) => ({ ...current, [nextPeriod]: next }));
     } catch (err) {
       if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
-      if (seq !== requestSeq.current) return;
-      setError(true);
+      if (!revalidate) {
+        if (seq !== requestSeq.current) return;
+        // Garde la dernière vue si on en a une — pas d’écran d’erreur brutal au switch.
+        if (!lastByPeriodRef.current[nextPeriod] && !cacheRef.current[key]) setError(true);
+      }
     } finally {
-      if (seq === requestSeq.current) {
+      if (!revalidate && seq === requestSeq.current) {
         setLoading(false);
         setRefreshing(false);
       }
     }
-  }, [anchorWeekStart]);
+  }, [anchorWeekStart, storeEntry]);
+
+  const prefetchKey = useCallback(async (nextPeriod: PeriodMode, weekStart: string | null) => {
+    const key = perfCacheKey(nextPeriod, weekStart);
+    if (cacheRef.current[key] || prefetchingRef.current.has(key)) return;
+    prefetchingRef.current.add(key);
+    try {
+      const next = await perfRequest(nextPeriod, weekStart);
+      storeEntry(key, nextPeriod, next);
+    } catch {
+      // Prefetch silencieux — l’utilisateur refetch au clic si besoin.
+    } finally {
+      prefetchingRef.current.delete(key);
+    }
+  }, [storeEntry]);
+
+  const activeKey = perfCacheKey(period, anchorWeekStart);
+  const cachedResult = cache[activeKey] || null;
+  const fallbackResult = lastByPeriodRef.current[period] || null;
+  const result = cachedResult || fallbackResult || null;
 
   useEffect(() => {
     const controller = new AbortController();
-    const soft = Boolean(cacheRef.current[period]);
+    const key = perfCacheKey(period, anchorWeekStart);
+    const hit = Boolean(cacheRef.current[key]);
+    if (hit) {
+      // Semaine déjà en cache : affichage immédiat. Revalidate seulement la semaine live.
+      const live = !anchorWeekStart;
+      if (live) {
+        void loadPeriod(period, { background: true, revalidate: true, signal: controller.signal, weekStart: anchorWeekStart });
+      }
+      return () => {
+        controller.abort();
+      };
+    }
+    const soft = Boolean(lastByPeriodRef.current[period] || Object.keys(cacheRef.current).length);
     void loadPeriod(period, { background: soft, signal: controller.signal, weekStart: anchorWeekStart });
     return () => {
       controller.abort();
@@ -1598,16 +1752,37 @@ export default function WeeklyApp() {
   }, [loadPeriod, period, anchorWeekStart]);
 
   useEffect(() => {
-    if (prefetchDone.current || !cache.week) return;
-    prefetchDone.current = true;
-    void loadPeriod("quarter", { background: true });
-  }, [cache.week, loadPeriod]);
+    if (quarterPrefetchDone.current) return;
+    const hasWeek = Object.keys(cache).some((key) => key.startsWith("week:"));
+    if (!hasWeek) return;
+    quarterPrefetchDone.current = true;
+    void prefetchKey("quarter", null);
+  }, [cache, prefetchKey]);
+
+  useEffect(() => {
+    if (period !== "week" || !cachedResult) return;
+    const history = cachedResult.payload.period_history?.weeks?.length
+      ? cachedResult.payload.period_history.weeks
+      : historyCacheRef.current.weeks;
+    const live = cachedResult.payload.context?.live_week_start
+      || cachedResult.payload.context?.anchor_week_start
+      || null;
+    const selected = anchorWeekStart || live;
+    if (!selected || !history?.length) return;
+    const ordered = [...history]
+      .map((entry) => entry.week_start)
+      .filter((start, index, all) => all.indexOf(start) === index)
+      .sort((a, b) => b.localeCompare(a));
+    const index = ordered.indexOf(selected);
+    const neighbors = [ordered[index - 1], ordered[index + 1], live].filter((value): value is string => Boolean(value) && value !== selected);
+    for (const weekStart of neighbors.slice(0, 3)) {
+      void prefetchKey("week", weekStart === live && !anchorWeekStart ? null : weekStart);
+    }
+  }, [period, cachedResult, anchorWeekStart, prefetchKey]);
 
   const switchPeriod = (next: PeriodMode) => {
     setPeriod(next);
   };
-
-  const result = cache[period] || null;
 
   const model = useMemo(() => {
     if (!result) return null;
@@ -1626,13 +1801,23 @@ export default function WeeklyApp() {
     const pipelineIndex = seriesIndex(payload.pipeline);
     const priorPulseIndex = seriesIndex(payload.prior_pulse || []);
     const priorPipelineIndex = seriesIndex(payload.prior_pipeline || []);
-    const priorPulseFor = (owner: Owner) => weeks.map(({ start }) => priorPulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start));
-    const priorPipelineFor = (owner: Owner) => weeks.map(({ start }) => priorPipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start));
+    const pulseByOwner = new Map<string, Pulse[]>();
+    const pipelineByOwner = new Map<string, Pipeline[]>();
+    const priorPulseByOwner = new Map<string, Pulse[]>();
+    const priorPipelineByOwner = new Map<string, Pipeline[]>();
+    for (const owner of roster) {
+      pulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
+      pipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
+      priorPulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
+      priorPipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
+    }
+    const priorPulseFor = (owner: Owner) => priorPulseByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PULSE(owner.sf_user_id, start));
+    const priorPipelineFor = (owner: Owner) => priorPipelineByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PIPELINE(owner.sf_user_id, start));
     const context = payload.context;
     const compareLabel = shortPeriodLabel(context?.compare_week || weeks[Math.max(0, currentIndex - 1)]?.isoWeek) || "S−1";
     const priorQuarterLabel = context?.prior_quarter_label || "N−1";
-    const pulseFor = (owner: Owner) => weeks.map(({ start }) => pulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start));
-    const pipelineFor = (owner: Owner) => weeks.map(({ start }) => pipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start));
+    const pulseFor = (owner: Owner) => pulseByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PULSE(owner.sf_user_id, start));
+    const pipelineFor = (owner: Owner) => pipelineByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PIPELINE(owner.sf_user_id, start));
     const sellers = visibleOwners.filter((owner) => trackingOf(owner) !== "sdr");
     const sellerIds = new Set(sellers.map((owner) => owner.sf_user_id));
     const quarterFor = (owner: Owner) => payload.quarter.find((point) => point.sf_user_id === owner.sf_user_id);
@@ -1712,8 +1897,8 @@ export default function WeeklyApp() {
   const periodBadge = weekMode
     ? (selectedWeekLabel ? `Semaine ${selectedWeekLabel}` : "Semaine en cours")
     : (context?.quarter_label ? `${context.quarter_label} · S${context.week_of_quarter}/${context.weeks_in_quarter}` : "Trimestre en cours");
-  const contentKey = `${period}-${context?.anchor_week_start || selectedWeekStart}`;
-  const contentRefreshing = refreshing || (weekMode && Boolean(anchorWeekStart) && context?.anchor_week_start !== selectedWeekStart);
+  const contentRefreshing = Boolean(!cachedResult && result && (refreshing || loading));
+  const viewTransitionKey = `${period}-${mode}-${selectedOwnerId}`;
   const visibleHasActivity = visibleOwners.some((owner) => {
     const pulse = pulseFor(owner);
     const pipe = pipelineFor(owner);
@@ -1728,9 +1913,11 @@ export default function WeeklyApp() {
   const showPace = Boolean(pace) && visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
   const ownerOptions = [{ value: "all", label: "Toute l’équipe" }, ...roster.map((owner) => ({ value: owner.sf_user_id, label: owner.name }))];
   const showWeekSelector = weekMode && (historyOptions.length > 1 || selectedWeekStart !== liveWeekStart);
-  const showSoftEmpty = !visibleHasActivity && selectedWeekStart === liveWeekStart;
+  const showSoftEmpty = !visibleHasActivity && selectedWeekStart === liveWeekStart && Boolean(cachedResult);
 
-  return <main className={`weekly-app ${loading ? "weekly-app--loading" : ""}`}>
+  return (
+    <TipHost>
+  <main className={`weekly-app ${loading ? "weekly-app--loading" : ""}`}>
     <header className="weekly-header">
       <div className="weekly-header__brand">
         <Tag variant="accent">Performance</Tag>
@@ -1758,11 +1945,11 @@ export default function WeeklyApp() {
           aria-label="Choisir une semaine"
           value={selectedWeekStart}
           options={historyOptions}
-          onChange={(value) => setAnchorWeekStart(value)}
+          onChange={(value) => setAnchorWeekStart(value === liveWeekStart ? null : value)}
         />
       )}
       {showWeekSelector && selectedWeekStart !== liveWeekStart && (
-        <Button variant="secondary" onClick={() => setAnchorWeekStart(liveWeekStart)}>Semaine en cours</Button>
+        <Button variant="secondary" onClick={() => setAnchorWeekStart(null)}>Semaine en cours</Button>
       )}
       <div className="weekly-toggle weekly-seg weekly-display-toggle" aria-label="Affichage">
         <Button variant={displayMode === "cards" ? "primary" : "secondary"} onClick={() => setDisplayMode("cards")}>Cards</Button>
@@ -1786,7 +1973,7 @@ export default function WeeklyApp() {
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
         />
-        <div className="weekly-pulse-grid weekly-view-transition" key={`cards-${contentKey}-${mode}-${selectedOwnerId}`}>
+        <div className="weekly-pulse-grid weekly-view-transition" key={`cards-${viewTransitionKey}`}>
           {visibleOwners.map((owner, ownerIndex) => (
             <PersonCard
               key={owner.sf_user_id}
@@ -1813,7 +2000,7 @@ export default function WeeklyApp() {
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
         />
-        <div className="weekly-tables weekly-view-transition" key={`table-${contentKey}-${mode}-${selectedOwnerId}`}>
+        <div className="weekly-tables weekly-view-transition" key={`table-${viewTransitionKey}`}>
           {showTeamRollup && <TeamMetricTable owners={visibleOwners} weeks={model.weeks} pulseFor={pulseFor} pipelineFor={pipelineFor} priorPulseFor={priorPulseFor} priorPipelineFor={priorPipelineFor} quarterFor={quarterFor} currentIndex={currentIndex} weekMode={weekMode} compareLabel={compareLabel} priorQuarterLabel={priorQuarterLabel} />}
           {visibleOwners.map((owner) => (
             <MetricTable key={owner.sf_user_id} owner={owner} weeks={model.weeks} pulse={pulseFor(owner)} pipeline={pipelineFor(owner)} priorPulse={priorPulseFor(owner)} priorPipeline={priorPipelineFor(owner)} quarter={quarterFor(owner)} currentIndex={currentIndex} weekMode={weekMode} compareLabel={compareLabel} priorQuarterLabel={priorQuarterLabel} />
@@ -1822,24 +2009,43 @@ export default function WeeklyApp() {
       </section>}
       <LeadingFunnel owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} weekMode={weekMode} currentIndex={currentIndex} />
       {showActivityTrend && (
-        <ActivityTrendChart
-          weeks={model.weeks}
-          owners={visibleOwners}
-          pulseFor={pulseFor}
-          pipelineFor={pipelineFor}
-          currentIndex={currentIndex}
-          showCalls={includeCalls}
-        />
+        <LazyMount>
+          <ActivityTrendChart
+            weeks={model.weeks}
+            owners={visibleOwners}
+            pulseFor={pulseFor}
+            pipelineFor={pipelineFor}
+            currentIndex={currentIndex}
+            showCalls={includeCalls}
+          />
+        </LazyMount>
       )}
       {showPace && pace && <section className="weekly-section">
         <SectionHeading kicker={COPY.pace.kicker} title={weekMode ? COPY.pace.titleWeek : COPY.pace.titleQuarter} hint={COPY.pace.hint} />
         <PaceStrip pace={pace} />
         {!weekMode && <ConversionRates owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} currentIndex={currentIndex} />}
       </section>}
-      <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
-      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker={COPY.trajectoire.kicker} title={COPY.trajectoire.title} hint={COPY.trajectoire.hint} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
-      <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
-      {showCustomPipe && <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />}
+      <LazyMount minHeight="18rem">
+        <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
+      </LazyMount>
+      {displayMode === "cards" && showForecast && (
+        <LazyMount>
+          <section className="weekly-section">
+            <SectionHeading kicker={COPY.trajectoire.kicker} title={COPY.trajectoire.title} hint={COPY.trajectoire.hint} />
+            <ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} />
+          </section>
+        </LazyMount>
+      )}
+      <LazyMount>
+        <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
+      </LazyMount>
+      {showCustomPipe && (
+        <LazyMount>
+          <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />
+        </LazyMount>
+      )}
     </div>
-  </main>;
+  </main>
+    </TipHost>
+  );
 }
