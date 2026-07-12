@@ -4,6 +4,14 @@ import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { CallFunnelCard, stagesFromPeriodKpis } from "./CallFunnelCard";
 import { PilotageHeatmap } from "./PilotageHeatmap";
+import {
+  cockpitDataInSync,
+  emptyKpis,
+  filterSessionsModeKpis,
+  mergeKpis,
+  normalizeSessionId,
+  selectionStaleForSessions,
+} from "./pilotageKpis";
 import type { PeriodKpis } from "./types";
 import {
   fetchProspectionCockpit,
@@ -36,16 +44,22 @@ function cockpitSliceReducer(state: CockpitSlice, action: CockpitSliceAction): C
     case "apply":
       return {
         data: action.cockpit,
-        selectedSessionIds: new Set((action.cockpit.sessions ?? []).map((s) => s.id)),
+        selectedSessionIds: new Set(
+          (action.cockpit.sessions ?? []).map((s) => normalizeSessionId(s.id)),
+        ),
       };
     case "selectAll":
-      return { ...state, selectedSessionIds: new Set(action.sessionIds) };
+      return {
+        ...state,
+        selectedSessionIds: new Set(action.sessionIds.map((id) => normalizeSessionId(id))),
+      };
     case "selectNone":
       return { ...state, selectedSessionIds: new Set() };
     case "toggle": {
       const next = new Set(state.selectedSessionIds);
-      if (next.has(action.id)) next.delete(action.id);
-      else next.add(action.id);
+      const id = normalizeSessionId(action.id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return { ...state, selectedSessionIds: next };
     }
     case "clear":
@@ -55,6 +69,8 @@ function cockpitSliceReducer(state: CockpitSlice, action: CockpitSliceAction): C
   }
 }
 
+export { mergeKpis } from "./pilotageKpis";
+
 type CallerCard = {
   user_id: string;
   label: string;
@@ -63,45 +79,6 @@ type CallerCard = {
   sessions_completed?: number;
   kpis: PeriodKpis;
 };
-
-function emptyKpis(): PeriodKpis {
-  return {
-    calls: 0,
-    decroche: 0,
-    argumente: 0,
-    rdv: 0,
-    npa: 0,
-    rate_decroche: 0,
-    rate_argumente: 0,
-    rate_rdv_per_decroche: 0,
-    rate_rdv_per_argumente: 0,
-  };
-}
-
-function rate(num: number, den: number): number {
-  return den > 0 ? Math.round((num / den) * 1000) / 10 : 0;
-}
-
-/** Sum absolute counts across KPI rows and recompute rates. */
-export function mergeKpis(list: PeriodKpis[]): PeriodKpis {
-  if (list.length === 0) return emptyKpis();
-  const calls = list.reduce((s, k) => s + k.calls, 0);
-  const decroche = list.reduce((s, k) => s + k.decroche, 0);
-  const argumente = list.reduce((s, k) => s + k.argumente, 0);
-  const rdv = list.reduce((s, k) => s + k.rdv, 0);
-  const npa = list.reduce((s, k) => s + k.npa, 0);
-  return {
-    calls,
-    decroche,
-    argumente,
-    rdv,
-    npa,
-    rate_decroche: rate(decroche, calls),
-    rate_argumente: rate(argumente, calls),
-    rate_rdv_per_decroche: rate(rdv, decroche),
-    rate_rdv_per_argumente: rate(rdv, argumente),
-  };
-}
 
 function pct(value: number): string {
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}%`;
@@ -375,6 +352,7 @@ export function PilotageView({
   const prefetching = useRef<Set<string>>(new Set());
   const loadSeq = useRef(0);
   const dataRef = useRef<ProspectionCockpit | null>(null);
+  const stableKpisRef = useRef<PeriodKpis>(emptyKpis());
   const [pinned, setPinned] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [selectedCallerId, setSelectedCallerId] = useState<string | null>(null);
@@ -485,9 +463,8 @@ export function PilotageView({
   const byDay = data?.by_day ?? [];
 
   const selectedSessions = useMemo(() => {
-    const picked = sessions.filter((s) => selectedSessionIds.has(s.id));
-    // Transition entre jours : ids encore ceux de la période précédente.
-    if (sessions.length > 0 && selectedSessionIds.size > 0 && picked.length === 0) {
+    const picked = sessions.filter((s) => selectedSessionIds.has(normalizeSessionId(s.id)));
+    if (selectionStaleForSessions(sessions, selectedSessionIds)) {
       return sessions;
     }
     return picked;
@@ -499,18 +476,12 @@ export function PilotageView({
     }
 
     if (detailMode === "sessions") {
-      if (sessions.length === 0) {
-        return { kpis: data.team_kpis, callers: data.by_caller as CallerCard[] };
-      }
-      if (selectedSessions.length === 0) {
-        return { kpis: emptyKpis(), callers: [] as CallerCard[] };
-      }
-      const allSelected = selectedSessions.length === sessions.length;
-      if (allSelected) {
-        return { kpis: data.team_kpis, callers: data.by_caller as CallerCard[] };
+      const { kpis, allCallers } = filterSessionsModeKpis(data, sessions, selectedSessionIds);
+      if (allCallers) {
+        return { kpis, callers: data.by_caller as CallerCard[] };
       }
       return {
-        kpis: mergeKpis(selectedSessions.map((s) => s.kpis)),
+        kpis,
         callers: callersFromSessions(selectedSessions, data.by_caller),
       };
     }
@@ -529,7 +500,16 @@ export function PilotageView({
       kpis: data.team_kpis,
       callers: data.by_caller as CallerCard[],
     };
-  }, [data, detailMode, sessions, selectedSessions, expandedDay, byDay]);
+  }, [data, detailMode, sessions, selectedSessionIds, selectedSessions, expandedDay, byDay]);
+
+  const kpis = useMemo(() => {
+    const computed = filtered.kpis;
+    if (data && !cockpitDataInSync(data, period, anchor)) {
+      return stableKpisRef.current;
+    }
+    stableKpisRef.current = computed;
+    return computed;
+  }, [filtered.kpis, data, period, anchor]);
 
   const selectedCaller = useMemo(
     () => filtered.callers.find((c) => c.user_id === selectedCallerId) ?? null,
@@ -537,7 +517,10 @@ export function PilotageView({
   );
 
   const selectAllSessions = () => {
-    dispatchCockpit({ type: "selectAll", sessionIds: sessions.map((s) => s.id) });
+    dispatchCockpit({
+      type: "selectAll",
+      sessionIds: sessions.map((s) => normalizeSessionId(s.id)),
+    });
   };
 
   const selectNoSessions = () => {
@@ -565,7 +548,6 @@ export function PilotageView({
     );
   }
 
-  const kpis = filtered.kpis;
   const effectiveAnchor = anchor ?? data?.range?.anchor ?? todayParisDate();
   const rangeMatchesAnchor =
     !anchor || data?.range?.anchor === anchor || (data?.range?.anchor == null && anchor == null);

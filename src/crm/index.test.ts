@@ -21,7 +21,7 @@ describe("emptyFilterTree", () => {
 
   it("round-trips through JSON (as sent to /api/calls list_contacts)", () => {
     const tree = emptyFilterTree();
-    tree.entreprise.secteurs = ["Finance", "Transports"];
+    tree.entreprise.secteurs = ["Banque / finance", "Transports"];
     tree.relance.exclure_si_plus_de = { appels: 3, sur_jours: 30 };
     expect(JSON.parse(JSON.stringify(tree))).toEqual(tree);
   });
@@ -30,7 +30,7 @@ describe("emptyFilterTree", () => {
 describe("normalizeFilterTree", () => {
   it("fills missing v2.1 keys from a v2.0 preset and drops obsolete duration fields", () => {
     const normalized = normalizeFilterTree({
-      entreprise: { secteurs: ["Finance"] },
+      entreprise: { secteurs: ["Banque / finance"] },
       contact: { a_telephone: true, exclure_npa: true },
       relance: {
         jamais_appele: true,
@@ -41,7 +41,7 @@ describe("normalizeFilterTree", () => {
 
     expect(normalized.contact.fonctions).toEqual([]);
     expect(normalized.entreprise.tiers).toEqual([]);
-    expect(normalized.entreprise.secteurs).toEqual(["Finance"]);
+    expect(normalized.entreprise.secteurs).toEqual(["Banque / finance"]);
     expect(normalized.relance.jamais_appele).toBe(true);
     expect(normalized.relance).not.toHaveProperty("duree_min_sec");
     expect(normalized.relance).not.toHaveProperty("duree_max_sec");
