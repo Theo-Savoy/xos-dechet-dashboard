@@ -51,23 +51,23 @@ const CALL_FUNNEL_STAGES = [
   { key: "meeting", label: "RDV planifié", hint: null, sources: ["RDV planifié"], color: "var(--xos-alert)" },
 ] as const;
 
-/** Identité texte Weekly Perf — kickers courts, titres concrets, aides en langage métier. */
+/** Identité texte Weekly Perf — pack hybride : kickers brandés, titres concrets. */
 const COPY = {
-  point: {
-    kicker: "Point",
+  pulse: {
+    kicker: "Pulse",
     hint: "Le snapshot de la période : RDV, détections, signatures, et si le rythme tient.",
   },
-  detail: {
-    kicker: "Détail",
+  ledger: {
+    kicker: "Ledger",
     hint: "Les mêmes repères, semaine par semaine — pour comparer et cumuler.",
   },
-  chaine: {
-    kicker: "Chaîne",
+  amont: {
+    kicker: "Amont",
     title: "RDV → détection → volume",
     hint: "Avant la signature : combien de RDV, combien deviennent une opp, quel volume créé.",
   },
-  rythme: {
-    kicker: "Rythme",
+  pace: {
+    kicker: "Pace",
     titleWeek: "Objectif du trimestre",
     titleQuarter: "Où en est le trimestre",
     hint: "Signé vs objectif, vs N−1 à date, et projection si le rythme se maintient.",
@@ -75,8 +75,8 @@ const COPY = {
     runRate: "Si le rythme actuel se poursuit jusqu’à la fin du trimestre.",
     seasonal: "Attendu calé sur l’historique des 3 dernières années.",
   },
-  focus: {
-    kicker: "Focus",
+  board: {
+    kicker: "Board",
     title: "À closer ce trimestre",
     hint: "Les deals qui comptent. Taille = montant (échelle log). Bleu = à pousser, rouge = stagnant.",
   },
@@ -85,15 +85,14 @@ const COPY = {
     title: "Semaine après semaine",
     hint: "L’activité qui alimente le trimestre : RDV, détections, et appels si utile.",
   },
-  courbe: {
-    kicker: "Courbe",
+  trajectoire: {
+    kicker: "Trajectoire",
     title: "Projeté vs signé",
     hint: "Projeté = pipeline pondéré. Signé = cumul. Ligne pointillée = objectif.",
   },
-  appels: {
-    kicker: "Appels",
-    titleWeek: "Cette semaine",
-    titleQuarter: "Cumul du trimestre",
+  line: {
+    kicker: "Line",
+    title: "De l’appel au RDV",
     hint: "Répartition des résultats d’appel — du non décroché au RDV planifié.",
   },
   sm: {
@@ -993,7 +992,7 @@ function CallFunnelChart({
   const isIndividualView = owners.length === 1;
   if (!max && !isIndividualView && !callActivity) return null;
   return <section className="weekly-section">
-    <SectionHeading kicker={COPY.appels.kicker} title={weekMode ? COPY.appels.titleWeek : COPY.appels.titleQuarter} hint={COPY.appels.hint} />
+    <SectionHeading kicker={COPY.line.kicker} title={COPY.line.title} hint={COPY.line.hint} />
     <GlassCard className="weekly-call-funnel-card">
       <div className="weekly-call-funnel" role="img" aria-label="Entonnoir des résultats d’appel">
         {totals.map((stage, index) => {
@@ -1056,7 +1055,7 @@ function LeadingFunnel({
   const detectRate = rdv > 0 ? opps / rdv : null;
   const avgCreated = opps > 0 ? created / opps : null;
   return <section className="weekly-section">
-    <SectionHeading kicker={COPY.chaine.kicker} title={COPY.chaine.title} hint={COPY.chaine.hint} />
+    <SectionHeading kicker={COPY.amont.kicker} title={COPY.amont.title} hint={COPY.amont.hint} />
     <GlassCard className="weekly-leading-funnel">
       <div className="weekly-leading-step">
         <small>RDV</small>
@@ -1120,19 +1119,19 @@ function PaceStrip({ pace }: { pace: Pace }) {
         <span className="weekly-pace-legend--n1">N−1 · {money.format(pace.signed_n1)}</span>
       </div>
       {pace.expected_mode === "seasonal" && (
-        <Tip text={COPY.rythme.seasonal}>
+        <Tip text={COPY.pace.seasonal}>
           <span className="weekly-pace-note">Saisonnalité</span>
         </Tip>
       )}
       {pace.monthly_indicative?.length ? (
         <div className="weekly-pace-monthly">
-          <small>Mois indicatifs<Tip text={COPY.rythme.monthly} /></small>
+          <small>Mois indicatifs<Tip text={COPY.pace.monthly} /></small>
           <MonthlyIndicativePills months={pace.monthly_indicative} />
         </div>
       ) : null}
     </div>
     <div className="weekly-pace-aside">
-      <small>Projeté fin de trimestre<Tip text={COPY.rythme.runRate} /></small>
+      <small>Projeté fin de trimestre<Tip text={COPY.pace.runRate} /></small>
       <strong className="xos-numeric">{money.format(pace.run_rate)}</strong>
       <span>{paceText}</span>
     </div>
@@ -1228,7 +1227,7 @@ function DecisionBoard({
   };
 
   return <section className="weekly-section">
-    <SectionHeading kicker={COPY.focus.kicker} title={COPY.focus.title} hint={COPY.focus.hint} />
+    <SectionHeading kicker={COPY.board.kicker} title={COPY.board.title} hint={COPY.board.hint} />
     <GlassCard className="weekly-decision-board">
       {scatterData.length > 0 && <div className="weekly-chart weekly-chart--scatter" aria-label="Carte des opportunités : date de clôture × probabilité">
         <ResponsiveContainer width="100%" height="100%">
@@ -1604,9 +1603,9 @@ export default function WeeklyApp() {
       {showTeamRollup && displayMode === "cards" && <TeamRollup owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} weekMode={weekMode} currentIndex={currentIndex} compareLabel={compareLabel} />}
       {displayMode === "cards" && <section className="weekly-section">
         <SectionHeading
-          kicker={COPY.point.kicker}
+          kicker={COPY.pulse.kicker}
           title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? `Cette semaine · ${currentWeekShort}` : "Qui a bougé ?"}
-          hint={COPY.point.hint}
+          hint={COPY.pulse.hint}
           action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
@@ -1631,9 +1630,9 @@ export default function WeeklyApp() {
       </section>}
       {displayMode === "table" && <section className="weekly-section">
         <SectionHeading
-          kicker={COPY.detail.kicker}
+          kicker={COPY.ledger.kicker}
           title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? `Semaine · ${currentWeekShort}` : `${context?.quarter_label || "Trimestre"} · S${context?.week_of_quarter || "?"}`}
-          hint={COPY.detail.hint}
+          hint={COPY.ledger.hint}
           action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
@@ -1657,12 +1656,12 @@ export default function WeeklyApp() {
         />
       )}
       {showPace && pace && <section className="weekly-section">
-        <SectionHeading kicker={COPY.rythme.kicker} title={weekMode ? COPY.rythme.titleWeek : COPY.rythme.titleQuarter} hint={COPY.rythme.hint} />
+        <SectionHeading kicker={COPY.pace.kicker} title={weekMode ? COPY.pace.titleWeek : COPY.pace.titleQuarter} hint={COPY.pace.hint} />
         <PaceStrip pace={pace} />
         {!weekMode && <ConversionRates owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} currentIndex={currentIndex} />}
       </section>}
       <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
-      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker={COPY.courbe.kicker} title={COPY.courbe.title} hint={COPY.courbe.hint} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
+      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker={COPY.trajectoire.kicker} title={COPY.trajectoire.title} hint={COPY.trajectoire.hint} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
       <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
       {showCustomPipe && <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />}
     </>}

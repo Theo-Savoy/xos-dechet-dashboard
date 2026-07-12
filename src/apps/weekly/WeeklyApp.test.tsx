@@ -188,7 +188,7 @@ describe("Weekly Perf", () => {
     fireEvent.click(screen.getByRole("option", { name: "Ada Lovelace" }));
     expect(screen.getByRole("heading", { level: 4, name: "Ada Lovelace" })).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 4, name: "Yanis Agharbi" })).toBeNull();
-    expect(screen.getByText("Appels")).toBeTruthy();
+    expect(screen.getByText("Line")).toBeTruthy();
     expect(screen.getByText("Non décroché")).toBeTruthy();
   });
 
@@ -301,25 +301,26 @@ describe("Weekly Perf", () => {
     expect(screen.getByText("Deal SM")).toBeTruthy();
   });
 
-  it("renders chaîne before rythme and appels lower on the page", async () => {
+  it("renders amont before pace and line lower on the page", async () => {
     render(<WeeklyApp />);
-    expect(await screen.findByText("Chaîne")).toBeTruthy();
+    expect(await screen.findByText("Amont")).toBeTruthy();
     expect(screen.getByText("RDV → détection → volume")).toBeTruthy();
     expect(screen.getByText("Volume détecté")).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
     expect(screen.getAllByText("Mois indicatifs")).toHaveLength(1);
     expect(screen.getByText(/Juil\./)).toBeTruthy();
     expect(screen.getByText("Projeté fin de trimestre")).toBeTruthy();
-    expect(screen.getByText("Appels")).toBeTruthy();
+    expect(screen.getByText("Line")).toBeTruthy();
+    expect(screen.getByText("De l’appel au RDV")).toBeTruthy();
     expect(screen.getByText("Non décroché")).toBeTruthy();
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.queryByText("Généré, puis gagné")).toBeNull();
 
-    const leading = screen.getByText("Chaîne");
+    const leading = screen.getByText("Amont");
     const rythme = screen.getByText("Objectif du trimestre");
-    const appels = screen.getByText("Appels");
+    const line = screen.getByText("Line");
     expect(leading.compareDocumentPosition(rythme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(rythme.compareDocumentPosition(appels) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rythme.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("computes table totals and week-over-week deltas client-side", async () => {
