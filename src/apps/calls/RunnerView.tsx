@@ -552,11 +552,11 @@ export function RunnerView({
     });
   }, [contacts, isRecallQueue]);
 
-  const openDetail = (contactId: number) => {
+  const openDetail = useCallback((contactId: number) => {
     setFocusedId(contactId);
     onFocusContact(contactId);
     setMode("detail");
-  };
+  }, [onFocusContact]);
 
   const toggleSelected = (contactId: number) => {
     setSelectedIds((current) => {
@@ -715,7 +715,7 @@ export function RunnerView({
       openDetail(next.id);
       playComboSound("tick", soundsEnabled);
     },
-    [contacts, filteredContacts, focusedContact?.id, focusedId, soundsEnabled],
+    [contacts, filteredContacts, focusedContact?.id, focusedId, openDetail, soundsEnabled],
   );
 
   const runComboAction = useCallback(
@@ -827,28 +827,15 @@ export function RunnerView({
       isRecallQueue,
       mode,
       navigateContact,
+      openDetail,
       soundsEnabled,
     ],
   );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (demoOpen) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setDemoOpen(false);
-        }
-        return;
-      }
-
-      if (commandBarOpen || helpOpen) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setCommandBarOpen(false);
-          setHelpOpen(false);
-        }
-        return;
-      }
+      // Démo / overlays gèrent Esc + focus trap eux-mêmes.
+      if (demoOpen || commandBarOpen || helpOpen) return;
 
       if (isModKey(event) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -1011,7 +998,8 @@ export function RunnerView({
               setCommandBarOpen(true);
               playComboSound("whoosh", soundsEnabled);
             }}
-            title="⌘K"
+            title="Command bar (⌘K)"
+            aria-label="Command bar"
           >
             ⌘K
           </Button>
@@ -1021,7 +1009,8 @@ export function RunnerView({
               setHelpOpen(true);
               playComboSound("whoosh", soundsEnabled);
             }}
-            title="?"
+            title="Aide raccourcis (?)"
+            aria-label="Aide raccourcis"
           >
             ?
           </Button>

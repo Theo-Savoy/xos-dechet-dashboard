@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, GlassCard } from "../../components/ui";
 import { markComboDemoSeen } from "./comboKeyboard";
+import { useComboOverlay } from "./comboOverlay";
 import { playComboSound, unlockComboAudio } from "./comboSounds";
 
 type ComboOnboardingDemoProps = {
@@ -8,17 +9,31 @@ type ComboOnboardingDemoProps = {
   onClose: () => void;
 };
 
+const DEMO_MS = 22_000;
+
 const BEATS = [
   { at: 0, title: "Combo", body: "Prospection au rythme du clavier.", sound: "demo" as const },
-  { at: 4000, title: "1", body: "Résultat — Appel non décroché", sound: "tick" as const, chip: "Non décroché" },
-  { at: 10000, title: "⇧3", body: "Rappel dans 3 jours", sound: "recall" as const, chip: "+3 j" },
-  { at: 18000, title: "⌘↵", body: "Loggué · contact suivant", sound: "success" as const },
-  { at: 26000, title: "⌘K · ?", body: "Toutes les actions, toujours sous la main.", sound: "whoosh" as const },
+  { at: 3_000, title: "1", body: "Résultat — Appel non décroché", sound: "tick" as const, chip: "Non décroché" },
+  { at: 7_500, title: "⇧3", body: "Rappel dans 3 jours", sound: "recall" as const, chip: "+3 j" },
+  { at: 13_000, title: "⌘↵", body: "Loggué · contact suivant", sound: "success" as const },
+  { at: 17_000, title: "⌘K · ?", body: "Toutes les actions, toujours sous la main.", sound: "whoosh" as const },
 ];
 
 export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps) {
   const [elapsed, setElapsed] = useState(0);
   const [played, setPlayed] = useState<Set<number>>(() => new Set());
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const finish = useCallback(
+    (skip: boolean) => {
+      markComboDemoSeen();
+      if (!skip) playComboSound("success");
+      onClose();
+    },
+    [onClose],
+  );
+
+  useComboOverlay(open, rootRef, () => finish(true));
 
   useEffect(() => {
     if (!open) return;
@@ -26,10 +41,13 @@ export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps)
     setPlayed(new Set());
     void unlockComboAudio();
     const started = performance.now();
-    const timer = window.setInterval(() => {
+    let frame = 0;
+    const tick = () => {
       setElapsed(performance.now() - started);
-    }, 100);
-    return () => window.clearInterval(timer);
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
   useEffect(() => {
@@ -39,25 +57,18 @@ export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps)
       setPlayed((prev) => new Set(prev).add(index));
       playComboSound(beat.sound);
     }
-    if (elapsed > 35000) {
-      markComboDemoSeen();
-      onClose();
+    if (elapsed > DEMO_MS) {
+      finish(false);
     }
-  }, [elapsed, open, onClose, played]);
+  }, [elapsed, open, finish, played]);
 
   if (!open) return null;
 
   const current = [...BEATS].reverse().find((beat) => elapsed >= beat.at) ?? BEATS[0];
-  const progress = Math.min(1, elapsed / 35000);
-
-  const finish = (skip: boolean) => {
-    markComboDemoSeen();
-    if (!skip) playComboSound("success");
-    onClose();
-  };
+  const progress = Math.min(1, elapsed / DEMO_MS);
 
   return (
-    <div className="calls-demo" role="dialog" aria-modal="true" aria-label="Démo Combo">
+    <div ref={rootRef} className="calls-demo" role="dialog" aria-modal="true" aria-label="Démo Combo">
       <div className="calls-demo__stage">
         <GlassCard className="calls-demo__card">
           <p className="calls-demo__brand">Combo</p>
@@ -68,10 +79,10 @@ export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps)
           {current.chip && <span className="calls-demo__chip">{current.chip}</span>}
           <div className="calls-demo__mock" aria-hidden="true">
             <div className="calls-demo__mock-row">
-              <span className={elapsed >= 4000 ? "is-on" : undefined}>Non décroché</span>
-              <span className={elapsed >= 10000 ? "is-on" : undefined}>+3 j</span>
+              <span className={elapsed >= 3_000 ? "is-on" : undefined}>Non décroché</span>
+              <span className={elapsed >= 7_500 ? "is-on" : undefined}>+3 j</span>
             </div>
-            <div className={`calls-demo__toast${elapsed >= 18000 ? " is-on" : ""}`}>Loggué · rappel +3 j</div>
+            <div className={`calls-demo__toast${elapsed >= 13_000 ? " is-on" : ""}`}>Loggué · rappel +3 j</div>
           </div>
           <div className="calls-demo__progress" aria-hidden="true">
             <span style={{ width: `${progress * 100}%` }} />

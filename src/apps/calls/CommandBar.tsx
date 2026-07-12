@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, GlassCard } from "../../components/ui";
 import {
   type ComboActionDef,
   type ComboActionId,
   filterComboActions,
 } from "./comboKeyboard";
+import { useComboOverlay } from "./comboOverlay";
 
 type CommandBarProps = {
   open: boolean;
@@ -16,16 +17,21 @@ type CommandBarProps = {
 export function CommandBar({ open, onClose, onRun, soundsEnabled }: CommandBarProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const actions = useMemo(() => filterComboActions(query), [query]);
+
+  const handleEscape = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  useComboOverlay(open, rootRef, handleEscape, { initialFocusRef: inputRef });
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
     setActiveIndex(0);
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 10);
-    return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
@@ -35,11 +41,6 @@ export function CommandBar({ open, onClose, onRun, soundsEnabled }: CommandBarPr
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         setActiveIndex((i) => Math.min(i + 1, Math.max(actions.length - 1, 0)));
@@ -73,8 +74,14 @@ export function CommandBar({ open, onClose, onRun, soundsEnabled }: CommandBarPr
   let flatIndex = -1;
 
   return (
-    <div className="calls-cmdk" role="dialog" aria-modal="true" aria-label="Command bar Combo">
-      <button type="button" className="calls-cmdk__backdrop" aria-label="Fermer" onClick={onClose} />
+    <div ref={rootRef} className="calls-cmdk" role="dialog" aria-modal="true" aria-label="Command bar Combo">
+      <button
+        type="button"
+        className="calls-cmdk__backdrop"
+        tabIndex={-1}
+        aria-label="Fermer"
+        onClick={onClose}
+      />
       <GlassCard className="calls-cmdk__panel">
         <div className="calls-cmdk__head">
           <input
@@ -108,6 +115,7 @@ export function CommandBar({ open, onClose, onRun, soundsEnabled }: CommandBarPr
                         type="button"
                         role="option"
                         aria-selected={index === activeIndex}
+                        aria-label={label}
                         className={`calls-cmdk__item${index === activeIndex ? " calls-cmdk__item--active" : ""}`}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => {
@@ -116,7 +124,11 @@ export function CommandBar({ open, onClose, onRun, soundsEnabled }: CommandBarPr
                         }}
                       >
                         <span>{label}</span>
-                        {action.shortcutLabel && <kbd className="calls-kbd">{action.shortcutLabel}</kbd>}
+                        {action.shortcutLabel && (
+                          <kbd className="calls-kbd" aria-hidden="true">
+                            {action.shortcutLabel}
+                          </kbd>
+                        )}
                       </button>
                     </li>
                   );
@@ -140,6 +152,10 @@ type ShortcutHelpProps = {
 };
 
 export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const handleEscape = useCallback(() => onClose(), [onClose]);
+  useComboOverlay(open, rootRef, handleEscape);
+
   if (!open) return null;
 
   const left = [
@@ -158,12 +174,18 @@ export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpPr
   ] as const;
 
   return (
-    <div className="calls-help" role="dialog" aria-modal="true" aria-label="Aide raccourcis Combo">
-      <button type="button" className="calls-help__backdrop" aria-label="Fermer" onClick={onClose} />
+    <div ref={rootRef} className="calls-help" role="dialog" aria-modal="true" aria-label="Aide raccourcis Combo">
+      <button
+        type="button"
+        className="calls-help__backdrop"
+        tabIndex={-1}
+        aria-label="Fermer"
+        onClick={onClose}
+      />
       <GlassCard className="calls-help__panel">
         <div className="calls-help__head">
           <div>
-            <Tagish>Combo</Tagish>
+            <span className="calls-help__eyebrow">Combo</span>
             <h3>Raccourcis clavier</h3>
             <p className="calls-muted">Prospection au rythme du clavier.</p>
           </div>
@@ -204,8 +226,4 @@ export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpPr
       </GlassCard>
     </div>
   );
-}
-
-function Tagish({ children }: { children: string }) {
-  return <span className="calls-help__eyebrow">{children}</span>;
 }

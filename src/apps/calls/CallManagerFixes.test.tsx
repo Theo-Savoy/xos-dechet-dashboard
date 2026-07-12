@@ -637,6 +637,82 @@ describe("RunnerView", () => {
     expect(screen.getByRole("button", { name: /Appel décroché/i }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("sets recall delay with Shift+digit via keyboard code (AZERTY-safe)", () => {
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "F" });
+    fireEvent.keyDown(document, { key: "3", code: "Digit3", shiftKey: true });
+    expect(screen.getByRole("button", { name: "+3 j" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens shortcut help with ? and closes with Escape", () => {
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "?" });
+    expect(screen.getByRole("dialog", { name: "Aide raccourcis Combo" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Aide raccourcis Combo" })).toBeNull();
+  });
+
+  it("marks the combo demo as seen when dismissed with Escape", async () => {
+    const { ComboOnboardingDemo } = await import("./ComboOnboardingDemo");
+    const store: Record<string, string> = {};
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => {
+          store[key] = String(value);
+        },
+        removeItem: (key: string) => {
+          delete store[key];
+        },
+      },
+    });
+    const onClose = vi.fn();
+    render(<ComboOnboardingDemo open onClose={onClose} />);
+    expect(screen.getByRole("dialog", { name: "Démo Combo" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+    expect(store["xos-combo-demo-seen"]).toBe("1");
+  });
+
+  it("ignores digit shortcuts while typing in comments", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    const comments = screen.getByLabelText("Commentaires");
+    await user.click(comments);
+    await user.keyboard("3");
+    expect(screen.getByRole("button", { name: /Appel non décroché/i }).getAttribute("aria-pressed")).toBe("true");
+    expect((comments as HTMLTextAreaElement).value).toContain("3");
+  });
+
   it("keeps the in-progress result and comments when changing the default recall delay", async () => {
     const user = userEvent.setup();
     const current = { ...bob, status: "pending" as const, outcome: null };
