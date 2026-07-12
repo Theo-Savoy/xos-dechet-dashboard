@@ -257,6 +257,7 @@ textarea {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  position: relative;
   background: var(--xos-window-content-bg);
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
