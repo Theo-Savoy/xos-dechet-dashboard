@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { Button, GlassCard, Select, Tag } from "../../components/ui";
 import { supabase } from "../../lib/supabase";
@@ -10,7 +10,8 @@ type Pulse = { sf_user_id: string; week: string; week_start: string; calls: numb
 type WonByType = { catalogue: number; sur_mesure: number; conseil: number };
 type Pipeline = { sf_user_id: string; week: string; week_start: string; generated_count: number; generated_amount: number; won_count: number; won_amount: number; won_by_type: WonByType; won_arr_amount: number; closing_rate_count: number | null; closing_rate_amount: number | null };
 type Effort = { sf_user_id: string; week: string; week_start: string; progressions: number; open_opps_at_start: number; effort_rate: number | null };
-type Quarter = { sf_user_id: string; quarter: string; signed_to_date: number; weighted_open: number; forecast: number; custom_pipe: number; target: number | null; signed_n1?: number; pace_ratio?: number | null; expected_to_date?: number | null };
+type MonthlyIndicative = { month: string; label: string; weight: number; raw: number; indicative: number };
+type Quarter = { sf_user_id: string; quarter: string; signed_to_date: number; weighted_open: number; forecast: number; custom_pipe: number; target: number | null; signed_n1?: number; pace_ratio?: number | null; expected_to_date?: number | null; monthly_indicative?: MonthlyIndicative[] };
 type ForecastPoint = { sf_user_id: string; week_start: string; week: string; forecast: number | null; signed_to_date: number };
 type RitualOpp = {
   id: string | null;
@@ -40,6 +41,7 @@ type Pace = {
   pace_ratio: number | null;
   won_count?: number;
   expected_mode?: "seasonal" | "linear";
+  monthly_indicative?: MonthlyIndicative[];
 };
 
 const CALL_FUNNEL_STAGES = [
@@ -49,7 +51,85 @@ const CALL_FUNNEL_STAGES = [
   { key: "meeting", label: "RDV planifié", hint: null, sources: ["RDV planifié"], color: "var(--xos-alert)" },
 ] as const;
 
+const HINTS = {
+  forme: "Repères de la semaine : RDV, taux de détection, signatures et rythme trimestre.",
+  cap: "Où vous en êtes sur l’objectif du trimestre, comparé à l’an dernier à la même date.",
+  capMonthly: "Répartition indicative du trimestre selon la saisonnalité — arrondie à l’ordre de grandeur (~).",
+  capProjection: "Si le rythme actuel se maintient, voici où vous finirez le trimestre.",
+  flux: "Du RDV à l’opportunité détectée, puis au volume engagé — avant les signatures.",
+  decisions: "Les opps à closer ce trimestre : taille = montant (échelle log pour lire petits et gros deals).",
+  forecast: "Pipeline engagé vs signé cumulé. La ligne pointillée = objectif trimestre.",
+  conversionDetect: "Part des RDV qui deviennent une opportunité détectée.",
+  conversionClose: "Part des opps détectées qui se signent sur le trimestre.",
+} as const;
+
+const EMPTY_PULSE = (ownerId: string, start: string): Pulse => ({
+  sf_user_id: ownerId, week: "", week_start: start, calls: 0, meetings: 0, proposals: 0, call_results: {},
+});
+
+const EMPTY_PIPELINE = (ownerId: string, start: string): Pipeline => ({
+  sf_user_id: ownerId, week: "", week_start: start, generated_count: 0, generated_amount: 0,
+  won_count: 0, won_amount: 0, won_by_type: emptyWonByType(), won_arr_amount: 0,
+  closing_rate_count: null, closing_rate_amount: null,
+});
+
+function seriesIndex<T extends { sf_user_id: string; week_start: string }>(rows: T[]) {
+  const map = new Map<string, T>();
+  for (const row of rows) map.set(`${row.sf_user_id}:${row.week_start}`, row);
+  return map;
+}
+
+function Hint({ text }: { text: string }) {
+  return (
+    <button type="button" className="weekly-hint" aria-label={text} title={text}>
+      ?
+    </button>
+  );
+}
+
+function SectionHeading({
+  kicker, title, hint, action,
+}: {
+  kicker: string;
+  title: string;
+  hint?: string;
+  action?: React.ReactNode;
+}) {
+  const inner = (
+    <>
+      <p>{kicker}{hint ? <Hint text={hint} /> : null}</p>
+      <h3>{title}</h3>
+    </>
+  );
+  if (!action) return <div className="weekly-section-heading">{inner}</div>;
+  return (
+    <div className="weekly-section-heading weekly-section-heading--row">
+      <div>{inner}</div>
+      {action}
+    </div>
+  );
+}
+
 const chartBarCursor = { fill: "color-mix(in srgb, var(--xos-accent) 12%, transparent)" };
+
+const SCATTER_MAX_POINTS = 22;
+const SCATTER_MIN_EXPECTED = 5_000;
+
+function logBubbleSize(amount: number, minAmount: number, maxAmount: number) {
+  const floor = Math.max(minAmount, 1);
+  const ceiling = Math.max(maxAmount, floor * 1.05);
+  const logMin = Math.log10(floor);
+  const logMax = Math.log10(ceiling);
+  const logVal = Math.log10(Math.max(amount, 1));
+  if (logMax <= logMin) return 220;
+  return 90 + ((logVal - logMin) / (logMax - logMin)) * 310;
+}
+
+function funnelStageWidth(count: number, max: number) {
+  if (count <= 0) return 24;
+  if (max <= 0) return 38;
+  return Math.max(38, Math.round(30 + (count / max) * 70));
+}
 type CustomPipe = {
   horizon_days: number;
   total_amount: number;
@@ -152,14 +232,14 @@ function cadenceHealth(
 ): Health {
   const ahead = paceRatio !== null && paceRatio >= 1;
   const onTrack = paceRatio !== null && paceRatio >= 0.85;
-  const trajectoryLabel = ahead ? "trajectoire en avance" : onTrack ? "trajectoire dans le rythme" : paceRatio !== null ? "trajectoire en retard" : null;
+  const trajectoryLabel = ahead ? "bon rythme trimestre" : onTrack ? "rythme tenu" : paceRatio !== null ? "trimestre en retard" : null;
 
   if (tracking === "sdr") {
     const calls = currentPulse.calls;
     const rdv = currentPulse.meetings;
     const opps = currentPipe.generated_count;
     const detect = rdv >= CADENCE.detectSample ? opps / rdv : null;
-    const recoParts = [`${calls} appels`, `${rdv}/${CADENCE.rdvPerWeek} RDV`, detect === null ? `${opps} opp` : `détect. ${percent.format(detect)}`];
+    const recoParts = [`${calls} appels`, `${rdv} RDV sur ${CADENCE.rdvPerWeek}`, detect === null ? `${opps} opp` : `détection ${percent.format(detect)}`];
     const reco = recoParts.join(" · ");
 
     if (calls === 0 && rdv === 0 && opps === 0) {
@@ -197,9 +277,9 @@ function cadenceHealth(
   const detectBad = detect !== null && detect < CADENCE.detectFloor;
 
   const bits = [
-    `${rdv}/${CADENCE.rdvPerWeek} RDV`,
-    detect === null ? `${opps} opp` : `détect. ${percent.format(detect)}`,
-    hasSales ? `signés ${money.format(wonAmount)}` : null,
+    `${rdv} RDV sur ${CADENCE.rdvPerWeek}`,
+    detect === null ? `${opps} opp` : `détection ${percent.format(detect)}`,
+    hasSales ? `${money.format(wonAmount)} signés` : null,
     trajectoryLabel,
   ].filter(Boolean);
   const reco = bits.join(" · ");
@@ -207,7 +287,7 @@ function cadenceHealth(
   // Semaine morte : pas d’activité ni de vente — sauf si trajectoire déjà largement en avance.
   if (rdv === 0 && opps === 0 && !hasSales) {
     if (ahead) return { label: "OK", tone: "ok", reco: `Semaine calme · ${trajectoryLabel}.` };
-    return { label: "Critique", tone: "crit", reco: "Aucun RDV, opp ni signé." };
+    return { label: "Critique", tone: "crit", reco: "Pas de RDV ni d’opp cette semaine." };
   }
 
   // Super : volume + résultats (ventes ou détection saine).
@@ -223,7 +303,7 @@ function cadenceHealth(
     return { label: "OK", tone: "ok", reco };
   }
   if (!rdvOk && hasSales) {
-    return { label: "À surveiller", tone: "warn", reco: `${reco} · volume RDV bas.` };
+    return { label: "À surveiller", tone: "warn", reco: `${reco} · peu de RDV.` };
   }
 
   // Détection très basse sur un vrai échantillon.
@@ -246,16 +326,6 @@ function cadenceHealth(
   }
 
   return { label: "OK", tone: "ok", reco };
-}
-
-function CadenceLegend() {
-  return (
-    <p className="weekly-cadence-legend" role="note">
-      <span>Forme</span>
-      <span>{CADENCE.rdvPerWeek} RDV / sem</span>
-      <span>détection {percent.format(CADENCE.detectRate)}</span>
-    </p>
-  );
 }
 
 function ConversionRates({
@@ -287,25 +357,77 @@ function ConversionRates({
   return (
     <GlassCard className="weekly-conversion">
       <div className="weekly-conversion__item">
-        <small>Taux détection (TQ)</small>
+        <small>RDV → opp<Hint text={HINTS.conversionDetect} /></small>
         <strong className={`xos-numeric ${detectTone}`}>{detect === null ? "—" : percent.format(detect)}</strong>
-        <span>{opps} opp / {rdv} RDV</span>
+        <span>{opps} opp · {rdv} RDV</span>
       </div>
       <div className="weekly-conversion__item">
-        <small>Taux closing (TQ)</small>
+        <small>Opp → signées<Hint text={HINTS.conversionClose} /></small>
         <strong className={`xos-numeric ${closeTone}`}>{close === null ? "—" : percent.format(close)}</strong>
-        <span>{won} gagnées / {opps} détectées</span>
+        <span>{won} gagnées · {opps} détectées</span>
       </div>
     </GlassCard>
   );
 }
 
-async function perfRequest(period: PeriodMode) {
+async function perfRequest(period: PeriodMode, signal?: AbortSignal) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("missing_session");
-  const response = await fetch(`/api/perf?period=${period}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+  const response = await fetch(`/api/perf?period=${period}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    signal,
+  });
   if (!response.ok) throw new Error("perf_unavailable");
   return { payload: await response.json() as PerfResponse, email: session.user.email || null };
+}
+
+function roundToMagnitude(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const exp = Math.floor(Math.log10(value));
+  const base = 10 ** exp;
+  const normalized = value / base;
+  let factor = 10;
+  if (normalized < 1.5) factor = 1;
+  else if (normalized < 3.5) factor = 2.5;
+  else if (normalized < 7.5) factor = 5;
+  return Math.round(factor * base);
+}
+
+function aggregateMonthlyIndicative(rows: Quarter[]): MonthlyIndicative[] {
+  const byMonth = new Map<string, { month: string; label: string; weight: number; raw: number }>();
+  for (const row of rows) {
+    for (const month of row.monthly_indicative || []) {
+      const prev = byMonth.get(month.month);
+      if (prev) prev.raw += month.raw;
+      else byMonth.set(month.month, { month: month.month, label: month.label, weight: month.weight, raw: month.raw });
+    }
+  }
+  return [...byMonth.values()].map((month) => ({
+    ...month,
+    indicative: roundToMagnitude(month.raw),
+  }));
+}
+
+function currentMonthKey() {
+  return String(new Date().getMonth() + 1).padStart(2, "0");
+}
+
+function MonthlyIndicativePills({ months, compact = false }: { months: MonthlyIndicative[]; compact?: boolean }) {
+  if (!months.length) return null;
+  const currentMonth = currentMonthKey();
+  return (
+    <div className={`weekly-monthly-targets${compact ? " weekly-monthly-targets--compact" : ""}`} aria-label="Objectifs mensuels indicatifs">
+      {months.map((month) => (
+        <span
+          key={month.month}
+          className={`weekly-monthly-target${month.month === currentMonth ? " weekly-monthly-target--current" : ""}`}
+          title={`${Math.round(month.weight * 100)} % · brut ${money.format(month.raw)}`}
+        >
+          {month.label} ~{money.format(month.indicative)}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function QuarterGauge({ data }: { data: Quarter | undefined }) {
@@ -315,15 +437,15 @@ function QuarterGauge({ data }: { data: Quarter | undefined }) {
   const ceiling = Math.max(target || 0, forecast, signed, 1);
   const targetText = target === null ? "—" : money.format(target);
   return <div className="weekly-quarter">
-    <div className="weekly-quarter-heading"><span>{data?.quarter || "Trimestre"}</span><small>Target trimestre</small></div>
+    <div className="weekly-quarter-heading"><span>{data?.quarter || "Trimestre"}</span><small>Objectif trimestre</small></div>
     <div className="weekly-quarter-track" aria-hidden="true">
       <span className="weekly-quarter-forecast" style={{ width: `${Math.min(100, forecast / ceiling * 100)}%` }} />
       <span className="weekly-quarter-signed" style={{ width: `${Math.min(100, signed / ceiling * 100)}%` }} />
     </div>
     <div className="weekly-quarter-stats">
       <span aria-label={`Signé ${money.format(signed)}`}><small>Signé</small><strong>{money.format(signed)}</strong></span>
-      <span aria-label={`Forecast ${money.format(forecast)}`}><small>Forecast</small><strong>{money.format(forecast)}</strong></span>
-      <span aria-label={`Target ${targetText}`}><small>Target</small><strong>{targetText}</strong></span>
+      <span aria-label={`Engagement ${money.format(forecast)}`}><small>Engagement</small><strong>{money.format(forecast)}</strong></span>
+      <span aria-label={`Objectif ${targetText}`}><small>Objectif</small><strong>{targetText}</strong></span>
     </div>
   </div>;
 }
@@ -399,7 +521,7 @@ function MetricCell({ label, value, previous, moneyValue = false }: { label: str
   </div>;
 }
 
-function PersonCard({
+const PersonCard = memo(function PersonCard({
   owner, pulseSeries, pipelineSeries, quarter, delay, currentIndex, interactive = false, focused = false, onOpen,
 }: {
   owner: Owner;
@@ -468,7 +590,7 @@ function PersonCard({
     )}
     {tracking !== "sdr" && <QuarterGauge data={quarter} />}
   </GlassCard>;
-}
+});
 
 function sumAt<T>(owners: Owner[], seriesFor: (owner: Owner) => T[], index: number, pick: (row: T) => number) {
   return owners.reduce((sum, owner) => sum + (pick(seriesFor(owner)[index]) || 0), 0);
@@ -493,6 +615,7 @@ function teamQuarter(owners: Owner[], quarterFor: (owner: Owner) => Quarter | un
     forecast: rows.reduce((sum, row) => sum + row.forecast, 0),
     custom_pipe: rows.reduce((sum, row) => sum + row.custom_pipe, 0),
     target: targets.length ? targets.reduce((sum, value) => sum + value, 0) : null,
+    monthly_indicative: aggregateMonthlyIndicative(rows),
   };
 }
 
@@ -541,7 +664,7 @@ function TeamRollup({
     : pipelineFor(owner).slice(0, currentIndex + 1).reduce((sum, row) => sum + row.won_amount, 0));
 
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Équipe</p><h3>{weekMode ? "Consolidé vs S−1" : "Consolidé trimestre"}</h3></div>
+    <SectionHeading kicker="Équipe" title={weekMode ? "Consolidé vs S−1" : "Consolidé trimestre"} />
     <GlassCard className="weekly-team-rollup">
       <div className={`weekly-metrics weekly-metrics--${hasSdr ? 5 : 4}`}>
         {hasSdr && <MetricCell label="Appels" value={calls.value} previous={calls.previous} />}
@@ -608,7 +731,7 @@ function CustomPipeSection({ pipe, owners, sellerIds }: { pipe: CustomPipe; owne
   const months = pipe.months.map((entry) => ({ ...entry, label: entry.label.replace(".", "") }));
   const opps = pipe.opps.filter((opp) => sellerIds.has(opp.sf_user_id));
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Pipe sur-mesure</p><h3>6 prochains mois</h3></div>
+    <SectionHeading kicker="Pipe sur-mesure" title="6 prochains mois" />
     <GlassCard className="weekly-custom-pipe">
       <div className="weekly-custom-kpis">
         <div><small>Montant brut</small><strong className="xos-numeric">{money.format(pipe.total_amount)}</strong></div>
@@ -662,6 +785,7 @@ function scopePace(rows: Quarter[], meta: Pace | null | undefined): Pace | null 
       pace_ratio: expectedToDate && expectedToDate > 0 ? signed / expectedToDate : null,
       won_count: meta?.won_count || 0,
       expected_mode: meta?.expected_mode || (expectedFromRows !== null ? "seasonal" : "linear"),
+      monthly_indicative: aggregateMonthlyIndicative(rows),
     };
 }
 
@@ -688,18 +812,24 @@ function CallFunnelChart({
   });
   const max = Math.max(...totals.map((stage) => stage.count), 0);
   const totalCalls = totals.reduce((sum, stage) => sum + stage.count, 0);
-  if (!max) return null;
+  const callActivity = owners.some((owner) => {
+    const pulse = pulseFor(owner);
+    const indexes = weekMode ? [currentIndex] : weeks.map((_, index) => index).filter((index) => index <= currentIndex);
+    return indexes.some((index) => (pulse[index]?.calls || 0) > 0 || Object.values(pulse[index]?.call_results || {}).some((value) => value > 0));
+  });
+  const isIndividualView = owners.length === 1;
+  if (!max && !isIndividualView && !callActivity) return null;
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Funnel appels</p><h3>{weekMode ? "Cette semaine" : "Cumul trimestre"}</h3></div>
+    <SectionHeading kicker="Funnel appels" title={weekMode ? "Cette semaine" : "Cumul trimestre"} />
     <GlassCard className="weekly-call-funnel-card">
       <div className="weekly-call-funnel" role="img" aria-label="Entonnoir des résultats d’appel">
         {totals.map((stage, index) => {
-          const width = max <= 0 ? 42 : Math.max(42, Math.round(42 + (stage.count / max) * 58));
+          const width = funnelStageWidth(stage.count, max);
           const share = totalCalls > 0 ? stage.count / totalCalls : 0;
           return (
             <div
               key={stage.key}
-              className="weekly-call-funnel__stage"
+              className={`weekly-call-funnel__stage${stage.count <= 0 ? " weekly-call-funnel__stage--empty" : ""}`}
               style={{
                 ["--funnel-width" as string]: `${width}%`,
                 ["--stage-color" as string]: stage.color,
@@ -753,7 +883,7 @@ function LeadingFunnel({
   const detectRate = rdv > 0 ? opps / rdv : null;
   const avgCreated = opps > 0 ? created / opps : null;
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Flux menant</p><h3>{weekMode ? "Cette semaine" : "Cumul trimestre"}</h3></div>
+    <SectionHeading kicker="Flux menant" title={weekMode ? "Cette semaine" : "Cumul trimestre"} hint={HINTS.flux} />
     <GlassCard className="weekly-leading-funnel">
       <div className="weekly-leading-step">
         <small>RDV</small>
@@ -770,7 +900,7 @@ function LeadingFunnel({
         <span>{avgCreated === null ? "—" : money.format(avgCreated)}</span>
       </div>
       <div className="weekly-leading-step">
-        <small>CA créé</small>
+        <small>Volume détecté</small>
         <strong className="xos-numeric">{money.format(created)}</strong>
       </div>
     </GlassCard>
@@ -783,8 +913,8 @@ function PaceStrip({ pace }: { pace: Pace }) {
   const expectedPct = pace.expected_to_date === null ? null : Math.min(100, (pace.expected_to_date / ceiling) * 100);
   const n1Pct = Math.min(100, (pace.signed_n1 / ceiling) * 100);
   const deltaN1 = pace.signed_to_date - pace.signed_n1;
-  const n1Text = `${deltaN1 === 0 ? "=" : deltaN1 > 0 ? "+" : "−"}${money.format(Math.abs(deltaN1))} vs même période N−1`;
-  const paceText = pace.pace_ratio === null ? "Sans target" : pace.pace_ratio >= 1 ? "Au-dessus du rythme" : pace.pace_ratio >= 0.85 ? "Dans le rythme" : "Sous le rythme";
+  const n1Text = `${deltaN1 === 0 ? "=" : deltaN1 > 0 ? "+" : "−"}${money.format(Math.abs(deltaN1))} vs N−1`;
+  const paceText = pace.pace_ratio === null ? "Pas d’objectif défini" : pace.pace_ratio >= 1 ? "Au-dessus du rythme" : pace.pace_ratio >= 0.85 ? "Dans le rythme" : "En dessous du rythme";
   const paceTone = pace.pace_ratio === null ? "" : pace.pace_ratio >= 1 ? "weekly-pace--up" : pace.pace_ratio >= 0.85 ? "weekly-pace--ok" : "weekly-pace--down";
   return <GlassCard className={`weekly-pace ${paceTone}`}>
     <div className="weekly-pace-visual">
@@ -795,9 +925,9 @@ function PaceStrip({ pace }: { pace: Pace }) {
           <span>{n1Text}</span>
         </div>
         <div>
-          <small>Target · semaine {pace.week_of_quarter}/{pace.weeks_in_quarter}</small>
+          <small>Objectif · S{pace.week_of_quarter}/{pace.weeks_in_quarter}</small>
           <strong className="xos-numeric">{pace.target === null ? "—" : money.format(pace.target)}</strong>
-          <span>{pace.won_count ?? 0} opportunité{(pace.won_count || 0) > 1 ? "s" : ""} gagnée{(pace.won_count || 0) > 1 ? "s" : ""}</span>
+          <span>{pace.won_count ?? 0} signature{(pace.won_count || 0) > 1 ? "s" : ""}</span>
         </div>
       </div>
       <div className="weekly-pace-track" aria-label="Progression vers le target trimestre">
@@ -810,10 +940,16 @@ function PaceStrip({ pace }: { pace: Pace }) {
         <span className="weekly-pace-legend--expected">Attendu{pace.expected_to_date !== null ? ` · ${money.format(pace.expected_to_date)}` : ""}</span>
         <span className="weekly-pace-legend--n1">N−1 · {money.format(pace.signed_n1)}</span>
       </div>
-      {pace.expected_mode === "seasonal" && <p className="weekly-pace-note">Attendu saisonnier</p>}
+      {pace.expected_mode === "seasonal" && <p className="weekly-pace-note" title="Attendu basé sur l’historique des 3 dernières années">Saisonnalité</p>}
+      {pace.monthly_indicative?.length ? (
+        <div className="weekly-pace-monthly">
+          <small>Mois indicatifs<Hint text={HINTS.capMonthly} /></small>
+          <MonthlyIndicativePills months={pace.monthly_indicative} />
+        </div>
+      ) : null}
     </div>
     <div className="weekly-pace-aside">
-      <small>Projection fin de trimestre</small>
+      <small>Projection fin de trimestre<Hint text={HINTS.capProjection} /></small>
       <strong className="xos-numeric">{money.format(pace.run_rate)}</strong>
       <span>{paceText}</span>
     </div>
@@ -843,50 +979,51 @@ function DecisionBoard({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  const nameOf = (id: string) => owners.find((owner) => owner.sf_user_id === id)?.name.split(" ")[0] || id;
+  const nameOf = useCallback((id: string) => owners.find((owner) => owner.sf_user_id === id)?.name.split(" ")[0] || id, [owners]);
   const reasonLabel = (reasons: RitualOpp["reasons"] = []) => {
     if (reasons.includes("stage") && reasons.includes("silence")) return "Étape + silence";
     if (reasons.includes("stage")) return "Étape longue";
     return "Sans activité";
   };
-  const inQuarter = (close: string | null) => {
+  const inQuarter = useCallback((close: string | null) => {
     if (!close || !quarterBounds) return Boolean(close);
     return close >= quarterBounds.from && close <= quarterBounds.to;
-  };
-  const stagnantIds = new Set(stagnant.map((opp) => opp.id).filter(Boolean));
-  const merged = new Map<string, RitualOpp & { kind: "push" | "stagnant" | "both"; close_ts: number; key: string }>();
-  for (const opp of [...followUps, ...stagnant]) {
-    if (!opp.close_date || !inQuarter(opp.close_date)) continue;
-    const key = opp.id || `${opp.name}-${opp.close_date}`;
-    const existing = merged.get(key);
-    const isStagnant = stagnantIds.has(opp.id) || stagnant.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
-    const isPush = followUps.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
-    const kind = isStagnant && isPush ? "both" : isStagnant ? "stagnant" : "push";
-    if (existing) {
-      existing.kind = kind;
-      continue;
+  }, [quarterBounds]);
+
+  const { ranked, scatterData, chartCount } = useMemo(() => {
+    const stagnantIds = new Set(stagnant.map((opp) => opp.id).filter(Boolean));
+    const merged = new Map<string, RitualOpp & { kind: "push" | "stagnant" | "both"; close_ts: number; key: string }>();
+    for (const opp of [...followUps, ...stagnant]) {
+      if (!opp.close_date || !inQuarter(opp.close_date)) continue;
+      const key = opp.id || `${opp.name}-${opp.close_date}`;
+      const existing = merged.get(key);
+      const isStagnant = stagnantIds.has(opp.id) || stagnant.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
+      const isPush = followUps.some((row) => row.id === opp.id || (!row.id && row.name === opp.name));
+      const kind = isStagnant && isPush ? "both" : isStagnant ? "stagnant" : "push";
+      if (existing) {
+        existing.kind = kind;
+        continue;
+      }
+      merged.set(key, { ...opp, kind, close_ts: Date.parse(`${opp.close_date}T12:00:00.000Z`), key });
     }
-    merged.set(key, { ...opp, kind, close_ts: Date.parse(`${opp.close_date}T12:00:00.000Z`), key });
-  }
-  const points = [...merged.values()].sort((a, b) => b.expected - a.expected);
-  const maxAmount = Math.max(...points.map((opp) => opp.amount), 1);
-  const cluster = new Map<string, number>();
-  const scatterData = points.map((opp) => {
-    const bucket = `${opp.close_date}:${Math.round(opp.probability / 5) * 5}`;
-    const n = cluster.get(bucket) || 0;
-    cluster.set(bucket, n + 1);
-    const angle = n * 2.15;
-    const radius = Math.min(5.5, n * 1.55);
-    return {
+    const points = [...merged.values()].sort((a, b) => b.expected - a.expected);
+    const aboveThreshold = points.filter((opp) => opp.expected >= SCATTER_MIN_EXPECTED);
+    const chartPool = aboveThreshold.length >= 8 ? aboveThreshold : points;
+    const chartPoints = chartPool.slice(0, SCATTER_MAX_POINTS);
+    const minChartAmount = chartPoints.length ? Math.min(...chartPoints.map((opp) => opp.amount)) : 1;
+    const maxChartAmount = chartPoints.length ? Math.max(...chartPoints.map((opp) => opp.amount), minChartAmount) : 1;
+    const scatter = chartPoints.map((opp) => ({
       ...opp,
-      x: opp.close_ts + Math.cos(angle) * radius * 86400000 * 0.45,
-      y: Math.min(100, Math.max(0, opp.probability + Math.sin(angle) * radius * 0.55)),
-      z: Math.max(opp.amount, maxAmount * 0.07),
-    };
-  });
+      x: opp.close_ts,
+      y: opp.probability,
+      z: logBubbleSize(opp.amount, minChartAmount, maxChartAmount),
+    }));
+    const list = points.map((opp) => ({ ...opp, listKind: opp.kind === "stagnant" ? "stagnant" as const : "push" as const }));
+    return { ranked: list, scatterData: scatter, chartCount: chartPoints.length };
+  }, [followUps, stagnant, inQuarter]);
+
   const domainFrom = quarterBounds ? Date.parse(`${quarterBounds.from}T12:00:00.000Z`) : "dataMin";
   const domainTo = quarterBounds ? Date.parse(`${quarterBounds.to}T12:00:00.000Z`) : "dataMax";
-  const ranked = points.map((opp) => ({ ...opp, listKind: opp.kind === "stagnant" ? "stagnant" as const : "push" as const }));
   const list = showAll ? ranked : ranked.slice(0, 10);
   const tickFormatter = (value: number) => weekLabel.format(new Date(value));
 
@@ -907,7 +1044,7 @@ function DecisionBoard({
   };
 
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Décisions</p><h3>Opportunités essentielles du trimestre</h3></div>
+    <SectionHeading kicker="Décisions" title="Opportunités essentielles du trimestre" hint={HINTS.decisions} />
     <GlassCard className="weekly-decision-board">
       {scatterData.length > 0 && <div className="weekly-chart weekly-chart--scatter" aria-label="Carte des opportunités : date de clôture × probabilité">
         <ResponsiveContainer width="100%" height="100%">
@@ -915,7 +1052,7 @@ function DecisionBoard({
             <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 45%, transparent)" strokeDasharray="3 6" />
             <XAxis type="number" dataKey="x" name="Clôture" domain={[domainFrom, domainTo]} tickFormatter={tickFormatter} stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
             <YAxis type="number" dataKey="y" name="Proba" domain={[0, 100]} stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} width={36} tickFormatter={(value) => `${value}%`} />
-            <ZAxis type="number" dataKey="z" range={[40, 260]} />
+            <ZAxis type="number" dataKey="z" range={[90, 400]} />
             <Tooltip cursor={{ stroke: "color-mix(in srgb, var(--xos-text) 35%, transparent)", strokeDasharray: "4 4" }} content={<OppTooltip />} wrapperStyle={{ outline: "none", zIndex: 20 }} />
             <Scatter
               name="Opps"
@@ -942,7 +1079,7 @@ function DecisionBoard({
       <div className="weekly-decision-legend">
         <span className="weekly-decision-legend--push">À pousser</span>
         <span className="weekly-decision-legend--stale">Stagnante</span>
-        <span>Taille = montant</span>
+        {ranked.length > chartCount && <span>{chartCount} sur {ranked.length} sur la carte</span>}
       </div>
       <ul className="weekly-decision-list">
         {list.map((opp) => (
@@ -1018,7 +1155,7 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
               label={{ value: "Objectif", position: "insideTopRight", fill: "var(--xos-text-muted)", fontSize: 11 }}
             />
           )}
-          {hasForecast && <Line type="monotone" dataKey="forecast" name="Forecast" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
+          {hasForecast && <Line type="monotone" dataKey="forecast" name="Engagement" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
           <Line type="monotone" dataKey="signed" name="Signé cumulé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />
         </LineChart>
       </ResponsiveContainer>
@@ -1039,21 +1176,33 @@ export default function WeeklyApp() {
   const [displayMode, setDisplayMode] = useState<"cards" | "table">("cards");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("all");
   const prefetchDone = useRef(false);
+  const requestSeq = useRef(0);
 
-  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false } = {}) => {
+  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false, signal }: { background?: boolean; signal?: AbortSignal } = {}) => {
+    const seq = ++requestSeq.current;
     if (!background) setLoading(true);
     setError(false);
     try {
-      const next = await perfRequest(nextPeriod);
+      const next = await perfRequest(nextPeriod, signal);
+      if (seq !== requestSeq.current) return;
       setCache((current) => ({ ...current, [nextPeriod]: next }));
-    } catch {
+    } catch (err) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
+      if (seq !== requestSeq.current) return;
       if (!background) setError(true);
     } finally {
-      if (!background) setLoading(false);
+      if (seq === requestSeq.current && !background) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void loadPeriod(period); }, [loadPeriod, period]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadPeriod(period, { signal: controller.signal });
+    return () => {
+      controller.abort();
+      requestSeq.current += 1;
+    };
+  }, [loadPeriod, period]);
 
   useEffect(() => {
     if (prefetchDone.current || !cache.week) return;
@@ -1080,8 +1229,10 @@ export default function WeeklyApp() {
     const visibleOwners = mode === "team" && selectedOwnerId !== "all"
       ? roster.filter((owner) => owner.sf_user_id === selectedOwnerId)
       : roster;
-    const pulseFor = (owner: Owner) => weeks.map(({ start }) => payload.pulse.find((point) => point.sf_user_id === owner.sf_user_id && point.week_start === start) || { sf_user_id: owner.sf_user_id, week: "", week_start: start, calls: 0, meetings: 0, proposals: 0 });
-    const pipelineFor = (owner: Owner) => weeks.map(({ start }) => payload.pipeline.find((point) => point.sf_user_id === owner.sf_user_id && point.week_start === start) || { sf_user_id: owner.sf_user_id, week: "", week_start: start, generated_count: 0, generated_amount: 0, won_count: 0, won_amount: 0, won_by_type: emptyWonByType(), won_arr_amount: 0, closing_rate_count: null, closing_rate_amount: null });
+    const pulseIndex = seriesIndex(payload.pulse);
+    const pipelineIndex = seriesIndex(payload.pipeline);
+    const pulseFor = (owner: Owner) => weeks.map(({ start }) => pulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start));
+    const pipelineFor = (owner: Owner) => weeks.map(({ start }) => pipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start));
     const sellers = visibleOwners.filter((owner) => trackingOf(owner) !== "sdr");
     const sellerIds = new Set(sellers.map((owner) => owner.sf_user_id));
     const quarterFor = (owner: Owner) => payload.quarter.find((point) => point.sf_user_id === owner.sf_user_id);
@@ -1141,7 +1292,7 @@ export default function WeeklyApp() {
         <Button variant={period === "quarter" ? "primary" : "secondary"} onClick={() => switchPeriod("quarter")}>Trimestre</Button>
       </div>
     </header>
-    {payload.warning === "sf_user_unmapped" && <div className="weekly-warning" role="status">Compte Salesforce non lié — passez par le Hub ou le login Salesforce.</div>}
+    {payload.warning === "sf_user_unmapped" && <div className="weekly-warning" role="status">Compte Salesforce non relié — connectez-vous via le Hub.</div>}
     <div className="weekly-controls">
       {payload.view === "team" && <div className="weekly-toggle weekly-seg" aria-label="Vue">
         <Button variant={mode === "self" ? "primary" : "secondary"} onClick={() => { setMode("self"); setSelectedOwnerId("all"); }}>Moi</Button>
@@ -1155,19 +1306,17 @@ export default function WeeklyApp() {
         <Button variant={displayMode === "table" ? "primary" : "secondary"} onClick={() => setDisplayMode("table")}>Tableau</Button>
       </div>
     </div>
-    {!hasActivity ? <GlassCard className="weekly-empty"><h3>Une semaine encore calme</h3><p>Les activités Salesforce apparaîtront ici au fil des saisies.</p><span>Consultez Call Manager pour enregistrer vos appels.</span></GlassCard> : <>
+    {!hasActivity ? <GlassCard className="weekly-empty"><h3>Rien à signaler cette semaine</h3><p>Dès que les activités remontent de Salesforce, elles apparaîtront ici.</p><span>Pensez à loguer vos appels dans Call Manager.</span></GlassCard> : <>
       {showTeamRollup && displayMode === "cards" && <TeamRollup owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} weekMode={weekMode} currentIndex={currentIndex} />}
       {displayMode === "cards" && <section className="weekly-section">
-        <div className="weekly-section-heading weekly-section-heading--row">
-          <div>
-            <p>Pulse</p>
-            <h3>{selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Qui a bougé ?"}</h3>
-          </div>
-          {mode === "team" && selectedOwnerId !== "all" && (
+        <SectionHeading
+          kicker="Pulse"
+          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Qui a bougé ?"}
+          hint={HINTS.forme}
+          action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
-          )}
-        </div>
-        <CadenceLegend />
+          ) : undefined}
+        />
         <div className="weekly-pulse-grid weekly-view-transition" key={`cards-${period}-${mode}-${selectedOwnerId}`}>
           {visibleOwners.map((owner, ownerIndex) => (
             <PersonCard
@@ -1186,16 +1335,14 @@ export default function WeeklyApp() {
         </div>
       </section>}
       {displayMode === "table" && <section className="weekly-section">
-        <div className="weekly-section-heading weekly-section-heading--row">
-          <div>
-            <p>Rituel</p>
-            <h3>{selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Trimestre en cours"}</h3>
-          </div>
-          {mode === "team" && selectedOwnerId !== "all" && (
+        <SectionHeading
+          kicker="Rituel"
+          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Trimestre en cours"}
+          hint={HINTS.forme}
+          action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
-          )}
-        </div>
-        <CadenceLegend />
+          ) : undefined}
+        />
         <div className="weekly-tables weekly-view-transition" key={`table-${period}-${mode}-${selectedOwnerId}`}>
           {showTeamRollup && <TeamMetricTable owners={visibleOwners} weeks={model.weeks} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} currentIndex={currentIndex} />}
           {visibleOwners.map((owner) => (
@@ -1205,12 +1352,12 @@ export default function WeeklyApp() {
       </section>}
       <LeadingFunnel owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} weekMode={weekMode} currentIndex={currentIndex} />
       {showPace && pace && <section className="weekly-section">
-        <div className="weekly-section-heading"><p>Cap</p><h3>{weekMode ? "Objectif du trimestre" : "Rythme du trimestre"}</h3></div>
+        <SectionHeading kicker="Cap" title={weekMode ? "Objectif du trimestre" : "Rythme du trimestre"} hint={HINTS.cap} />
         <PaceStrip pace={pace} />
         {!weekMode && <ConversionRates owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} currentIndex={currentIndex} />}
       </section>}
       <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
-      {displayMode === "cards" && showForecast && <section className="weekly-section"><div className="weekly-section-heading"><p>Effort</p><h3>Forecast vs réalisé</h3></div><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
+      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker="Effort" title="Engagement vs signé" hint={HINTS.forecast} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
       <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
       {showCustomPipe && <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />}
     </>}

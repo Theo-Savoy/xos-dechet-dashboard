@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { supabase } from "../../lib/supabase";
+import TargetsEditor from "./TargetsEditor";
 import "./hub.css";
 
 type Status = {
@@ -69,14 +70,15 @@ export default function HubApp() {
           <div className="hub-status"><span>Salesforce <Tag variant={status.salesforce.connected ? "success" : "warning"}>{status.salesforce.connected ? "OK" : "KO"}</Tag></span><span>API SF (24 h glissantes) <strong>{quota ? `${(quota.max - quota.remaining).toLocaleString("fr-FR")} utilisés / ${quota.max.toLocaleString("fr-FR")} — ${quota.remaining.toLocaleString("fr-FR")} restants` : "Indisponible"}</strong></span><span>Cache Cleaner <strong>{status.cache.cleaner.version || "Non disponible"}</strong></span><span>Déploiement <strong>{status.version}</strong></span></div>
         </GlassCard>
       </section>
-      {status.capabilities.manageSettings && <GlassCard className="hub-panel"><p className="hub-eyebrow">Équipe</p><h3>Configuration équipe</h3>
-        <div className="hub-settings">{status.settings?.map((setting) => <div className="hub-setting" key={setting.id}><code>{setting.key}</code><span>{JSON.stringify(setting.value)}</span><Button variant="secondary" disabled={saving} onClick={() => post({ action: "update_settings", operation: "delete", key: setting.key })}>Supprimer</Button></div>)}</div>
+      {status.capabilities.manageSettings && <GlassCard className="hub-panel"><p className="hub-eyebrow">Objectifs</p><h3>Trimestre en cours</h3>{token && <TargetsEditor token={token} />}</GlassCard>}
+      {status.capabilities.manageSettings && <GlassCard className="hub-panel hub-advanced"><details><summary>Paramètres avancés (JSON)</summary>
+        <div className="hub-settings">{status.settings?.filter((setting) => setting.key !== "weekly_targets").map((setting) => <div className="hub-setting" key={setting.id}><code>{setting.key}</code><span>{JSON.stringify(setting.value)}</span><Button variant="secondary" disabled={saving} onClick={() => post({ action: "update_settings", operation: "delete", key: setting.key })}>Supprimer</Button></div>)}</div>
         <form className="hub-form" onSubmit={(event) => { event.preventDefault(); try { void post({ action: "update_settings", operation: "upsert", key, value: JSON.parse(value) }); setKey(""); } catch { setError(true); } }}>
           <input aria-label="Clé du paramètre" value={key} onChange={(event) => setKey(event.target.value)} placeholder="cleaner_late_days" required />
           <input aria-label="Valeur JSON" value={value} onChange={(event) => setValue(event.target.value)} required />
           <Button disabled={saving}>Enregistrer</Button>
         </form>
-      </GlassCard>}
+      </details></GlassCard>}
       {status.capabilities.manageSettings && !status.capabilities.manageRoles && <GlassCard className="hub-panel"><p className="hub-eyebrow">Équipe</p><h3>Profils</h3>
         <div className="hub-profiles">{status.profiles?.map((profile) => <div className="hub-profile" key={profile.id}><span><strong>{profile.full_name || profile.email}</strong><small>{profile.email}</small></span><Tag>{profile.role}</Tag></div>)}</div>
       </GlassCard>}

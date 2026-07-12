@@ -56,7 +56,11 @@ const selfPayload = {
     { sf_user_id: "self", week: "2026-W28", week_start: "2026-07-06", generated_count: 2, generated_amount: 12000, won_count: 1, won_amount: 6000, won_by_type: { catalogue: 3000, sur_mesure: 2000, conseil: 1000 }, won_arr_amount: 3000, closing_rate_count: 0.5, closing_rate_amount: 0.5 },
   ],
   effort: [{ sf_user_id: "self", week: "2026-W28", week_start: "2026-07-06", progressions: 3, open_opps_at_start: 20, effort_rate: 0.15 }],
-  quarter: [{ sf_user_id: "self", quarter: "FY27-Q1", signed_to_date: 20000, weighted_open: 15000, forecast: 35000, custom_pipe: 18000, target: 60000, signed_n1: 15000, pace_ratio: 4.33, expected_to_date: 4615 }],
+  quarter: [{ sf_user_id: "self", quarter: "FY27-Q1", signed_to_date: 20000, weighted_open: 15000, forecast: 35000, custom_pipe: 18000, target: 60000, signed_n1: 15000, pace_ratio: 4.33, expected_to_date: 4615, monthly_indicative: [
+    { month: "07", label: "Juil.", weight: 0.2, raw: 12000, indicative: 10000 },
+    { month: "08", label: "Août", weight: 0.3, raw: 18000, indicative: 25000 },
+    { month: "09", label: "Sept.", weight: 0.5, raw: 30000, indicative: 25000 },
+  ] }],
   forecast_history: [
     { sf_user_id: "self", week_start: "2026-07-06", week: "2026-W28", forecast: 35000, signed_to_date: 20000 },
   ],
@@ -76,6 +80,11 @@ const selfPayload = {
     expected_to_date: 4615,
     run_rate: 260000,
     won_count: 1,
+    monthly_indicative: [
+      { month: "07", label: "Juil.", weight: 0.2, raw: 12000, indicative: 10000 },
+      { month: "08", label: "Août", weight: 0.3, raw: 18000, indicative: 20000 },
+      { month: "09", label: "Sept.", weight: 0.5, raw: 30000, indicative: 30000 },
+    ],
   },
   quarter_bounds: { from: "2026-07-01", to: "2026-09-30", label: "FY27-Q1" },
   custom_pipe: {
@@ -142,7 +151,7 @@ describe("Weekly Perf", () => {
     expect(screen.getByRole("link", { name: "Deal à pousser" }).getAttribute("href")).toBe("https://example.salesforce.com/lightning/r/Opportunity/006F/view");
     expect(screen.getByRole("link", { name: "Deal silencieux" })).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
-    expect(screen.getByText(/vs même période N−1/)).toBeTruthy();
+    expect(screen.getByText(/vs N−1/)).toBeTruthy();
     expect(screen.getByTestId("opp-scatter")).toBeTruthy();
   });
 
@@ -155,6 +164,8 @@ describe("Weekly Perf", () => {
     fireEvent.click(screen.getByRole("option", { name: "Ada Lovelace" }));
     expect(screen.getByRole("heading", { level: 4, name: "Ada Lovelace" })).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 4, name: "Yanis Agharbi" })).toBeNull();
+    expect(screen.getByText("Funnel appels")).toBeTruthy();
+    expect(screen.getByText("Non décroché")).toBeTruthy();
   });
 
   it("renders a commercial's week metrics without a team toggle", async () => {
@@ -164,10 +175,9 @@ describe("Weekly Perf", () => {
     expect(screen.getAllByText("RDV").length).toBeGreaterThan(0);
     expect(screen.getAllByText("+1").length).toBeGreaterThan(0);
     expect(screen.getByText("OK")).toBeTruthy();
-    expect(screen.getByText(/2\/5 RDV/)).toBeTruthy();
-    expect(screen.getByText(/trajectoire en avance/)).toBeTruthy();
-    expect(screen.getByText(/Forme/)).toBeTruthy();
-    expect(screen.getByText(/5 RDV \/ sem/)).toBeTruthy();
+    expect(screen.getByText(/2 RDV sur 5/)).toBeTruthy();
+    expect(screen.getByText(/bon rythme trimestre/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Repères de la semaine/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Équipe" })).toBeNull();
   });
 
@@ -214,7 +224,7 @@ describe("Weekly Perf", () => {
     fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
     expect(await screen.findByText("Trimestre en cours")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
-    expect(screen.getByText("Target trimestre")).toBeTruthy();
+    expect(screen.getByText("Objectif trimestre")).toBeTruthy();
   });
 
   it("shows the full team roster without a DG badge", async () => {
@@ -245,7 +255,7 @@ describe("Weekly Perf", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...selfPayload, warning: "sf_user_unmapped" }), { status: 200 })));
     render(<WeeklyApp />);
 
-    expect(await screen.findByText(/Compte Salesforce non lié/)).toBeTruthy();
+    expect(await screen.findByText(/Compte Salesforce non relié/)).toBeTruthy();
   });
 
   it("retries the request after an API error", async () => {
@@ -269,8 +279,10 @@ describe("Weekly Perf", () => {
     render(<WeeklyApp />);
     expect(await screen.findByText("Flux menant")).toBeTruthy();
     expect(screen.queryByText(/Les signés se lisent au Cap/)).toBeNull();
-    expect(screen.getByText("CA créé")).toBeTruthy();
+    expect(screen.getByText("Volume détecté")).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
+    expect(screen.getAllByText("Mois indicatifs")).toHaveLength(1);
+    expect(screen.getByText(/Juil\./)).toBeTruthy();
     expect(screen.getByText("Projection fin de trimestre")).toBeTruthy();
     expect(screen.getByText("Funnel appels")).toBeTruthy();
     expect(screen.getByText("Non décroché")).toBeTruthy();
@@ -295,6 +307,6 @@ describe("Weekly Perf", () => {
     expect(within(table).queryByRole("row", { name: /Pipe sur-mesure/ })).toBeNull();
     expect(within(table).getAllByRole("row")).toHaveLength(8);
     expect(within(table).queryByRole("row", { name: /Target/ })).toBeNull();
-    expect(screen.getByText("Target trimestre")).toBeTruthy();
+    expect(screen.getByText("Objectif trimestre")).toBeTruthy();
   });
 });

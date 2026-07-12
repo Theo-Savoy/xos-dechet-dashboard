@@ -4,6 +4,7 @@ import { getProfile } from "./_calls/profileCache.js";
 import { canViewTeamPerf, isWeeklyOwnerExcluded, sfIdKey, trackingModeFor } from "./_config/access.js";
 import mapping from "./_crm/mapping.js";
 import { escapeSOQL, fetchSFToken, searchContacts, buildLightningUrl } from "./_crm/salesforce.js";
+import { quarterlyToMonthlyIndicative } from "./_weekly/targets.js";
 
 const CACHE_CONTROL = "public, s-maxage=900, stale-while-revalidate=60";
 const TIMEZONE = "Europe/Paris";
@@ -697,7 +698,19 @@ export async function GET(request) {
       const linearExpected = target === null ? null : target * ((weekIndex + 1) / Math.max(quarterStarts.length, weekIndex + 1));
       const expected = seasonalExpected ?? linearExpected;
       const pace_ratio = expected && expected > 0 ? signedToDate / expected : null;
-      return { sf_user_id: owner, quarter: quarter.label, signed_to_date: signedToDate, weighted_open: weightedOpen, forecast, custom_pipe: customByOwner.get(owner) || 0, target, signed_n1: signedN1, pace_ratio, expected_to_date: expected };
+      return {
+        sf_user_id: owner,
+        quarter: quarter.label,
+        signed_to_date: signedToDate,
+        weighted_open: weightedOpen,
+        forecast,
+        custom_pipe: customByOwner.get(owner) || 0,
+        target,
+        signed_n1: signedN1,
+        pace_ratio,
+        expected_to_date: expected,
+        monthly_indicative: target ? quarterlyToMonthlyIndicative(target, quarter.label, seasonality) : [],
+      };
     });
 
     const currentMonday = mondayFor(today);
@@ -739,6 +752,10 @@ export async function GET(request) {
       wonCount: quarterWon.filter((record) => allowed(record[opportunity.fields.ownerId])).length,
       expectedToDate: seasonalExpected,
     });
+    const paceWithMonthly = {
+      ...pace,
+      monthly_indicative: paceTarget ? quarterlyToMonthlyIndicative(paceTarget, quarter.label, seasonality) : [],
+    };
 
     return json(200, {
       ...empty,
@@ -751,7 +768,7 @@ export async function GET(request) {
       custom_pipe: customPipe,
       follow_up_opps: followUpOpps,
       stagnant_opps: stagnantOpps,
-      pace,
+      pace: paceWithMonthly,
       seasonality,
       quarter_bounds: { from: quarter.from, to: addDays(quarter.toExclusive, -1), label: quarter.label },
     });

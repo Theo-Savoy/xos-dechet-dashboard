@@ -1,0 +1,102 @@
+.hub-targets { display: grid; gap: .85rem; }
+.hub-targets-intro p { margin: 0; color: var(--xos-text-muted); font-size: .84rem; line-height: 1.45; }
+.hub-targets-intro strong { color: var(--xos-text); }
+.hub-targets-hint { margin-top: .25rem !important; font-size: .78rem !important; }
+.hub-targets-loading, .hub-targets-error { margin: 0; color: var(--xos-text-muted); font-size: .84rem; }
+
+.hub-targets-table { display: grid; gap: .45rem; }
+.hub-targets-head,
+.hub-targets-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.2fr) minmax(6rem, .75fr) minmax(0, 1.6fr);
+  gap: .65rem;
+  align-items: center;
+}
+
+.hub-targets-head span {
+  color: var(--xos-text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.hub-targets-row {
+  padding: .6rem .7rem;
+  border-radius: .6rem;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid color-mix(in srgb, var(--xos-border) 70%, transparent);
+}
+
+.hub-targets-person { display: grid; gap: .1rem; min-width: 0; }
+.hub-targets-person strong { font-size: .88rem; }
+.hub-targets-person small { color: var(--xos-text-muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; }
+
+.hub-targets-input {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.hub-targets-input input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--xos-border);
+  border-radius: .5rem;
+  padding: .48rem .55rem;
+  color: var(--xos-text);
+  background: rgba(255, 255, 255, .05);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-targets-input span { color: var(--xos-text-muted); font-size: .8rem; }
+
+.hub-targets-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.hub-targets-month {
+  padding: .22rem .45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xos-accent) 14%, transparent);
+  color: var(--xos-text);
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hub-targets-month--empty {
+  background: transparent;
+  color: var(--xos-text-muted);
+}
+
+.hub-targets-actions {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.hub-targets-saved {
+  color: color-mix(in srgb, #2f9d6a 80%, var(--xos-text));
+  font-size: .8rem;
+}
+
+.hub-advanced summary {
+  cursor: pointer;
+  color: var(--xos-text-muted);
+  font-size: .82rem;
+  user-select: none;
+}
+
+.hub-advanced { display: grid; gap: .65rem; }
+
+@media (max-width: 720px) {
+  .hub-targets-head { display: none; }
+  .hub-targets-row {
+    grid-template-columns: 1fr;
+    gap: .5rem;
+  }
+}
