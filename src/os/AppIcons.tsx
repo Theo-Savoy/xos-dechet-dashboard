@@ -104,26 +104,11 @@ export function DemoUiIcon({ className }: IconProps) {
   );
 }
 
-/** Feedback — bulle de dialogue + étincelle d'idée */
-export function FeedbackIcon({ className }: IconProps) {
-  return (
-    <IconShell className={className}>
-      <path
-        d="M24 8.5c8.8 0 16 5.9 16 13.2 0 7.3-7.2 13.2-16 13.2-1.7 0-3.4-.2-4.9-.6l-6.8 3.9 1.4-6.4C10.6 29.4 8 25.8 8 21.7 8 14.4 15.2 8.5 24 8.5Z"
-        fill="currentColor"
-      />
-      <path d="M16.5 19.5h15M16.5 25h9.5" stroke="white" strokeOpacity=".75" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M37.5 6.5v4.6M35.2 8.8h4.6" stroke="white" strokeOpacity=".6" strokeWidth="2" strokeLinecap="round" />
-    </IconShell>
-  );
-}
-
 export const APP_ICONS = {
   cleaner: CleanerIcon,
   calls: CallsIcon,
   weekly: WeeklyIcon,
   hub: HubIcon,
-  feedback: FeedbackIcon,
   "overview-demo": DemoOverviewIcon,
   "notes-demo": DemoNotesIcon,
   "ui-demo": DemoUiIcon,
