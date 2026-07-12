@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
+import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { emptyFilterTree, normalizeFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree, type MaxPerCompany } from "../../crm";
 import {
   completeSession,
@@ -43,7 +44,7 @@ import type {
 } from "./types";
 import "./calls.css";
 
-type View = "sessions" | "new" | "runner" | "recap" | "recalls";
+type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "loading-params";
 
 function findNextPending(contacts: SessionContact[]): SessionContact | null {
   return contacts.find((c) => c.status === "pending") ?? null;
@@ -81,7 +82,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const { session } = useSession();
   const token = session?.access_token ?? "";
 
-  const [view, setView] = useState<View>("sessions");
+  // Si on arrive avec un session_id dans les params (ex. raccourci bureau), on
+  // saute la page d'accueil "sessions" et on affiche un loader le temps du
+  // fetch. La view bascule ensuite vers runner/recap via openSession().
+  const [view, setView] = useState<View>(() =>
+    params?.session_id ? "loading-params" : "sessions",
+  );
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [stats, setStats] = useState<CallStats | null>(null);
   const [recalls, setRecalls] = useState<RecallInboxItem[]>([]);
@@ -196,6 +202,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         setView(data.session.status === "completed" ? "recap" : "runner");
       } catch (err) {
         setSessionsError(errorMessage(err));
+        // Si on était sur le loader de transition params, retombe sur la
+        // liste des séances pour que l'utilisateur voie l'erreur.
+        setView((current) => (current === "loading-params" ? "sessions" : current));
       } finally {
         setRunnerLoading(false);
       }
@@ -736,6 +745,9 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
 
   return (
     <div className="calls-app">
+      {view === "loading-params" && (
+        <WindowBootScreen label="Ouverture de la séance…" />
+      )}
       {view === "sessions" && (
         <SessionsView
           sessions={sessions}
