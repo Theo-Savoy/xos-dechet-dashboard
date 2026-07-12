@@ -58,7 +58,8 @@ async function loadContactCountsBySessionIds(client, sessionIds) {
   const { data: rpcRows, error: rpcError } = await client.rpc("call_session_contact_counts", {
     p_session_ids: sessionIds,
   });
-  if (!rpcError) {
+  const legacyRpcShape = (rpcRows || []).some((row) => row && "done" in row && !("called" in row));
+  if (!rpcError && !legacyRpcShape) {
     const counts = new Map();
     for (const row of rpcRows || []) {
       counts.set(row.session_id, {

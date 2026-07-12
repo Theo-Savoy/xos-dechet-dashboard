@@ -110,6 +110,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   mockDb.mockReset();
   mockFrom.mockClear();
+  mockRpc.mockReset();
+  mockRpc.mockResolvedValue({ data: null, error: { message: "no rpc" } });
   mockChain.insert.mockClear();
   mockFetchSFToken.mockReset();
   mockLogCall.mockReset();
@@ -284,6 +286,54 @@ describe("GET /api/calls", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.sessions[0]).toMatchObject({ id: 1, total: 2, called: 1, pending: 1 });
+  });
+
+  it("falls back when legacy RPC shape returns done instead of called", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{ session_id: 1, total: 2, pending: 1, done: 0, skipped: 0, do_not_call: 0 }],
+      error: null,
+    });
+    mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [
+          { session_id: 1, status: "called" },
+          { session_id: 1, status: "pending" },
+        ],
+        error: null,
+      });
+
+    const res = await GET(makeReq("GET", undefined));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sessions[0]).toMatchObject({ id: 1, total: 2, called: 1, pending: 1 });
+  });
+
+  it("uses RPC counts when called column is present", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{ session_id: 1, total: 3, called: 2, skipped: 0, pending: 1 }],
+      error: null,
+    });
+    mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    const res = await GET(makeReq("GET", undefined));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sessions[0]).toMatchObject({ id: 1, total: 3, called: 2, pending: 1 });
+    expect(mockFrom).not.toHaveBeenCalledWith("call_session_contacts");
   });
 
   it("returns 500 when contacts aggregation fails", async () => {

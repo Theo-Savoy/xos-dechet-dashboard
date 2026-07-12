@@ -1,8 +1,7 @@
--- 024_call_session_contact_counts.sql
--- Agrégation des compteurs de contacts par séance (hub Combo).
+-- 025_call_session_contact_counts_called.sql
+-- Remplace l'ancienne RPC (colonnes done/do_not_call, status obsolètes).
 
-create index if not exists idx_call_session_contacts_session_status
-  on public.call_session_contacts (session_id, status);
+drop function if exists public.call_session_contact_counts(bigint[]);
 
 create or replace function public.call_session_contact_counts(p_session_ids bigint[])
 returns table (
@@ -31,6 +30,3 @@ $$;
 revoke all on function public.call_session_contact_counts(bigint[]) from public;
 grant execute on function public.call_session_contact_counts(bigint[]) to service_role;
 grant execute on function public.call_session_contact_counts(bigint[]) to authenticated;
-
-comment on function public.call_session_contact_counts(bigint[]) is
-  'Compte total/called/skipped/pending par séance pour le hub Combo.';

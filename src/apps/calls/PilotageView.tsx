@@ -318,7 +318,7 @@ function CommercialCard({
           <strong className="xos-numeric">{caller.kpis.calls}</strong>
         </div>
         <div>
-          <span>Décroché</span>
+          <span>Décroch.</span>
           <strong className="xos-numeric">{pct(caller.kpis.rate_decroche)}</strong>
         </div>
         <div>
