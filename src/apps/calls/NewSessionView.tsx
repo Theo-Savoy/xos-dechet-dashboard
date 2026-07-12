@@ -11,7 +11,7 @@ import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
 import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
-import type { ContactPreview, SessionType } from "./types";
+import type { ContactPreview, SessionType, TeamMember } from "./types";
 
 type NewSessionViewProps = {
   filters: FilterTree;
@@ -33,6 +33,7 @@ type NewSessionViewProps = {
   presetsLoading: boolean;
   savingPreset: boolean;
   currentUserId: string;
+  team?: TeamMember[];
   onBack: () => void;
   onPreview: () => void;
   onLoadPreset: (preset: CallTargetPreset) => void;
@@ -43,6 +44,7 @@ type NewSessionViewProps = {
     contacts: ContactPreview[],
     scheduledFor: string,
     sessionType: SessionType,
+    memberUserIds: string[],
   ) => void;
 };
 
@@ -83,6 +85,7 @@ export function NewSessionView({
   presetsLoading,
   savingPreset,
   currentUserId,
+  team = [],
   onBack,
   onPreview,
   onLoadPreset,
@@ -95,7 +98,22 @@ export function NewSessionView({
   const [sessionType, setSessionType] = useState<SessionType>("prospection");
   const [dedupMode, setDedupMode] = useState<DedupMode>("avertir");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [shareMemberIds, setShareMemberIds] = useState<Set<string>>(new Set());
   const [capHint, setCapHint] = useState<string | null>(null);
+
+  const shareableTeam = useMemo(
+    () =>
+      team.filter(
+        (member) =>
+          member.user_id
+          && member.user_id !== currentUserId
+          && !String(member.user_id).startsWith("map:"),
+      ),
+    [team, currentUserId],
+  );
+
+  const allTeamSelected =
+    shareableTeam.length > 0 && shareableTeam.every((m) => shareMemberIds.has(m.user_id));
 
   const inSessionOf = useMemo(
     () => new Map(dedup.map((d) => [d.sf_contact_id, d.in_session_of])),
@@ -160,10 +178,27 @@ export function NewSessionView({
     setCapHint(null);
   };
 
+  const toggleShareMember = (userId: string) => {
+    setShareMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const toggleAllTeam = () => {
+    if (allTeamSelected) {
+      setShareMemberIds(new Set());
+      return;
+    }
+    setShareMemberIds(new Set(shareableTeam.map((m) => m.user_id)));
+  };
+
   const handleCreate = () => {
     const name = sessionName.trim();
     if (!name || selectedContacts.length === 0) return;
-    onCreate(name, selectedContacts, scheduledFor, sessionType);
+    onCreate(name, selectedContacts, scheduledFor, sessionType, [...shareMemberIds]);
   };
 
   return (
@@ -239,6 +274,39 @@ export function NewSessionView({
             >
               {loading ? "Création…" : "Lancer la séance"}
             </Button>
+            {shareableTeam.length > 0 && (
+              <div className="calls-name-form__share">
+                <div className="calls-name-form__share-head">
+                  <span>Partager avec</span>
+                  <button
+                    type="button"
+                    className={`calls-list-filter-chip${allTeamSelected ? " calls-list-filter-chip--active" : ""}`}
+                    aria-pressed={allTeamSelected}
+                    onClick={toggleAllTeam}
+                  >
+                    Toute l&apos;équipe
+                  </button>
+                </div>
+                <div className="calls-name-form__share-chips" role="group" aria-label="Collègues">
+                  {shareableTeam.map((member) => {
+                    const checked = shareMemberIds.has(member.user_id);
+                    return (
+                      <label
+                        key={member.user_id}
+                        className={`calls-share-chip${checked ? " calls-share-chip--active" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleShareMember(member.user_id)}
+                        />
+                        <span>{member.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </GlassCard>
 
           <GlassCard className="calls-preview">

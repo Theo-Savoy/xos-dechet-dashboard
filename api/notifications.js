@@ -76,6 +76,73 @@ export async function POST(request) {
     return respond(200, { ok: true });
   }
 
+  if (body.action === "react") {
+    const ALLOWED_EMOJIS = new Set(["👏", "🔥", "💪"]);
+    const notificationId = body.notification_id;
+    const emoji = body.emoji;
+    if (!Number.isInteger(notificationId) || notificationId < 1) {
+      return respond(400, { error: "invalid_notification_id" });
+    }
+    if (typeof emoji !== "string" || !ALLOWED_EMOJIS.has(emoji)) {
+      return respond(400, { error: "invalid_emoji" });
+    }
+
+    const { data: original, error: lookupError } = await client
+      .from("user_notifications")
+      .select("id, kind, payload, recipient_id")
+      .eq("id", notificationId)
+      .eq("recipient_id", user.id)
+      .maybeSingle();
+    if (lookupError) return respond(500, { error: "notifications_lookup_failed" });
+    if (!original || original.kind !== "session_goal_hit") {
+      return respond(404, { error: "not_found" });
+    }
+
+    const payload = original.payload && typeof original.payload === "object" ? original.payload : {};
+    const actorId = typeof payload.actor_id === "string" ? payload.actor_id : null;
+    if (!actorId || actorId === user.id) {
+      return respond(400, { error: "invalid_actor" });
+    }
+
+    const { data: reactorProfile } = await client
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    const reactorLabel =
+      reactorProfile?.full_name || user.user_metadata?.full_name || user.email || "Quelqu'un";
+
+    const reactions = Array.isArray(payload.reactions) ? [...payload.reactions] : [];
+    reactions.push({
+      emoji,
+      from_id: user.id,
+      from_label: reactorLabel,
+      at: new Date().toISOString(),
+    });
+    const { error: updateError } = await client
+      .from("user_notifications")
+      .update({ payload: { ...payload, reactions } })
+      .eq("id", notificationId)
+      .eq("recipient_id", user.id);
+    if (updateError) return respond(500, { error: "notifications_update_failed" });
+
+    await insertUserNotification(client, {
+      recipientId: actorId,
+      kind: "goal_reaction",
+      title: `${reactorLabel} réagit`,
+      body: emoji,
+      payload: {
+        emoji,
+        session_id: payload.session_id ?? null,
+        from_notification_id: notificationId,
+        reactor_id: user.id,
+        reactor_label: reactorLabel,
+      },
+    });
+
+    return respond(200, { ok: true });
+  }
+
   return respond(400, { error: "invalid_action" });
 }
 

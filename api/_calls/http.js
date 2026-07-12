@@ -322,7 +322,7 @@ export function enrichSessionContacts(contacts) {
   }));
 }
 
-export function getParisDateRange() {
+function parisOffsetMs() {
   const now = new Date();
   const parisNowStr = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Paris",
@@ -337,10 +337,13 @@ export function getParisDateRange() {
   const [datePart, timePart] = parisNowStr.split(" ");
   const [year, month, day] = datePart.split("-").map(Number);
   const [hour, minute, second] = timePart.split(":").map(Number);
-
-  const utcNow = Date.now();
   const parisNowDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  const offsetMs = utcNow - parisNowDate.getTime();
+  return Date.now() - parisNowDate.getTime();
+}
+
+export function getParisDateRange() {
+  const offsetMs = parisOffsetMs();
+  const [year, month, day] = todayParisDate().split("-").map(Number);
 
   const todayStart = new Date(Date.UTC(year, month - 1, day) + offsetMs);
   const tomorrowStart = new Date(todayStart.getTime() + 86400000);
@@ -351,4 +354,34 @@ export function getParisDateRange() {
   const monthStart = new Date(Date.UTC(year, month - 1, 1) + offsetMs);
 
   return { todayStart, tomorrowStart, weekStart, monthStart };
+}
+
+/**
+ * Day / week / month range containing an arbitrary Paris calendar date (YYYY-MM-DD).
+ * Mirrors getParisDateRange offset logic; week is Mon–Sun, month is calendar month.
+ */
+export function getParisRangeFor(period, anchorDateStr) {
+  const offsetMs = parisOffsetMs();
+  const todayStr = todayParisDate();
+  const dateStr = isValidScheduledFor(anchorDateStr) ? anchorDateStr : todayStr;
+  const [year, month, day] = dateStr.split("-").map(Number);
+
+  const dayStart = new Date(Date.UTC(year, month - 1, day) + offsetMs);
+  const dayEnd = new Date(dayStart.getTime() + 86400000);
+
+  if (period === "day") {
+    return { start: dayStart, end: dayEnd, anchor: dateStr };
+  }
+
+  if (period === "month") {
+    const start = new Date(Date.UTC(year, month - 1, 1) + offsetMs);
+    const end = new Date(Date.UTC(year, month, 1) + offsetMs);
+    return { start, end, anchor: dateStr };
+  }
+
+  const dow = dayStart.getUTCDay();
+  const mondayOffset = dow === 0 ? 6 : dow - 1;
+  const start = new Date(dayStart.getTime() - mondayOffset * 86400000);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  return { start, end, anchor: dateStr };
 }

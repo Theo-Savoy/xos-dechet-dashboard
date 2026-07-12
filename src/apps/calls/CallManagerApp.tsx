@@ -7,6 +7,7 @@ import {
   createFollowUpSession,
   createPreset,
   createSession,
+  celebrateGoal,
   claimContact,
   deferContacts,
   deletePreset,
@@ -39,6 +40,7 @@ import { RecapView } from "./RecapView";
 import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
+import { ShareSessionPanel } from "./ShareSessionPanel";
 import type {
   CallStats,
   ContactContext,
@@ -129,6 +131,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const matchCountRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
+  const [shareSessionId, setShareSessionId] = useState<number | null>(null);
+  const [shareSaving, setShareSaving] = useState(false);
 
   const [presets, setPresets] = useState<CallTargetPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
@@ -225,10 +229,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   }, [token]);
 
   useEffect(() => {
-    if (view === "runner" || view === "recalls") {
+    if (view === "runner" || view === "recalls" || view === "new" || view === "sessions" || shareSessionId != null) {
       void loadTeam();
     }
-  }, [view, loadTeam]);
+  }, [view, loadTeam, shareSessionId]);
 
   const openSession = useCallback(
     async (sessionId: number, focusContactId?: number) => {
@@ -408,12 +412,20 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     contactList: ContactPreview[],
     scheduledFor: string,
     sessionType: SessionType,
+    memberUserIds: string[] = [],
   ) => {
     if (!token) return;
     setCreateLoading(true);
     setNewError(null);
     try {
-      const data = await createSession(token, name, contactList, scheduledFor, sessionType);
+      const data = await createSession(
+        token,
+        name,
+        contactList,
+        scheduledFor,
+        sessionType,
+        memberUserIds,
+      );
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
@@ -1123,6 +1135,34 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     );
   };
 
+  const handleHubShareSession = async (memberUserIds: string[]) => {
+    if (!token || shareSessionId == null) return;
+    const members = await setSessionMembers(token, shareSessionId, memberUserIds);
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === shareSessionId
+          ? {
+              ...session,
+              members,
+              shared: members.length > 0,
+              member_count: members.length,
+            }
+          : session,
+      ),
+    );
+    setShareSessionId(null);
+  };
+
+  const shareTargetSession =
+    shareSessionId != null ? sessions.find((session) => session.id === shareSessionId) ?? null : null;
+
+  const handleCelebrateGoal = (payload: { goal: number; count: number }) => {
+    if (!token || !activeSession || activeSession.id === RECALL_QUEUE_SESSION.id) return;
+    void celebrateGoal(token, activeSession.id, payload.goal, payload.count).catch(() => {
+      /* fire-and-forget */
+    });
+  };
+
   const handlePin = async () => {
     if (!activeSession || activeSession.id === RECALL_QUEUE_SESSION.id) return;
     const dateLabel = activeSession.scheduled_for
@@ -1192,6 +1232,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onOpenPilotage={() => setView("pilotage")}
           onUpdateSession={handleUpdateSession}
           onDeleteSession={handleDeleteSession}
+          onShareSession={(id) => setShareSessionId(id)}
         />
       )}
 
@@ -1220,13 +1261,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           presetsLoading={presetsLoading}
           savingPreset={savingPreset}
           currentUserId={session.user.id}
+          team={team}
           onBack={goToSessions}
           onPreview={() => void handlePreview()}
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
-          onCreate={(name, list, scheduledFor, sessionType) =>
-            void handleCreate(name, list, scheduledFor, sessionType)
+          onCreate={(name, list, scheduledFor, sessionType, memberUserIds) =>
+            void handleCreate(name, list, scheduledFor, sessionType, memberUserIds)
           }
         />
       )}
@@ -1268,6 +1310,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onRemoveContacts={(ids) => void handleRemoveContacts(ids)}
           onUpdateRecall={(contactIds, recallAt) => void handleUpdateRecall(contactIds, recallAt)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
+          onCelebrateGoal={handleCelebrateGoal}
         />
       )}
 
@@ -1279,6 +1322,24 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           error={runnerError}
           onBack={goToSessions}
           onCreateFollowUp={() => void handleCreateFollowUp()}
+        />
+      )}
+
+      {shareTargetSession && (
+        <ShareSessionPanel
+          members={shareTargetSession.members ?? []}
+          team={team}
+          currentUserId={session.user.id}
+          saving={shareSaving}
+          onClose={() => setShareSessionId(null)}
+          onSave={async (ids) => {
+            setShareSaving(true);
+            try {
+              await handleHubShareSession(ids);
+            } finally {
+              setShareSaving(false);
+            }
+          }}
         />
       )}
     </div>

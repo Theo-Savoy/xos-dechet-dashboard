@@ -3,7 +3,13 @@ import { SF_ID, assertSessionOwner, enrichSessionContacts, filterContactsForFoll
 
 export async function handleSessionWrite({ action, body, user, client, headers }) {
   if (action === "create_session") {
-    const { name, contacts, scheduled_for: scheduledForInput, session_type: sessionTypeInput } = body;
+    const {
+      name,
+      contacts,
+      scheduled_for: scheduledForInput,
+      session_type: sessionTypeInput,
+      member_user_ids: memberUserIdsInput,
+    } = body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return new Response(JSON.stringify({ error: "invalid_name" }), { status: 400, headers });
@@ -38,6 +44,26 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       }
     }
 
+    let uniqueMemberIds = [];
+    if (memberUserIdsInput !== undefined) {
+      if (!Array.isArray(memberUserIdsInput) || memberUserIdsInput.some((id) => typeof id !== "string" || !id)) {
+        return new Response(JSON.stringify({ error: "invalid_member_user_ids" }), { status: 400, headers });
+      }
+      uniqueMemberIds = [...new Set(memberUserIdsInput.filter((id) => id !== user.id && !String(id).startsWith("map:")))];
+      if (uniqueMemberIds.length > 0) {
+        const { data: profiles, error: profilesError } = await client
+          .from("profiles")
+          .select("id")
+          .in("id", uniqueMemberIds);
+        if (profilesError) {
+          return new Response(JSON.stringify({ error: "members_lookup_failed" }), { status: 500, headers });
+        }
+        if ((profiles || []).length !== uniqueMemberIds.length) {
+          return new Response(JSON.stringify({ error: "invalid_member_user_ids" }), { status: 400, headers });
+        }
+      }
+    }
+
     const created = await insertSessionWithContacts(client, user.id, name, contacts, scheduledFor, {
       sessionType,
     });
@@ -45,8 +71,33 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       return new Response(JSON.stringify({ error: created.error }), { status: created.status, headers });
     }
 
+    let members = [];
+    if (uniqueMemberIds.length > 0) {
+      const rows = uniqueMemberIds.map((memberId) => ({
+        session_id: created.session.id,
+        user_id: memberId,
+        added_by: user.id,
+      }));
+      const { error: insertError } = await client.from("call_session_members").insert(rows);
+      if (insertError) {
+        return new Response(JSON.stringify({ error: "members_update_failed" }), { status: 500, headers });
+      }
+      const { data: memberProfiles } = await client
+        .from("profiles")
+        .select("id, full_name, email, sf_user_id")
+        .in("id", uniqueMemberIds);
+      members = (memberProfiles || []).map((profile) => ({
+        user_id: profile.id,
+        label: profile.full_name || profile.email || profile.id,
+        sf_user_id: profile.sf_user_id || null,
+      }));
+    }
+
     return new Response(
-      JSON.stringify({ session: created.session, contacts: created.contacts }),
+      JSON.stringify({
+        session: { ...created.session, is_owner: true, members },
+        contacts: created.contacts,
+      }),
       { status: 200, headers },
     );
   }

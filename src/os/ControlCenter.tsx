@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import logoXos from "../assets/logo-xos.png";
 import {
+  FloatingReactions,
+  type FloatingReactionBurst,
+} from "./FloatingReactions";
+import {
   fetchNotifications,
+  GOAL_REACTION_EMOJIS,
   markNotificationsRead,
+  reactToNotification,
+  type GoalReactionEmoji,
   type UserNotification,
 } from "./notifications";
 import "./controlCenter.css";
@@ -22,11 +29,22 @@ function formatRelative(iso: string): string {
   return `il y a ${days} j`;
 }
 
+function reactionEmoji(item: UserNotification): string | null {
+  if (item.kind !== "goal_reaction") return null;
+  const fromPayload = typeof item.payload?.emoji === "string" ? item.payload.emoji : null;
+  if (fromPayload) return fromPayload;
+  return item.body?.trim() || null;
+}
+
 export function ControlCenter({ accessToken }: ControlCenterProps) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<UserNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [reactingId, setReactingId] = useState<number | null>(null);
+  const [bursts, setBursts] = useState<FloatingReactionBurst[]>([]);
+  const seenReactionIds = useRef(new Set<number>());
+  const bootstrapped = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
@@ -34,6 +52,25 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
       const data = await fetchNotifications(accessToken);
       setItems(data.notifications);
       setUnread(data.unread_count);
+
+      const unreadReactions = data.notifications.filter(
+        (n) => n.kind === "goal_reaction" && !n.read_at,
+      );
+      if (!bootstrapped.current) {
+        for (const n of unreadReactions) seenReactionIds.current.add(n.id);
+        bootstrapped.current = true;
+      } else {
+        const fresh: FloatingReactionBurst[] = [];
+        for (const n of unreadReactions) {
+          if (seenReactionIds.current.has(n.id)) continue;
+          seenReactionIds.current.add(n.id);
+          const emoji = reactionEmoji(n);
+          if (emoji) fresh.push({ id: `n-${n.id}`, emoji });
+        }
+        if (fresh.length > 0) {
+          setBursts((prev) => [...prev, ...fresh]);
+        }
+      }
     } catch {
       /* ignore poll errors */
     }
@@ -73,8 +110,26 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
     }
   };
 
+  const handleReact = async (item: UserNotification, emoji: GoalReactionEmoji) => {
+    if (reactingId === item.id) return;
+    setReactingId(item.id);
+    try {
+      await reactToNotification(accessToken, item.id, emoji);
+      if (!item.read_at) await markOne(item.id);
+      else void refresh();
+    } catch {
+      void refresh();
+    } finally {
+      setReactingId(null);
+    }
+  };
+
   return (
     <div className="xos-cc">
+      <FloatingReactions
+        bursts={bursts}
+        onDone={(id) => setBursts((prev) => prev.filter((b) => b.id !== id))}
+      />
       <button
         type="button"
         className={`xos-cc__trigger${unread > 0 ? " xos-cc__trigger--badge" : ""}`}
@@ -124,10 +179,14 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                 const eventUrl =
                   typeof item.payload?.sf_event_url === "string" ? item.payload.sf_event_url : null;
                 const unreadItem = !item.read_at;
+                const goalHit = item.kind === "session_goal_hit";
+                const bigEmoji = reactionEmoji(item);
                 return (
                   <article
                     key={item.id}
-                    className={`xos-cc__item${unreadItem ? " xos-cc__item--unread" : ""}`}
+                    className={`xos-cc__item${unreadItem ? " xos-cc__item--unread" : ""}${
+                      bigEmoji ? " xos-cc__item--reaction" : ""
+                    }`}
                   >
                     <div className="xos-cc__item-top">
                       <img src={logoXos} alt="" className="xos-cc__item-logo" width={20} height={8} />
@@ -137,8 +196,30 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                       </time>
                     </div>
                     <h3 className="xos-cc__item-title">{item.title}</h3>
-                    <p className="xos-cc__item-body">{item.body}</p>
+                    {bigEmoji ? (
+                      <p className="xos-cc__item-emoji" aria-label={`Réaction ${bigEmoji}`}>
+                        {bigEmoji}
+                      </p>
+                    ) : (
+                      <p className="xos-cc__item-body">{item.body}</p>
+                    )}
                     <div className="xos-cc__item-actions">
+                      {goalHit && (
+                        <div className="xos-cc__reacts" role="group" aria-label="Réagir">
+                          {GOAL_REACTION_EMOJIS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className="xos-cc__react"
+                              disabled={reactingId === item.id}
+                              title={`Réagir ${emoji}`}
+                              onClick={() => void handleReact(item, emoji)}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {eventUrl && (
                         <a
                           className="xos-cc__sf"

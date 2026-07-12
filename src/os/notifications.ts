@@ -38,3 +38,27 @@ export async function markNotificationsRead(
   });
   if (!res.ok) throw new Error(`notifications_mark_${res.status}`);
 }
+
+const GOAL_REACTION_EMOJIS = ["👏", "🔥", "💪"] as const;
+export type GoalReactionEmoji = (typeof GOAL_REACTION_EMOJIS)[number];
+export { GOAL_REACTION_EMOJIS };
+
+export async function reactToNotification(
+  token: string,
+  notificationId: number,
+  emoji: GoalReactionEmoji,
+): Promise<void> {
+  const res = await fetch("/api/notifications", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "react",
+      notification_id: notificationId,
+      emoji,
+    }),
+  });
+  if (!res.ok) throw new Error(`notifications_react_${res.status}`);
+}

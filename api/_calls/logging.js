@@ -524,5 +524,87 @@ export async function handleLogging({ action, body, user, client, headers }) {
     );
   }
 
+  if (action === "celebrate_goal") {
+    const { session_id, goal, rdv_count } = body;
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+    if (typeof goal !== "number" || !Number.isInteger(goal) || goal < 1) {
+      return new Response(JSON.stringify({ error: "invalid_goal" }), { status: 400, headers });
+    }
+    if (typeof rdv_count !== "number" || !Number.isInteger(rdv_count) || rdv_count < 1) {
+      return new Response(JSON.stringify({ error: "invalid_rdv_count" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionAccess(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+    const session = sessionCheck.session;
+
+    const profileResult = await getProfile(client, user.id);
+    if (profileResult.error) {
+      return new Response(JSON.stringify({ error: profileResult.error }), { status: 500, headers });
+    }
+    const actorLabel = actorName(user, profileResult);
+    const celebrationId = crypto.randomUUID();
+    const sessionName = session.name || "Session";
+
+    const recipientIds = new Set();
+    if (session.owner && session.owner !== user.id) recipientIds.add(session.owner);
+
+    const { data: members, error: membersError } = await client
+      .from("call_session_members")
+      .select("user_id")
+      .eq("session_id", session_id);
+    if (membersError) {
+      return new Response(JSON.stringify({ error: "session_members_lookup_failed" }), { status: 500, headers });
+    }
+    for (const row of members || []) {
+      if (row.user_id && row.user_id !== user.id) recipientIds.add(row.user_id);
+    }
+
+    // Séance solo : on partage avec l’équipe Combo (social, pas Arena).
+    if (recipientIds.size === 0) {
+      const { data: teammates } = await client
+        .from("profiles")
+        .select("id")
+        .not("sf_user_id", "is", null)
+        .neq("id", user.id);
+      for (const row of teammates || []) {
+        if (row.id) recipientIds.add(row.id);
+      }
+    }
+
+    const payload = {
+      session_id,
+      goal,
+      rdv_count,
+      actor_id: user.id,
+      actor_label: actorLabel,
+      celebration_id: celebrationId,
+      reactions: [],
+    };
+    const title = "Objectif RDV atteint";
+    const notifBody = `${actorLabel} a atteint ${rdv_count}/${goal} RDV sur « ${sessionName} »`;
+
+    await Promise.all(
+      [...recipientIds].map((recipientId) =>
+        insertUserNotification(client, {
+          recipientId,
+          kind: "session_goal_hit",
+          title,
+          body: notifBody,
+          payload,
+        }),
+      ),
+    );
+
+    return new Response(
+      JSON.stringify({ ok: true, celebration_id: celebrationId, notified: recipientIds.size }),
+      { status: 200, headers },
+    );
+  }
+
   return null;
 }

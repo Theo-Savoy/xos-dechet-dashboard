@@ -1269,6 +1269,7 @@ describe("preview selection and enriched rows", () => {
       [preview[0]],
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       "prospection",
+      [],
     );
   });
 

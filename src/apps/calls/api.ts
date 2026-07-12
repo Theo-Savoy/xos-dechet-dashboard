@@ -132,6 +132,7 @@ export async function createSession(
   contacts: ContactPreview[],
   scheduledFor?: string,
   sessionType?: string,
+  memberUserIds?: string[],
 ): Promise<{ session: SessionDetail; contacts: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -141,6 +142,7 @@ export async function createSession(
       contacts,
       ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
       ...(sessionType ? { session_type: sessionType } : {}),
+      ...(memberUserIds && memberUserIds.length > 0 ? { member_user_ids: memberUserIds } : {}),
     }),
   });
 }
@@ -263,6 +265,24 @@ export async function skipContact(
       action: "skip_contact",
       session_id: sessionId,
       contact_id: contactId,
+    }),
+  });
+}
+
+/** Fire-and-forget team cheer when a commercial hits their RDV goal. */
+export async function celebrateGoal(
+  token: string,
+  sessionId: number,
+  goal: number,
+  rdvCount: number,
+): Promise<void> {
+  await apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "celebrate_goal",
+      session_id: sessionId,
+      goal,
+      rdv_count: rdvCount,
     }),
   });
 }

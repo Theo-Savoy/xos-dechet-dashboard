@@ -1,6 +1,63 @@
 import { canViewTeamPerf, trackingModeFor } from "../_config/access.js";
-import { computeHubKpis, getParisDateRange } from "./http.js";
+import {
+  computeHubKpis,
+  getParisDateRange,
+  getParisRangeFor,
+  isValidScheduledFor,
+  todayParisDate,
+} from "./http.js";
 import { getProfile } from "./profileCache.js";
+
+const HEATMAP_DAYS = 42;
+
+function parisDayKey(iso) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+function dayLabel(dateKey) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function shiftParisDate(dateStr, deltaDays) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + deltaDays, 12));
+  return date.toISOString().slice(0, 10);
+}
+
+function buildHeatmap(calledRows, endDateStr) {
+  const counts = new Map();
+  for (const row of calledRows) {
+    if (!row.called_at) continue;
+    const key = parisDayKey(row.called_at);
+    if (!counts.has(key)) counts.set(key, { calls: 0, rdv: 0 });
+    const bucket = counts.get(key);
+    bucket.calls++;
+    if (row.outcome === "RDV planifié") bucket.rdv++;
+  }
+
+  const heatmap = [];
+  for (let i = HEATMAP_DAYS - 1; i >= 0; i--) {
+    const date = shiftParisDate(endDateStr, -i);
+    const bucket = counts.get(date) || { calls: 0, rdv: 0 };
+    heatmap.push({
+      date,
+      label: dayLabel(date),
+      calls: bucket.calls,
+      rdv: bucket.rdv,
+    });
+  }
+  return heatmap;
+}
 
 function emptyKpis() {
   return computeHubKpis([]);
@@ -32,7 +89,7 @@ function personFromSf(sfLabelById, sfUserId) {
 
 /**
  * Cockpit manager : perfs séances équipe + attribution RDV.
- * GET ?resource=prospection_cockpit&period=week|month
+ * GET ?resource=prospection_cockpit&period=day|week|month&anchor=YYYY-MM-DD
  */
 export async function handleProspectionCockpit({ url, user, client, headers }) {
   const profileResult = await getProfile(client, user.id);
@@ -45,9 +102,30 @@ export async function handleProspectionCockpit({ url, user, client, headers }) {
 
   const rawPeriod = url.searchParams.get("period");
   const periodParam = rawPeriod === "month" || rawPeriod === "day" ? rawPeriod : "week";
-  const { todayStart, tomorrowStart, weekStart, monthStart } = getParisDateRange();
-  const rangeStart = periodParam === "month" ? monthStart : periodParam === "day" ? todayStart : weekStart;
-  const rangeEnd = tomorrowStart;
+  const rawAnchor = url.searchParams.get("anchor");
+  const anchorParam = isValidScheduledFor(rawAnchor) ? rawAnchor : null;
+
+  let rangeStart;
+  let rangeEnd;
+  if (anchorParam) {
+    const anchored = getParisRangeFor(periodParam, anchorParam);
+    rangeStart = anchored.start;
+    rangeEnd = anchored.end;
+  } else {
+    const { todayStart, tomorrowStart, weekStart, monthStart } = getParisDateRange();
+    rangeStart = periodParam === "month" ? monthStart : periodParam === "day" ? todayStart : weekStart;
+    rangeEnd = tomorrowStart;
+  }
+
+  const todayStr = todayParisDate();
+  const heatmapEndStr =
+    anchorParam && anchorParam > todayStr ? anchorParam : todayStr;
+  const heatmapStartStr = shiftParisDate(heatmapEndStr, -(HEATMAP_DAYS - 1));
+  const rangePayload = {
+    start: rangeStart.toISOString(),
+    end: rangeEnd.toISOString(),
+    anchor: anchorParam,
+  };
 
   const { data: profiles, error: profilesError } = await client
     .from("profiles")
@@ -86,6 +164,8 @@ export async function handleProspectionCockpit({ url, user, client, headers }) {
       JSON.stringify({
         view: "team",
         period: periodParam,
+        range: rangePayload,
+        heatmap: buildHeatmap([], heatmapEndStr),
         team_kpis: emptyKpis(),
         by_caller: [],
         by_day: [],
@@ -188,23 +268,12 @@ export async function handleProspectionCockpit({ url, user, client, headers }) {
     return sessionById.get(row.session_id)?.owner || null;
   }
 
-  function parisDayKey(iso) {
-    return new Intl.DateTimeFormat("sv-SE", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(iso));
-  }
-
-  function dayLabel(dateKey) {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("fr-FR", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
-  }
+  const calledInHeatmap = contacts.filter((row) => {
+    if (row.status !== "called" || !row.called_at) return false;
+    const key = parisDayKey(row.called_at);
+    return key >= heatmapStartStr && key <= heatmapEndStr;
+  });
+  const heatmap = buildHeatmap(calledInHeatmap, heatmapEndStr);
 
   const byCallerMap = new Map();
   for (const profile of profileList) {
@@ -353,6 +422,8 @@ export async function handleProspectionCockpit({ url, user, client, headers }) {
     JSON.stringify({
       view: "team",
       period: periodParam,
+      range: rangePayload,
+      heatmap,
       team_kpis,
       by_caller,
       by_day,

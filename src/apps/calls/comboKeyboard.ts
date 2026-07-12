@@ -144,12 +144,14 @@ export const COMBO_ACTIONS: ComboActionDef[] = [
     id: "defer",
     label: "Non contacté",
     section: "Session",
+    shortcutLabel: "D",
     keywords: ["defer", "reporter", "follow-up"],
   },
   {
     id: "remove",
     label: "Retirer",
     section: "Session",
+    shortcutLabel: "⌫",
     keywords: ["supprimer", "retirer", "rappels"],
   },
   {

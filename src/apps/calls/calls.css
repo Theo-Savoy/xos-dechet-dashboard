@@ -862,7 +862,7 @@
 
 .calls-name-form {
   display: grid;
-  grid-template-columns: auto minmax(10rem, 1.4fr) minmax(8rem, 0.8fr) auto;
+  grid-template-columns: auto minmax(10rem, 1.4fr) minmax(8rem, 0.8fr) auto auto;
   gap: 0.75rem 1rem;
   align-items: end;
 }
@@ -875,6 +875,55 @@
 
 .calls-name-form .calls-field {
   margin: 0;
+}
+
+.calls-name-form__share {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--xos-border) 70%, transparent);
+}
+
+.calls-name-form__share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-name-form__share-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.calls-share-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--xos-text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.calls-share-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.calls-share-chip--active {
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
+  color: var(--xos-text);
 }
 
 .calls-name-form--sticky {
@@ -1812,11 +1861,28 @@
   gap: 0.7rem;
 }
 
+/* Journaliser avant le contexte : log à portée sans scroll. */
+.calls-cockpit-detail > .calls-contact-card {
+  order: 1;
+}
+
+.calls-cockpit-detail > .calls-log-form,
+.calls-cockpit-detail > .calls-event-panel {
+  order: 2;
+}
+
+.calls-cockpit-detail > .calls-cockpit-side {
+  order: 3;
+}
+
 .calls-cockpit-side {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
   align-items: start;
+  max-height: min(28rem, 45vh);
+  overflow-y: auto;
+  padding-right: 0.15rem;
 }
 
 .calls-cockpit-side > .calls-context-panel:nth-child(3) {
@@ -2191,6 +2257,16 @@
   font-size: 0.72em;
   font-weight: 500;
   color: var(--xos-text-muted);
+}
+
+.calls-stat__rate {
+  display: block;
+  margin-top: 0.05rem;
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--xos-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .calls-stat--rdv-heat {

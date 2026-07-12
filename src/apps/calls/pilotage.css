@@ -73,6 +73,189 @@
   color: #ff8f8f;
 }
 
+.pilotage-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.pilotage-stat {
+  padding: 0.75rem 0.85rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.pilotage-stat span {
+  font-size: 0.72rem;
+  color: var(--xos-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pilotage-stat strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pilotage-stat--accent {
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+}
+
+.pilotage-period-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.18rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pilotage-period-nav .calls-seg__btn {
+  min-width: 1.85rem;
+  padding: 0.35rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.pilotage-period-nav__label {
+  min-width: 6.5rem;
+  text-align: center;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--xos-text);
+  padding: 0 0.25rem;
+}
+
+.pilotage-heatmap {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.pilotage-heatmap__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pilotage-heatmap__head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.pilotage-heatmap__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.72rem;
+  color: var(--xos-text-muted);
+}
+
+.pilotage-heatmap__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pilotage-heatmap__swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+}
+
+.pilotage-heatmap__swatch--calls {
+  background: color-mix(in srgb, #6b8cae 55%, transparent);
+  border: 1px solid color-mix(in srgb, #6b8cae 70%, transparent);
+}
+
+.pilotage-heatmap__swatch--rdv {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xos-accent) 75%, #c9a227);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xos-accent) 35%, transparent);
+}
+
+.pilotage-heatmap__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.28rem;
+  font-size: 0.68rem;
+  color: var(--xos-text-muted);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pilotage-heatmap__grid {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.pilotage-heatmap__week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+
+.pilotage-heatmap__cell {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 2.1rem;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 85%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(
+    in srgb,
+    #6b8cae calc(var(--call-t, 0) * 42%),
+    rgba(255, 255, 255, 0.03)
+  );
+  color: var(--xos-text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.pilotage-heatmap__cell:hover {
+  border-color: color-mix(in srgb, #6b8cae 55%, var(--xos-border));
+  transform: translateY(-1px);
+}
+
+.pilotage-heatmap__cell--selected {
+  border-color: color-mix(in srgb, var(--xos-accent) 65%, var(--xos-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xos-accent) 35%, transparent);
+}
+
+.pilotage-heatmap__cell--empty {
+  border: none;
+  background: transparent;
+  cursor: default;
+  pointer-events: none;
+}
+
+.pilotage-heatmap__day {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+.pilotage-heatmap__rdv-dot {
+  position: absolute;
+  right: 0.28rem;
+  bottom: 0.28rem;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xos-accent) 70%, #d4af37);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xos-accent) 40%, transparent);
+}
+
 .pilotage-funnel-block {
   display: grid;
   gap: 0.55rem;
@@ -490,12 +673,14 @@
 }
 
 @media (max-width: 900px) {
+  .pilotage-kpis,
   .pilotage-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 640px) {
+  .pilotage-kpis,
   .pilotage-grid {
     grid-template-columns: 1fr;
   }

@@ -158,5 +158,48 @@ describe("prospection_cockpit", () => {
       caller: expect.objectContaining({ label: "Yanis" }),
       rdv_owner_label: "Christophe",
     });
+    expect(body.range).toEqual(
+      expect.objectContaining({
+        start: expect.any(String),
+        end: expect.any(String),
+        anchor: null,
+      }),
+    );
+    expect(body.heatmap).toHaveLength(42);
+    expect(body.heatmap[0]).toEqual(
+      expect.objectContaining({
+        date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        label: expect.any(String),
+        calls: expect.any(Number),
+        rdv: expect.any(Number),
+      }),
+    );
+  });
+
+  it("anchors period range and keeps heatmap when anchor is set", async () => {
+    mockDb
+      .mockResolvedValueOnce({
+        data: { sf_user_id: "005P", full_name: "Paul", role: "manager" },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          { id: "sdr-1", full_name: "Yanis", email: "yanis@xos-learning.fr", sf_user_id: "005S", role: "commercial" },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    const res = await GET(
+      makeReq("http://localhost/api/calls?resource=prospection_cockpit&period=day&anchor=2026-06-01"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.period).toBe("day");
+    expect(body.range.anchor).toBe("2026-06-01");
+    expect(body.heatmap).toHaveLength(42);
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
+    expect(body.heatmap[body.heatmap.length - 1].date).toBe(today);
   });
 });

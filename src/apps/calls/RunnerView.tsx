@@ -123,6 +123,8 @@ type RunnerViewProps = {
   onDeferContacts: (contactIds: number[], payload: DeferPayload) => void;
   onRemoveContacts: (contactIds: number[]) => void;
   onUpdateRecall: (contactIds: number[], recallAt: string | null) => void;
+  /** Social cheer when the session RDV goal is hit (shared sessions). */
+  onCelebrateGoal?: (payload: { goal: number; count: number }) => void;
   team?: TeamMember[];
   currentSfUserId?: string | null;
   currentUserId?: string | null;
@@ -198,11 +200,12 @@ function listStatusDisplay(contact: SessionContact): {
 function computeKpis(contacts: SessionContact[]) {
   const total = contacts.length;
   const remaining = contacts.filter((c) => c.status === "pending").length;
-  const called = contacts.filter((c) => c.status === "called");
-  const decroches = called.filter((c) => c.outcome && PIPE_DECROCHE.includes(c.outcome)).length;
-  const argumentes = called.filter((c) => c.outcome === "Appel argumenté").length;
-  const rdv = called.filter((c) => c.outcome === "RDV planifié").length;
-  return { total, remaining, decroches, argumentes, rdv };
+  const calledRows = contacts.filter((c) => c.status === "called");
+  const called = calledRows.length;
+  const decroches = calledRows.filter((c) => c.outcome && PIPE_DECROCHE.includes(c.outcome)).length;
+  const argumentes = calledRows.filter((c) => c.outcome === "Appel argumenté").length;
+  const rdv = calledRows.filter((c) => c.outcome === "RDV planifié").length;
+  return { total, remaining, called, decroches, argumentes, rdv };
 }
 
 function ResultButtons({
@@ -368,6 +371,7 @@ export function RunnerView({
   onDeferContacts,
   onRemoveContacts,
   onUpdateRecall,
+  onCelebrateGoal,
   team = [],
   currentSfUserId = null,
   currentUserId = null,
@@ -745,7 +749,10 @@ export function RunnerView({
       goalJustHit,
       heat,
     });
-  }, [rdvGoal, soundsEnabled]);
+    if (goalJustHit && rdvGoal != null && onCelebrateGoal) {
+      onCelebrateGoal({ goal: rdvGoal, count: next });
+    }
+  }, [onCelebrateGoal, rdvGoal, soundsEnabled]);
 
   const handleRdvGoalChange = (goal: number | null) => {
     if (isRecallQueue) return;
@@ -1099,6 +1106,16 @@ export function RunnerView({
         runComboAction("toggle-npa");
         return;
       }
+      if (key === "d") {
+        event.preventDefault();
+        runComboAction("defer");
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        runComboAction("remove");
+        return;
+      }
       if (key === "j") {
         event.preventDefault();
         runComboAction("nav-next");
@@ -1307,6 +1324,11 @@ export function RunnerView({
             <GlassCard className="calls-stat">
               <span>Décrochés</span>
               <strong className="xos-numeric">{kpis.decroches}</strong>
+              {kpis.called > 0 && (
+                <em className="calls-stat__rate xos-numeric">
+                  {Math.round((kpis.decroches / kpis.called) * 1000) / 10}%
+                </em>
+              )}
             </GlassCard>
             <GlassCard className="calls-stat">
               <span>Argumentés</span>
@@ -1503,9 +1525,12 @@ export function RunnerView({
                       variant="secondary"
                       onClick={() => openDefer(pendingSelected)}
                       disabled={loading}
-                      title={`Reporter vers « ${continuationLabel} »`}
+                      title={`Reporter vers « ${continuationLabel} » · D`}
                     >
                       Non contacté
+                      <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                        D
+                      </kbd>
                     </Button>
                   )}
                   {recallManageSelected.length > 0 && (
@@ -2121,17 +2146,24 @@ export function RunnerView({
                         variant="secondary"
                         onClick={() => openDefer([focusedContact.id])}
                         disabled={loading}
-                        title={`Reporter vers « ${continuationLabel} »`}
+                        title={`Reporter vers « ${continuationLabel} » · D`}
                       >
                         Non contacté
+                        <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                          D
+                        </kbd>
                       </Button>
                     )}
                     <Button
                       variant="secondary"
                       onClick={() => confirmRemove([focusedContact.id], focusedContact.contact_name)}
                       disabled={loading}
+                      title="⌫"
                     >
                       {isRecallQueue ? "Retirer des rappels" : "Retirer"}
+                      <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                        ⌫
+                      </kbd>
                     </Button>
                   </div>
                 </div>
@@ -2143,16 +2175,23 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title={`Reporter vers « ${continuationLabel} »`}
+                    title={`Reporter vers « ${continuationLabel} » · D`}
                   >
                     Non contacté
+                    <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                      D
+                    </kbd>
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => confirmRemove([focusedContact.id], focusedContact.contact_name)}
                     disabled={loading}
+                    title="⌫"
                   >
                     Retirer
+                    <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                      ⌫
+                    </kbd>
                   </Button>
                 </div>
               )}

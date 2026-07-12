@@ -3,6 +3,7 @@ import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { CallFunnelCard, stagesFromPeriodKpis } from "./CallFunnelCard";
+import { PilotageHeatmap } from "./PilotageHeatmap";
 import type { PeriodKpis } from "./types";
 import {
   fetchProspectionCockpit,
@@ -10,6 +11,7 @@ import {
   type CockpitCallerRow,
   type CockpitDayCallerRow,
   type CockpitPeriod,
+  type CockpitRange,
   type CockpitSessionRow,
   type ProspectionCockpit,
 } from "./pilotageApi";
@@ -131,6 +133,33 @@ function dayCallersToCards(rows: CockpitDayCallerRow[]): CallerCard[] {
     .sort((a, b) => b.kpis.calls - a.kpis.calls || a.label.localeCompare(b.label, "fr"));
 }
 
+function FunnelStrip({ kpis }: { kpis: PeriodKpis }) {
+  return (
+    <section className="pilotage-kpis" aria-label="Indicateurs">
+      <GlassCard className="pilotage-stat">
+        <span>Appels</span>
+        <strong className="xos-numeric">{kpis.calls}</strong>
+      </GlassCard>
+      <GlassCard className="pilotage-stat">
+        <span>Taux décroché</span>
+        <strong className="xos-numeric">{pct(kpis.rate_decroche)}</strong>
+      </GlassCard>
+      <GlassCard className="pilotage-stat">
+        <span>Taux argumenté</span>
+        <strong className="xos-numeric">{pct(kpis.rate_argumente)}</strong>
+      </GlassCard>
+      <GlassCard className="pilotage-stat">
+        <span>RDV / décroché</span>
+        <strong className="xos-numeric">{pct(kpis.rate_rdv_per_decroche)}</strong>
+      </GlassCard>
+      <GlassCard className="pilotage-stat pilotage-stat--accent">
+        <span>RDV pris</span>
+        <strong className="xos-numeric">{kpis.rdv}</strong>
+      </GlassCard>
+    </section>
+  );
+}
+
 function KpiFootnote({
   kpis,
   extras,
@@ -146,6 +175,68 @@ function KpiFootnote({
       {extras}
     </p>
   );
+}
+
+function todayParisDate(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
+}
+
+function shiftAnchor(anchor: string, period: CockpitPeriod, dir: -1 | 1): string {
+  const [y, m, d] = anchor.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d, 12));
+  if (period === "day") date.setUTCDate(date.getUTCDate() + dir);
+  else if (period === "week") date.setUTCDate(date.getUTCDate() + dir * 7);
+  else date.setUTCMonth(date.getUTCMonth() + dir);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatPeriodLabel(period: CockpitPeriod, range?: CockpitRange | null): string {
+  if (!range?.start) {
+    return period === "day" ? "aujourd’hui" : period === "week" ? "cette semaine" : "ce mois";
+  }
+
+  const start = new Date(range.start);
+  const endExclusive = new Date(range.end);
+  const end = new Date(endExclusive.getTime() - 1);
+
+  if (period === "day") {
+    return start.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short",
+      timeZone: "Europe/Paris",
+    });
+  }
+
+  if (period === "month") {
+    return start.toLocaleDateString("fr-FR", {
+      month: "long",
+      year: "numeric",
+      timeZone: "Europe/Paris",
+    });
+  }
+
+  const startDay = start.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    timeZone: "Europe/Paris",
+  });
+  const endLabel = end.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Paris",
+  });
+  const startMonth = start.toLocaleDateString("fr-FR", {
+    month: "short",
+    timeZone: "Europe/Paris",
+  });
+  const endMonth = end.toLocaleDateString("fr-FR", {
+    month: "short",
+    timeZone: "Europe/Paris",
+  });
+
+  if (startMonth === endMonth) {
+    return `${startDay}–${endLabel}`;
+  }
+  return `${startDay} ${startMonth}–${endLabel}`;
 }
 
 function CommercialCard({
@@ -196,6 +287,7 @@ export function PilotageView({
   const { session, loading: sessionLoading } = useSession();
   const token = session?.access_token ?? null;
   const [period, setPeriod] = useState<CockpitPeriod>("day");
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<DetailMode>("sessions");
   const [data, setData] = useState<ProspectionCockpit | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,7 +302,7 @@ export function PilotageView({
     setLoading(true);
     setError(null);
     try {
-      const next = await fetchProspectionCockpit(token, period);
+      const next = await fetchProspectionCockpit(token, period, anchor);
       setData(next);
       setSelectedSessionIds(new Set((next.sessions ?? []).map((s) => s.id)));
       setExpandedDay(null);
@@ -228,7 +320,7 @@ export function PilotageView({
     } finally {
       setLoading(false);
     }
-  }, [token, period]);
+  }, [token, period, anchor]);
 
   useEffect(() => {
     void load();
@@ -320,8 +412,21 @@ export function PilotageView({
   }
 
   const kpis = filtered.kpis;
-  const periodLabel =
-    period === "day" ? "aujourd’hui" : period === "week" ? "cette semaine" : "ce mois";
+  const periodLabel = formatPeriodLabel(period, data?.range);
+  const effectiveAnchor = anchor ?? data?.range?.anchor ?? todayParisDate();
+  const todayStr = todayParisDate();
+  const canGoNext = shiftAnchor(effectiveAnchor, period, 1) <= todayStr;
+  const heatmapDays = data?.heatmap ?? [];
+
+  const goPrev = () => setAnchor(shiftAnchor(effectiveAnchor, period, -1));
+  const goNext = () => {
+    const next = shiftAnchor(effectiveAnchor, period, 1);
+    if (next <= todayStr) setAnchor(next);
+  };
+  const selectHeatmapDay = (date: string) => {
+    setPeriod("day");
+    setAnchor(date);
+  };
 
   return (
     <div className="calls-view pilotage-app">
@@ -334,6 +439,26 @@ export function PilotageView({
           </p>
         </div>
         <div className="calls-view__actions pilotage-header__actions">
+          <div className="pilotage-period-nav" role="group" aria-label="Navigation période">
+            <button
+              type="button"
+              className="calls-seg__btn"
+              onClick={goPrev}
+              aria-label="Période précédente"
+            >
+              ‹
+            </button>
+            <span className="pilotage-period-nav__label">{periodLabel}</span>
+            <button
+              type="button"
+              className="calls-seg__btn"
+              onClick={goNext}
+              disabled={!canGoNext}
+              aria-label="Période suivante"
+            >
+              ›
+            </button>
+          </div>
           <div className="calls-seg" role="group" aria-label="Période">
             <button
               type="button"
@@ -415,29 +540,13 @@ export function PilotageView({
 
       {error && <p className="pilotage-error" role="alert">{error}</p>}
 
-      <div className="pilotage-funnel-block">
-        <CallFunnelCard stages={stagesFromPeriodKpis(kpis)} />
-        <KpiFootnote
-          kpis={kpis}
-          extras={
-            <>
-              {detailMode === "sessions" && sessions.length > 0 && (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  {selectedSessions.length}/{sessions.length} séance
-                  {sessions.length > 1 ? "s" : ""}
-                </>
-              )}
-              {detailMode === "days" && expandedDay && (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  {byDay.find((d) => d.date === expandedDay)?.label ?? expandedDay}
-                </>
-              )}
-            </>
-          }
-        />
-      </div>
+      <FunnelStrip kpis={kpis} />
+
+      <PilotageHeatmap
+        days={heatmapDays}
+        selectedDate={period === "day" ? effectiveAnchor : null}
+        onSelectDay={selectHeatmapDay}
+      />
 
       {detailMode === "sessions" && (
         <GlassCard className="pilotage-panel pilotage-sessions-panel">
@@ -583,9 +692,32 @@ export function PilotageView({
         </GlassCard>
       )}
 
+      <div className="pilotage-funnel-block">
+        <CallFunnelCard stages={stagesFromPeriodKpis(kpis)} />
+        <KpiFootnote
+          kpis={kpis}
+          extras={
+            <>
+              {detailMode === "sessions" && sessions.length > 0 && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {selectedSessions.length}/{sessions.length} séance
+                  {sessions.length > 1 ? "s" : ""}
+                </>
+              )}
+              {detailMode === "days" && expandedDay && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {byDay.find((d) => d.date === expandedDay)?.label ?? expandedDay}
+                </>
+              )}
+            </>
+          }
+        />
+      </div>
+
       <GlassCard className="pilotage-panel">
-        <h3>Équipe</h3>
-        <p className="pilotage-panel__hint">Qui a passé les appels. Cliquez pour le détail.</p>
+        <h3>Équipe</h3>        <p className="pilotage-panel__hint">Qui a passé les appels. Cliquez pour le détail.</p>
 
         {filtered.callers.length === 0 ? (
           <p className="pilotage-empty">Aucune activité sur la période.</p>

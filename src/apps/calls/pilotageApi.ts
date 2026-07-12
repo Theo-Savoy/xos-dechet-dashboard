@@ -69,9 +69,24 @@ export type CockpitRdvAttribution = {
   rdv_owner_label: string;
 };
 
+export type CockpitHeatmapDay = {
+  date: string;
+  label: string;
+  calls: number;
+  rdv: number;
+};
+
+export type CockpitRange = {
+  start: string;
+  end: string;
+  anchor: string | null;
+};
+
 export type ProspectionCockpit = {
   view: "team";
   period: CockpitPeriod;
+  range?: CockpitRange;
+  heatmap?: CockpitHeatmapDay[];
   team_kpis: PeriodKpis;
   by_caller: CockpitCallerRow[];
   /** Present once backend ships day breakdown; client treats missing as []. */
@@ -94,8 +109,15 @@ export class PilotageApiError extends Error {
 export async function fetchProspectionCockpit(
   token: string,
   period: CockpitPeriod,
+  anchor?: string | null,
 ): Promise<ProspectionCockpit> {
-  const res = await fetch(`/api/calls?resource=prospection_cockpit&period=${period}`, {
+  const params = new URLSearchParams({
+    resource: "prospection_cockpit",
+    period,
+  });
+  if (anchor) params.set("anchor", anchor);
+
+  const res = await fetch(`/api/calls?${params}`, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

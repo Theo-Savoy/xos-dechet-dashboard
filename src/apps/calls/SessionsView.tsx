@@ -27,6 +27,7 @@ type SessionsViewProps = {
     patch: { name?: string; scheduled_for?: string | null; session_type?: SessionType },
   ) => Promise<void>;
   onDeleteSession: (sessionId: number) => Promise<void>;
+  onShareSession?: (sessionId: number) => void;
 };
 
 function formatDate(iso: string): string {
@@ -114,6 +115,7 @@ export function SessionsView({
   onOpenPilotage,
   onUpdateSession,
   onDeleteSession,
+  onShareSession,
 }: SessionsViewProps) {
   const today = todayParisIso();
   const [viewMode, setViewMode] = useState<HubViewMode>("list");
@@ -472,6 +474,17 @@ export function SessionsView({
                       </div>
                     </button>
                     <div className="calls-session-card__actions">
+                      {session.is_owner !== false && onShareSession && (
+                        <Button
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onShareSession(session.id);
+                          }}
+                        >
+                          Partager
+                        </Button>
+                      )}
                       <Button variant="secondary" onClick={(e) => openEdit(session, e)}>
                         Modifier
                       </Button>
