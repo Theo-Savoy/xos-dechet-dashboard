@@ -388,6 +388,7 @@ describe("CallManagerApp component", () => {
     await screen.findByRole("heading", { name: "Changement de contact" });
     await waitFor(() => expect(contextFetches).toEqual(["/api/calls?session_id=1&context_contact_id=101"]));
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByRole("button", { name: "Bruno Martin" }));
 
     await waitFor(() => expect(contextFetches).toEqual([
@@ -442,6 +443,7 @@ describe("CallManagerApp component", () => {
     const user = userEvent.setup();
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Vagues" });
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByRole("button", { name: "Sélectionner les à faire (7)" }));
     await user.click(screen.getByRole("button", { name: "Consigner pour 7" }));
 

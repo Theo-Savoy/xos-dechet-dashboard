@@ -71,6 +71,14 @@ export function EventPanel({
   const inline = Boolean(className?.includes("calls-event-panel--inline"));
   const Wrapper = inline ? "div" : GlassCard;
   const wrapperClass = ["calls-event-panel", className].filter(Boolean).join(" ");
+  const submitText = submitLabel ?? "Enregistrer le RDV & suivant";
+  const startTime = start ? new Date(start).getTime() : Number.NaN;
+  const hasValidStart = Number.isFinite(startTime) && startTime > Date.now();
+  const disabledTitle = !start
+    ? "Renseignez la date et l’heure du RDV"
+    : !hasValidStart
+      ? "Choisissez une date et une heure à venir"
+      : undefined;
 
   return (
     <Wrapper className={wrapperClass}>
@@ -120,8 +128,13 @@ export function EventPanel({
         placeholder="003… (15 ou 18 caractères)"
       />
       {error && <p role="alert" aria-live="assertive" className="calls-error">{error}</p>}
-      <Button onClick={handleSubmit} disabled={loading || !start}>
-        {loading ? "Enregistrement…" : (submitLabel ?? "Enregistrer le RDV & suivant")}
+      <Button
+        onClick={handleSubmit}
+        disabled={loading || !hasValidStart}
+        aria-disabled={loading || !hasValidStart}
+        title={disabledTitle}
+      >
+        {loading ? "Enregistrement…" : submitText}
       </Button>
     </Wrapper>
   );

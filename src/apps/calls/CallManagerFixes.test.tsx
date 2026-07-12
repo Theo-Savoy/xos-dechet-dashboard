@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventPanel } from "./EventPanel";
@@ -59,15 +59,15 @@ describe("EventPanel", () => {
     expect((screen.getByLabelText("Date & heure") as HTMLInputElement).value).toBe(localValue);
   });
 
-  it("blocks a past event with an inline alert", async () => {
+  it("keeps submission disabled until the event start is valid", async () => {
     const user = userEvent.setup();
     render(<EventPanel contactName="Alice" loading={false} onSubmit={vi.fn()} />);
 
     await user.clear(screen.getByLabelText("Date & heure"));
     await user.type(screen.getByLabelText("Date & heure"), "2000-01-01T10:00");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(screen.getByRole("alert").textContent?.toLowerCase()).toContain("date");
+    const submit = screen.getByRole("button", { name: /enregistrer le rdv/i });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(submit.getAttribute("title")).toContain("à venir");
   });
 
   it("labels external invitees as CRM IDs and rejects an invalid ID before submitting", async () => {
@@ -168,7 +168,7 @@ describe("RunnerView", () => {
 
     await user.click(screen.getByRole("button", { name: "Fiche" }));
     expect(screen.getByText("RF · Acme")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "LinkedIn" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Ouvrir sur LinkedIn" }).getAttribute("href")).toBe(
       "https://linkedin.com/in/bob",
     );
     expect(screen.getByRole("button", { name: "Appel argumenté" })).toBeTruthy();
@@ -177,7 +177,45 @@ describe("RunnerView", () => {
     expect(screen.getByText("Restant")).toBeTruthy();
   });
 
-  it("toggles to list mode with session statuses", () => {
+  it("auto-opens the first pending fiche with next-contact and recall hints", () => {
+    const next = { ...bob, id: 3, contact_name: "Claire", position: 3 };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[bob, next]}
+        currentContact={bob}
+        awaitingEvent={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 3, name: "Bob Durand" })).toBeTruthy();
+    expect(screen.getByText("Claire")).toBeTruthy();
+    expect(screen.getByText("ou")).toBeTruthy();
+  });
+
+  it("logs with the keyboard shortcut except for a planned meeting", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[bob]}
+        currentContact={bob}
+        awaitingEvent={null}
+        onLogAndNext={onLogAndNext}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+    expect(onLogAndNext).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "RDV planifié" }));
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+    expect(onLogAndNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles to list mode with session statuses", async () => {
+    const user = userEvent.setup();
     render(
       <RunnerView
         {...runnerProps}
@@ -187,6 +225,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.getAllByText("À faire").length).toBeGreaterThan(0);
@@ -212,7 +251,8 @@ describe("RunnerView", () => {
     expect(screen.queryByRole("button", { name: "Logguer & suivant" })).toBeNull();
   });
 
-  it("exposes poste, email and phone in the session list", () => {
+  it("exposes poste, email and phone in the session list", async () => {
+    const user = userEvent.setup();
     render(
       <RunnerView
         {...runnerProps}
@@ -222,6 +262,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Poste")).toBeTruthy();
     expect(screen.getByText("Email")).toBeTruthy();
     expect(screen.getByText("Tél.")).toBeTruthy();
@@ -295,7 +336,9 @@ describe("RunnerView", () => {
       />,
     );
 
-    expect(screen.queryByText("Appel décroché")).toBeNull();
+    const historyPanel = screen.getByRole("heading", { name: "Historique d'appels" }).closest(".calls-context-panel");
+    expect(historyPanel).toBeTruthy();
+    expect(within(historyPanel!).queryByText("Appel décroché")).toBeNull();
   });
 
   it("bulk-logs the same outcome for selected contacts", async () => {
@@ -313,6 +356,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByLabelText("Sélectionner Claire"));
     await user.click(screen.getByRole("button", { name: "Appel décroché" }));
@@ -373,7 +417,9 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "+7 j" }));
 
     expect(screen.getByRole("button", { name: "Appel décroché" }).getAttribute("aria-pressed")).toBe("true");
-    expect((screen.getByPlaceholderText("Notes sur l'appel…") as HTMLTextAreaElement).value).toBe("À rappeler après validation");
+    const comments = screen.getByLabelText("Commentaires") as HTMLTextAreaElement;
+    expect(comments.value).toBe("À rappeler après validation");
+    expect(comments.placeholder).toBe("Motif du rappel…");
   });
 
   it("opens continuation session panel from Non contacté with date", async () => {
@@ -392,6 +438,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.queryByRole("button", { name: /Créer séance #2/i })).toBeNull();
     await user.click(screen.getByRole("button", { name: /Sélectionner les à faire/i }));
     await user.click(screen.getByRole("button", { name: "Non contacté" }));
@@ -420,6 +467,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByRole("button", { name: "Non contacté" }));
     expect(screen.getByText(/Non contacté → Séance test #2/i)).toBeTruthy();
@@ -490,6 +538,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByRole("button", { name: /Consigner pour 1/i }));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   DEFAULT_RECALL_DAYS,
@@ -9,7 +9,8 @@ import {
 } from "../../crm";
 import { EventPanel } from "./EventPanel";
 import { EmptyState } from "./EmptyState";
-import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
+import { DatePicker, formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls";
+import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
 import {
   countRecallDateFilters,
@@ -17,7 +18,14 @@ import {
   type RecallDateFilter,
 } from "./recallQueue";
 import { nextContinuationName } from "./sessionNaming";
-import type { ContactContext, SessionContact, SessionDetail, SessionSummary, TeamMember } from "./types";
+import type {
+  ContactContext,
+  ContactOpportunityItem,
+  SessionContact,
+  SessionDetail,
+  SessionSummary,
+  TeamMember,
+} from "./types";
 import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 
 const RECALL_DAYS_KEY = "xos-calls-default-recall-days";
@@ -84,6 +92,21 @@ function readDefaultRecallDays(): number {
   }
 }
 
+function formatRelativeDaysFr(iso: string | null | undefined, today = todayParisIso()): string {
+  const value = String(iso ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return "";
+  const from = new Date(`${value}T12:00:00Z`).getTime();
+  const to = new Date(`${today}T12:00:00Z`).getTime();
+  const days = Math.max(0, Math.round((to - from) / 86_400_000));
+  if (days === 0) return "aujourd’hui";
+  if (days === 1) return "hier";
+  return `il y a ${days} j`;
+}
+
+function sortOpportunities(opportunities: ContactOpportunityItem[]): ContactOpportunityItem[] {
+  return [...opportunities].sort((a, b) => Number(a.is_closed) - Number(b.is_closed));
+}
+
 function listStatusDisplay(contact: SessionContact): {
   label: string;
   variant: "success" | "warning" | "accent" | "muted" | "default";
@@ -118,14 +141,14 @@ function ResultButtons({
   disabledValues?: ResultatCall[];
 }) {
   return (
-    <div className="calls-result-grid" role="group" aria-label="Résultat de l'appel">
+    <div className="calls-result-seg" role="group" aria-label="Résultat de l'appel">
       {RESULTAT_OPTIONS.map((opt) => {
         const disabled = disabledValues.includes(opt.value);
         return (
           <button
             key={opt.value}
             type="button"
-            className={`calls-result-btn${value === opt.value ? " calls-result-btn--active" : ""}`}
+            className={`calls-result-seg__btn${value === opt.value ? " calls-result-seg__btn--active" : ""}`}
             aria-pressed={value === opt.value}
             disabled={disabled}
             title={disabled ? "Sélectionnez un seul contact pour planifier un RDV" : undefined}
@@ -177,11 +200,6 @@ function RecallFields({
     <div className="calls-recall" role="group" aria-label="Rappel">
       <div className="calls-recall__head">
         <p className="calls-recall__title">Rappel</p>
-        {(autoRecall || scheduleRecall) && (
-          <p className="calls-recall__summary">
-            Le <strong>{formatIsoDateFr(recallAt)}</strong>
-          </p>
-        )}
       </div>
       {!autoRecall && (
         <label className="calls-checkbox calls-checkbox--tight">
@@ -195,20 +213,23 @@ function RecallFields({
       )}
       {(autoRecall || scheduleRecall) && (
         <div className="calls-recall__track" role="group" aria-label="Choisir la date de rappel">
-          {RECALL_PRESETS.map((preset) => (
-            <button
-              key={preset.days}
-              type="button"
-              className={`calls-recall__chip${activePreset === preset.days ? " calls-recall__chip--active" : ""}`}
-              aria-pressed={activePreset === preset.days}
-              onClick={() => pickPreset(preset.days)}
-            >
-              {preset.label}
-            </button>
-          ))}
+          <div className="calls-recall__presets" role="group" aria-label="Délai rapide">
+            {RECALL_PRESETS.map((preset) => (
+              <button
+                key={preset.days}
+                type="button"
+                className={`calls-recall__chip${activePreset === preset.days ? " calls-recall__chip--active" : ""}`}
+                aria-pressed={activePreset === preset.days}
+                onClick={() => pickPreset(preset.days)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <span className="calls-recall__or" aria-hidden="true">ou</span>
           <DatePicker
             compact
-            label="Autre date"
+            label="Choisir une date"
             value={recallAt}
             onChange={onRecallAtChange}
             triggerClassName={`calls-recall__chip calls-recall__chip--date${customActive ? " calls-recall__chip--active" : ""}`}
@@ -265,10 +286,27 @@ export function RunnerView({
   const [deferDate, setDeferDate] = useState(() => addDaysIso(readDefaultRecallDays()));
   const [deferTargetId, setDeferTargetId] = useState<number | null>(null);
   const [pinned, setPinned] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const bootstrappedDetail = useRef(false);
 
   useEffect(() => {
     setPinned(false);
   }, [session.id]);
+
+  useEffect(() => {
+    if (bootstrappedDetail.current || !currentContact) return;
+    bootstrappedDetail.current = true;
+    if (currentContact.status !== "pending") return;
+    setFocusedId(currentContact.id);
+    onFocusContact(currentContact.id);
+    setMode("detail");
+  }, [currentContact, onFocusContact]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const kpis = useMemo(() => computeKpis(contacts), [contacts]);
   const canRecall = RECALL_ELIGIBLE_RESULTATS.includes(resultat) && !doNotCall;
@@ -373,6 +411,16 @@ export function RunnerView({
     ?? (contextContactId === focusedContact?.id ? contactContext?.title : null)
     ?? null;
   const contextApplies = contextContactId != null && contextContactId === focusedContact?.id;
+  const sortedOpportunities = useMemo(
+    () => sortOpportunities(contactContext?.opportunities ?? []),
+    [contactContext?.opportunities],
+  );
+  const nextContact = useMemo(() => {
+    if (!focusedContact) return pendingContacts[0] ?? null;
+    const focusedIndex = contacts.findIndex((contact) => contact.id === focusedContact.id);
+    if (focusedIndex < 0) return pendingContacts.find((contact) => contact.id !== focusedContact.id) ?? null;
+    return contacts.slice(focusedIndex + 1).find((contact) => contact.status === "pending") ?? null;
+  }, [contacts, focusedContact, pendingContacts]);
 
   useEffect(() => {
     if (!isRecallQueue) return;
@@ -466,7 +514,7 @@ export function RunnerView({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!focusedContact || focusedContact.status !== "pending") return;
     if (resultat === "RDV planifié") return;
     onLogAndNext(focusedContact.id, {
@@ -475,7 +523,27 @@ export function RunnerView({
       recallAt: willSendRecall ? recallAt : null,
       doNotCall,
     });
-  };
+    setToast(willSendRecall ? `Loggué · rappel ${formatIsoDateFr(recallAt)}` : "Loggué");
+  }, [comments, doNotCall, focusedContact, onLogAndNext, recallAt, resultat, willSendRecall]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Enter"
+        || (!event.metaKey && !event.ctrlKey)
+        || mode !== "detail"
+        || loading
+        || focusedContact?.status !== "pending"
+        || resultat === "RDV planifié"
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleSubmit();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [focusedContact?.status, handleSubmit, loading, mode, resultat]);
 
   const handleRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
     if (!focusedContact || focusedContact.status !== "pending") return;
@@ -489,6 +557,7 @@ export function RunnerView({
       },
       { start, durationMin, invitees },
     );
+    setToast("Loggué · RDV planifié");
   };
 
   const handleBulkLog = () => {
@@ -503,6 +572,7 @@ export function RunnerView({
     setBulkComments("");
     setBulkDoNotCall(false);
     setBulkRecallAt(addDaysIso(defaultRecallDays));
+    setToast(bulkWillSendRecall ? `Loggué · rappel ${formatIsoDateFr(bulkRecallAt)}` : "Loggué");
   };
 
   const openDefer = (ids: number[]) => {
@@ -540,12 +610,14 @@ export function RunnerView({
     setSelectedIds(new Set());
     setBulkComments("");
     setBulkDoNotCall(false);
+    setToast("Loggué · RDV planifié");
   };
 
   const called = contacts.filter((c) => c.status === "called").length;
 
   return (
-    <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}`}>
+    <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}${mode === "detail" ? " calls-view--detail" : ""}`}>
+      {toast && <div className="calls-runner-toast" role="status">{toast}</div>}
       <header className="calls-view__header calls-view__header--runner">
         <div className="calls-view__nav">
           <Button variant="secondary" className="calls-view__back" onClick={onBack}>
@@ -593,6 +665,9 @@ export function RunnerView({
 
       {!isRecallQueue && (
         <>
+          <div className={mode === "detail" ? "calls-progress-sticky" : undefined}>
+            <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
+          </div>
           <div className="calls-cockpit-kpis" aria-label="Indicateurs de séance">
             <GlassCard className="calls-stat">
               <span>Contacts</span>
@@ -615,8 +690,6 @@ export function RunnerView({
               <strong className="xos-numeric">{kpis.rdv}</strong>
             </GlassCard>
           </div>
-
-          <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
         </>
       )}
 
@@ -992,21 +1065,8 @@ export function RunnerView({
                 )}
               </div>
               <div className="calls-contact-card__links">
-                {sfContactUrl && (
-                  <a
-                    href={sfContactUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="calls-sf-link"
-                  >
-                    Salesforce
-                  </a>
-                )}
-                {focusedContact.linkedin_url && (
-                  <a href={focusedContact.linkedin_url} target="_blank" rel="noopener noreferrer">
-                    LinkedIn
-                  </a>
-                )}
+                {sfContactUrl && <SalesforceRecordLink href={sfContactUrl} />}
+                {focusedContact.linkedin_url && <LinkedInRecordLink href={focusedContact.linkedin_url} />}
               </div>
             </div>
 
@@ -1045,19 +1105,18 @@ export function RunnerView({
             <GlassCard className="calls-context-panel">
               <h3>Historique d&apos;appels</h3>
               {contextApplies && contactContext && contactContext.tasks.length === 0 && (
-                <p className="calls-muted">Aucun appel Salesforce récent.</p>
+                <p className="calls-muted">Aucun appel récent.</p>
               )}
               {contextApplies && contactContext && contactContext.tasks.length > 0 && (
                 <ul className="calls-context-list">
-                  {contactContext.tasks.map((task) => (
-                    <li key={task.id}>
+                  {contactContext.tasks.map((task, index) => (
+                    <li key={task.id} className={index === 0 ? "calls-context-list__row--latest" : undefined}>
                       <strong>{task.result ?? task.subject ?? "Appel"}</strong>
-                      <span className="xos-numeric">{task.activity_date ?? "—"}</span>
-                      {task.record_url && (
-                        <a href={task.record_url} target="_blank" rel="noopener noreferrer">
-                          SF
-                        </a>
-                      )}
+                      <span className="calls-context-list__date xos-numeric">
+                        {formatActivityDateFr(task.activity_date)}
+                        <small>{formatRelativeDaysFr(task.activity_date)}</small>
+                      </span>
+                      {task.record_url ? <SalesforceRecordLink href={task.record_url} /> : <span />}
                     </li>
                   ))}
                 </ul>
@@ -1067,19 +1126,15 @@ export function RunnerView({
             <GlassCard className="calls-context-panel">
               <h3>Opportunités</h3>
               {contextApplies && contactContext && contactContext.opportunities.length === 0 && (
-                <p className="calls-muted">Aucune opportunité sur le compte.</p>
+                <p className="calls-muted">Aucune opportunité.</p>
               )}
               {contextApplies && contactContext && contactContext.opportunities.length > 0 && (
                 <ul className="calls-context-list">
-                  {contactContext.opportunities.map((opp) => (
-                    <li key={opp.id}>
+                  {sortedOpportunities.map((opp) => (
+                    <li key={opp.id} className={opp.is_closed ? "calls-context-list__row--closed" : undefined}>
                       <strong>{opp.name}</strong>
                       <span>{opp.stage_name ?? "—"}</span>
-                      {opp.record_url && (
-                        <a href={opp.record_url} target="_blank" rel="noopener noreferrer">
-                          SF
-                        </a>
-                      )}
+                      {opp.record_url ? <SalesforceRecordLink href={opp.record_url} /> : <span />}
                     </li>
                   ))}
                 </ul>
@@ -1134,7 +1189,7 @@ export function RunnerView({
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
                   rows={3}
-                  placeholder="Notes sur l'appel…"
+                  placeholder={willSendRecall ? "Motif du rappel…" : "Notes sur l'appel…"}
                 />
               </label>
 
@@ -1149,20 +1204,27 @@ export function RunnerView({
                   team={team}
                 />
               ) : (
-                <div className="calls-runner-actions">
-                  <Button onClick={handleSubmit} disabled={loading}>
-                    {loading ? "Enregistrement…" : "Logguer & suivant"}
-                  </Button>
-                  {!isRecallQueue && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => openDefer([focusedContact.id])}
-                      disabled={loading}
-                      title={`Reporter vers « ${continuationLabel} »`}
-                    >
-                      Non contacté
-                    </Button>
+                <div className="calls-runner-actions calls-runner-actions--sticky">
+                  {nextContact && (
+                    <p className="calls-next-hint">
+                      Ensuite : <strong>{nextContact.contact_name}</strong>
+                    </p>
                   )}
+                  <div className="calls-runner-actions__row">
+                    <Button onClick={handleSubmit} disabled={loading} title="⌘↵">
+                      {loading ? "Enregistrement…" : "Logguer & suivant"}
+                    </Button>
+                    {!isRecallQueue && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => openDefer([focusedContact.id])}
+                        disabled={loading}
+                        title={`Reporter vers « ${continuationLabel} »`}
+                      >
+                        Non contacté
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
 
