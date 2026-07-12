@@ -464,7 +464,66 @@
 }
 
 /* —— Call funnel / leading flux —— */
-.weekly-funnel .weekly-chart--funnel { height: 220px; }
+.weekly-call-funnel-card { padding-block: .95rem; }
+
+.weekly-call-funnel {
+  display: grid;
+  gap: .45rem;
+  justify-items: center;
+  padding: .1rem .25rem .2rem;
+}
+
+.weekly-call-funnel__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .75rem;
+  width: var(--funnel-width, 100%);
+  min-height: 2.55rem;
+  padding: .55rem .9rem;
+  border-radius: .6rem;
+  color: var(--xos-text);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--stage-color) 34%, transparent),
+    color-mix(in srgb, var(--stage-color) 18%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--stage-color) 48%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--xos-text) 6%, transparent);
+}
+
+.weekly-call-funnel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .35rem .65rem;
+  min-width: 0;
+}
+
+.weekly-call-funnel__label {
+  color: var(--xos-text);
+  font-size: .84rem;
+  font-weight: 600;
+}
+
+.weekly-call-funnel__label em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--xos-text-muted);
+  font-size: .72rem;
+}
+
+.weekly-call-funnel__pct {
+  color: var(--xos-text-muted);
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-call-funnel__stage strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
 
 .weekly-leading-funnel {
   display: grid;
@@ -516,17 +575,9 @@
   font-weight: 600;
 }
 
-.weekly-leading-caption {
-  grid-column: 1 / -1;
-  margin: .15rem 0 0;
-  color: var(--xos-text-muted);
-  font-size: .74rem;
-  line-height: 1.4;
-}
-
 /* —— Décisions / scatter —— */
 .weekly-decision-board { display: grid; gap: .9rem; }
-.weekly-chart--scatter { height: 300px; }
+.weekly-chart--scatter { height: 340px; }
 
 .weekly-decision-legend {
   display: flex;
@@ -904,6 +955,11 @@
 .weekly-chart { height: 190px; min-width: 0; }
 .weekly-chart--forecast { height: 220px; }
 .weekly-forecast-card .recharts-legend-item-text { color: var(--xos-text-muted) !important; }
+
+.weekly-chart .recharts-rectangle.recharts-tooltip-cursor {
+  fill: color-mix(in srgb, var(--xos-accent) 12%, transparent) !important;
+  stroke: none !important;
+}
 
 .weekly-closing {
   margin: 0;

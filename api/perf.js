@@ -270,6 +270,7 @@ export function buildFollowUpOpps(records, fields, ownerIds, limit = 40) {
     .map((record) => ({
       id: record[fields.id] || null,
       name: record[fields.name] || "Sans nom",
+      account: record.Account?.Name || record["Account.Name"] || null,
       sf_user_id: record[fields.ownerId],
       stage: record[fields.stageName] || "",
       amount: number(record[fields.amount]),
@@ -313,6 +314,7 @@ export function buildStagnantOpps(records, fields, ownerIds, today = dateKey(), 
     rows.push({
       id: record[fields.id] || null,
       name: record[fields.name] || "Sans nom",
+      account: record.Account?.Name || record["Account.Name"] || null,
       sf_user_id: record[fields.ownerId],
       stage,
       amount,
@@ -519,10 +521,12 @@ export async function GET(request) {
     opportunity.fields.id, opportunity.fields.name, opportunity.fields.ownerId, opportunity.fields.isClosed, opportunity.fields.stageName,
     opportunity.fields.amount, opportunity.fields.probability, opportunity.fields.expectedRevenue, opportunity.fields.closeDate,
     opportunity.fields.createdDate, opportunity.fields.lastActivityDate, opportunity.fields.lastStageChangeDate,
+    "Account.Name",
   ];
   const quarterOpenFields = [
     opportunity.fields.id, opportunity.fields.name, opportunity.fields.ownerId, opportunity.fields.closeDate,
     opportunity.fields.amount, opportunity.fields.probability, opportunity.fields.expectedRevenue, opportunity.fields.stageName,
+    "Account.Name",
   ];
   const seasonalityFrom = addDays(quarter.from, -365 * 3);
   try {

@@ -15,6 +15,7 @@ type ForecastPoint = { sf_user_id: string; week_start: string; week: string; for
 type RitualOpp = {
   id: string | null;
   name: string;
+  account?: string | null;
   sf_user_id: string;
   stage: string;
   amount: number;
@@ -41,21 +42,14 @@ type Pace = {
   expected_mode?: "seasonal" | "linear";
 };
 
-const CALL_RESULT_KEYS = [
-  "Appel non décroché",
-  "Message répondeur",
-  "Appel décroché",
-  "Appel argumenté",
-  "RDV planifié",
+const CALL_FUNNEL_STAGES = [
+  { key: "no_answer", label: "Non décroché", hint: "dont répondeur", sources: ["Appel non décroché", "Message répondeur"], color: "#7d8aa3" },
+  { key: "answered", label: "Décroché", hint: null, sources: ["Appel décroché"], color: "#5b8def" },
+  { key: "pitched", label: "Argumenté", hint: null, sources: ["Appel argumenté"], color: "var(--xos-accent)" },
+  { key: "meeting", label: "RDV planifié", hint: null, sources: ["RDV planifié"], color: "var(--xos-alert)" },
 ] as const;
 
-const CALL_RESULT_COLORS: Record<(typeof CALL_RESULT_KEYS)[number], string> = {
-  "Appel non décroché": "#64748b",
-  "Message répondeur": "#94a3b8",
-  "Appel décroché": "var(--xos-accent)",
-  "Appel argumenté": "#6effbb",
-  "RDV planifié": "var(--xos-alert)",
-};
+const chartBarCursor = { fill: "color-mix(in srgb, var(--xos-accent) 12%, transparent)" };
 type CustomPipe = {
   horizon_days: number;
   total_amount: number;
@@ -258,10 +252,8 @@ function CadenceLegend() {
   return (
     <p className="weekly-cadence-legend" role="note">
       <span>Forme</span>
-      <span>{CADENCE.rdvPerWeek} RDV / sem.</span>
-      <span>{percent.format(CADENCE.detectRate)} détection (échantillon ≥{CADENCE.detectSample} RDV)</span>
-      <span>signés + trajectoire TQ peuvent compenser un volume bas</span>
-      <span>closing {percent.format(CADENCE.closeRate)} = mois–TQ</span>
+      <span>{CADENCE.rdvPerWeek} RDV / sem</span>
+      <span>détection {percent.format(CADENCE.detectRate)}</span>
     </p>
   );
 }
@@ -297,12 +289,12 @@ function ConversionRates({
       <div className="weekly-conversion__item">
         <small>Taux détection (TQ)</small>
         <strong className={`xos-numeric ${detectTone}`}>{detect === null ? "—" : percent.format(detect)}</strong>
-        <span>cible {percent.format(CADENCE.detectRate)} · {opps} opp / {rdv} RDV</span>
+        <span>{opps} opp / {rdv} RDV</span>
       </div>
       <div className="weekly-conversion__item">
         <small>Taux closing (TQ)</small>
         <strong className={`xos-numeric ${closeTone}`}>{close === null ? "—" : percent.format(close)}</strong>
-        <span>cible {percent.format(CADENCE.closeRate)} · {won} gagnées / {opps} détectées</span>
+        <span>{won} gagnées / {opps} détectées</span>
       </div>
     </GlassCard>
   );
@@ -628,7 +620,7 @@ function CustomPipeSection({ pipe, owners, sellerIds }: { pipe: CustomPipe; owne
           <BarChart data={months}>
             <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
             <YAxis hide />
-            <Tooltip formatter={(value) => money.format(Number(value))} contentStyle={chartTooltipStyle} />
+            <Tooltip cursor={chartBarCursor} formatter={(value) => money.format(Number(value))} contentStyle={chartTooltipStyle} />
             <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
             <Bar dataKey="expected" name="CA attendu" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} />
           </BarChart>
@@ -674,42 +666,57 @@ function scopePace(rows: Quarter[], meta: Pace | null | undefined): Pace | null 
 }
 
 function CallFunnelChart({
-  weeks, owners, pulseFor, currentIndex,
+  weeks, owners, pulseFor, currentIndex, weekMode,
 }: {
   weeks: Week[];
   owners: Owner[];
   pulseFor: (owner: Owner) => Pulse[];
   currentIndex: number;
+  weekMode: boolean;
 }) {
-  const data = weeks.map((week, index) => {
-    const row: Record<string, string | number> = { label: week.label };
-    for (const key of CALL_RESULT_KEYS) {
-      row[key] = owners.reduce((sum, owner) => sum + (pulseFor(owner)[index]?.call_results?.[key] || 0), 0);
+  const totals = CALL_FUNNEL_STAGES.map((stage) => {
+    let count = 0;
+    for (const owner of owners) {
+      const pulse = pulseFor(owner);
+      const indexes = weekMode ? [currentIndex] : weeks.map((_, index) => index).filter((index) => index <= currentIndex);
+      for (const index of indexes) {
+        const results = pulse[index]?.call_results || {};
+        for (const source of stage.sources) count += results[source] || 0;
+      }
     }
-    return row;
+    return { ...stage, count };
   });
-  const hasCalls = data.some((row, index) => {
-    if (index > currentIndex) return false;
-    return CALL_RESULT_KEYS.some((key) => Number(row[key]) > 0)
-      || owners.some((owner) => (pulseFor(owner)[index]?.calls || 0) > 0);
-  });
-  if (!hasCalls) return null;
+  const max = Math.max(...totals.map((stage) => stage.count), 0);
+  const totalCalls = totals.reduce((sum, stage) => sum + stage.count, 0);
+  if (!max) return null;
   return <section className="weekly-section">
-    <div className="weekly-section-heading"><p>Funnel appels</p><h3>Résultats par semaine</h3></div>
-    <GlassCard className="weekly-chart-card weekly-funnel">
-      <div className="weekly-chart weekly-chart--funnel">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data}>
-            <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 80%, transparent)" vertical={false} />
-            <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
-            <YAxis hide />
-            <Tooltip contentStyle={chartTooltipStyle} />
-            <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
-            {CALL_RESULT_KEYS.map((key) => (
-              <Bar key={key} dataKey={key} name={key} stackId="calls" fill={CALL_RESULT_COLORS[key]} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
+    <div className="weekly-section-heading"><p>Funnel appels</p><h3>{weekMode ? "Cette semaine" : "Cumul trimestre"}</h3></div>
+    <GlassCard className="weekly-call-funnel-card">
+      <div className="weekly-call-funnel" role="img" aria-label="Entonnoir des résultats d’appel">
+        {totals.map((stage, index) => {
+          const width = max <= 0 ? 42 : Math.max(42, Math.round(42 + (stage.count / max) * 58));
+          const share = totalCalls > 0 ? stage.count / totalCalls : 0;
+          return (
+            <div
+              key={stage.key}
+              className="weekly-call-funnel__stage"
+              style={{
+                ["--funnel-width" as string]: `${width}%`,
+                ["--stage-color" as string]: stage.color,
+                zIndex: totals.length - index,
+              }}
+            >
+              <div className="weekly-call-funnel__meta">
+                <span className="weekly-call-funnel__label">
+                  {stage.label}
+                  {stage.hint ? <em> · {stage.hint}</em> : null}
+                </span>
+                <span className="weekly-call-funnel__pct">{percent.format(share)}</span>
+              </div>
+              <strong className="xos-numeric">{countFmt.format(stage.count)}</strong>
+            </div>
+          );
+        })}
       </div>
     </GlassCard>
   </section>;
@@ -766,7 +773,6 @@ function LeadingFunnel({
         <small>CA créé</small>
         <strong className="xos-numeric">{money.format(created)}</strong>
       </div>
-      <p className="weekly-leading-caption">Les signés se lisent au Cap (cycle 3–6 mois) — ici on suit le flux menant.</p>
     </GlassCard>
   </section>;
 }
@@ -801,13 +807,13 @@ function PaceStrip({ pace }: { pace: Pace }) {
       </div>
       <div className="weekly-pace-legend">
         <span className="weekly-pace-legend--signed">Signé</span>
-        <span className="weekly-pace-legend--expected">Attendu à date{pace.expected_to_date !== null ? ` · ${money.format(pace.expected_to_date)}` : ""}</span>
+        <span className="weekly-pace-legend--expected">Attendu{pace.expected_to_date !== null ? ` · ${money.format(pace.expected_to_date)}` : ""}</span>
         <span className="weekly-pace-legend--n1">N−1 · {money.format(pace.signed_n1)}</span>
       </div>
-      {pace.expected_mode === "seasonal" && <p className="weekly-pace-note">Attendu saisonnier (histo 3 ans)</p>}
+      {pace.expected_mode === "seasonal" && <p className="weekly-pace-note">Attendu saisonnier</p>}
     </div>
     <div className="weekly-pace-aside">
-      <small>Allure fin de trimestre</small>
+      <small>Projection fin de trimestre</small>
       <strong className="xos-numeric">{money.format(pace.run_rate)}</strong>
       <span>{paceText}</span>
     </div>
@@ -818,11 +824,11 @@ function OppTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
   if (!active || !payload?.[0]?.payload) return null;
   const opp = payload[0].payload;
   return <div className="weekly-opp-tooltip">
-    <strong>{opp.name}</strong>
+    <strong>{opp.account || opp.name}</strong>
+    {opp.account ? <span>{opp.name}</span> : null}
     <span>Clôture · {opp.close_date ? weekLabel.format(new Date(`${opp.close_date}T12:00:00.000Z`)) : "—"}</span>
     <span>Probabilité · {countFmt.format(opp.probability)} %</span>
     <span>Montant · {money.format(opp.amount)}</span>
-    <span>Attendu · {money.format(opp.expected)}</span>
   </div>;
 }
 
@@ -864,13 +870,20 @@ function DecisionBoard({
   }
   const points = [...merged.values()].sort((a, b) => b.expected - a.expected);
   const maxAmount = Math.max(...points.map((opp) => opp.amount), 1);
-  const scatterData = points.map((opp) => ({
-    ...opp,
-    x: opp.close_ts,
-    y: opp.probability,
-    // Linear size vs amount so gaps stay readable (sqrt was too flat).
-    z: Math.max(opp.amount, maxAmount * 0.08),
-  }));
+  const cluster = new Map<string, number>();
+  const scatterData = points.map((opp) => {
+    const bucket = `${opp.close_date}:${Math.round(opp.probability / 5) * 5}`;
+    const n = cluster.get(bucket) || 0;
+    cluster.set(bucket, n + 1);
+    const angle = n * 2.15;
+    const radius = Math.min(5.5, n * 1.55);
+    return {
+      ...opp,
+      x: opp.close_ts + Math.cos(angle) * radius * 86400000 * 0.45,
+      y: Math.min(100, Math.max(0, opp.probability + Math.sin(angle) * radius * 0.55)),
+      z: Math.max(opp.amount, maxAmount * 0.07),
+    };
+  });
   const domainFrom = quarterBounds ? Date.parse(`${quarterBounds.from}T12:00:00.000Z`) : "dataMin";
   const domainTo = quarterBounds ? Date.parse(`${quarterBounds.to}T12:00:00.000Z`) : "dataMax";
   const ranked = points.map((opp) => ({ ...opp, listKind: opp.kind === "stagnant" ? "stagnant" as const : "push" as const }));
@@ -898,12 +911,12 @@ function DecisionBoard({
     <GlassCard className="weekly-decision-board">
       {scatterData.length > 0 && <div className="weekly-chart weekly-chart--scatter" aria-label="Carte des opportunités : date de clôture × probabilité">
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 12, right: 16, bottom: 8, left: 8 }}>
-            <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 80%, transparent)" />
+          <ScatterChart margin={{ top: 14, right: 18, bottom: 10, left: 8 }}>
+            <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 45%, transparent)" strokeDasharray="3 6" />
             <XAxis type="number" dataKey="x" name="Clôture" domain={[domainFrom, domainTo]} tickFormatter={tickFormatter} stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
             <YAxis type="number" dataKey="y" name="Proba" domain={[0, 100]} stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} width={36} tickFormatter={(value) => `${value}%`} />
-            <ZAxis type="number" dataKey="z" range={[48, 420]} />
-            <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<OppTooltip />} wrapperStyle={{ outline: "none", zIndex: 20 }} />
+            <ZAxis type="number" dataKey="z" range={[40, 260]} />
+            <Tooltip cursor={{ stroke: "color-mix(in srgb, var(--xos-text) 35%, transparent)", strokeDasharray: "4 4" }} content={<OppTooltip />} wrapperStyle={{ outline: "none", zIndex: 20 }} />
             <Scatter
               name="Opps"
               data={scatterData}
@@ -917,9 +930,9 @@ function DecisionBoard({
                 <Cell
                   key={point.key}
                   fill={point.kind === "stagnant" || point.kind === "both" ? "var(--xos-alert)" : "var(--xos-accent)"}
-                  fillOpacity={selectedKey === point.key ? 1 : point.kind === "both" ? 0.9 : 0.72}
-                  stroke={selectedKey === point.key ? "var(--xos-text)" : "transparent"}
-                  strokeWidth={selectedKey === point.key ? 2 : 0}
+                  fillOpacity={selectedKey === point.key ? 1 : point.kind === "both" ? 0.88 : 0.68}
+                  stroke={selectedKey === point.key ? "var(--xos-text)" : "color-mix(in srgb, var(--xos-window-content-bg) 70%, transparent)"}
+                  strokeWidth={selectedKey === point.key ? 2 : 1}
                 />
               ))}
             </Scatter>
@@ -948,8 +961,8 @@ function DecisionBoard({
             }}
           >
             <div>
-              {opp.url ? <a className="weekly-opp-link" href={opp.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{opp.name}</a> : <strong>{opp.name}</strong>}
-              <small>{nameOf(opp.sf_user_id)} · {opp.stage}{opp.close_date ? ` · close ${opp.close_date.slice(5)}` : ""}{opp.listKind === "stagnant" ? ` · ${reasonLabel(opp.reasons)}` : ""}</small>
+              {opp.url ? <a className="weekly-opp-link" href={opp.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{opp.account || opp.name}</a> : <strong>{opp.account || opp.name}</strong>}
+              <small>{nameOf(opp.sf_user_id)} · {opp.stage}{opp.close_date ? ` · ${opp.close_date.slice(5)}` : ""}{opp.listKind === "stagnant" ? ` · ${reasonLabel(opp.reasons)}` : ""}{opp.account ? ` · ${opp.name}` : ""}</small>
             </div>
             <div className="weekly-decision-value">
               <strong className="xos-numeric">{money.format(opp.expected || opp.amount)}</strong>
@@ -978,26 +991,38 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
       label: week.label,
       forecast: future ? null : (forecastValues.length ? forecastValues.reduce((sum, value) => sum + value, 0) : null),
       signed: future ? null : points.reduce((sum, point) => sum + (point.signed_to_date || 0), 0),
-      target: target === null ? null : target,
     };
   });
   const hasForecast = data.some((point) => point.forecast !== null);
+  const yMax = Math.max(
+    target || 0,
+    ...data.map((point) => Math.max(point.forecast || 0, point.signed || 0)),
+    1,
+  );
   return <GlassCard className="weekly-chart-card weekly-forecast-card">
     <div className="weekly-chart weekly-chart--forecast">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 80%, transparent)" vertical={false} />
+        <LineChart data={data} margin={{ top: 12, right: 12, bottom: 4, left: 4 }}>
+          <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
           <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
-          <YAxis hide />
+          <YAxis hide domain={[0, yMax * 1.08]} />
           <Tooltip formatter={(value) => (value === null || value === undefined ? "—" : money.format(Number(value)))} contentStyle={chartTooltipStyle} />
           <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
-          {target !== null && <ReferenceLine y={target} stroke="var(--xos-text-muted)" strokeDasharray="5 5" label={{ value: "Target", fill: "var(--xos-text-muted)", fontSize: 11 }} />}
+          {target !== null && target > 0 && (
+            <ReferenceLine
+              y={target}
+              stroke="color-mix(in srgb, var(--xos-text) 55%, transparent)"
+              strokeDasharray="5 5"
+              strokeWidth={1.6}
+              ifOverflow="extendDomain"
+              label={{ value: "Objectif", position: "insideTopRight", fill: "var(--xos-text-muted)", fontSize: 11 }}
+            />
+          )}
           {hasForecast && <Line type="monotone" dataKey="forecast" name="Forecast" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
           <Line type="monotone" dataKey="signed" name="Signé cumulé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
-    <p className="weekly-closing">Forecast vs signé vs target trimestre{!hasForecast ? " · historique forecast en cours" : ""}</p>
   </GlassCard>;
 }
 
@@ -1013,7 +1038,6 @@ export default function WeeklyApp() {
   const [mode, setMode] = useState<"self" | "team">("self");
   const [displayMode, setDisplayMode] = useState<"cards" | "table">("cards");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("all");
-  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const prefetchDone = useRef(false);
 
   const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false } = {}) => {
@@ -1022,7 +1046,6 @@ export default function WeeklyApp() {
     try {
       const next = await perfRequest(nextPeriod);
       setCache((current) => ({ ...current, [nextPeriod]: next }));
-      if (!background) setSelectedWeek(null);
     } catch {
       if (!background) setError(true);
     } finally {
@@ -1040,7 +1063,6 @@ export default function WeeklyApp() {
 
   const switchPeriod = (next: PeriodMode) => {
     setPeriod(next);
-    if (cache[next]) setSelectedWeek(null);
   };
 
   const result = cache[period] || null;
@@ -1051,7 +1073,6 @@ export default function WeeklyApp() {
     const weeks = makeWeeks(payload);
     const currentWeekStart = addDays(payload.range.to, -6);
     const currentIndex = Math.max(0, weeks.findIndex((week) => week.start === currentWeekStart));
-    const latestWeek = weeks[currentIndex]?.start || currentWeekStart || payload.range.from;
     const selfOwner = payload.owners.find((owner) => owner.email?.toLowerCase() === email?.toLowerCase()) || payload.owners[0];
     const roster = mode === "self"
       ? (selfOwner ? [selfOwner] : [])
@@ -1063,10 +1084,6 @@ export default function WeeklyApp() {
     const pipelineFor = (owner: Owner) => weeks.map(({ start }) => payload.pipeline.find((point) => point.sf_user_id === owner.sf_user_id && point.week_start === start) || { sf_user_id: owner.sf_user_id, week: "", week_start: start, generated_count: 0, generated_amount: 0, won_count: 0, won_amount: 0, won_by_type: emptyWonByType(), won_arr_amount: 0, closing_rate_count: null, closing_rate_amount: null });
     const sellers = visibleOwners.filter((owner) => trackingOf(owner) !== "sdr");
     const sellerIds = new Set(sellers.map((owner) => owner.sf_user_id));
-    const pipeline = weeks.map(({ start, label }) => {
-      const points = payload.pipeline.filter((point) => point.week_start === start && sellerIds.has(point.sf_user_id));
-      return { week_start: start, label, generated_amount: points.reduce((sum, point) => sum + point.generated_amount, 0), won_amount: points.reduce((sum, point) => sum + point.won_amount, 0), generated_count: points.reduce((sum, point) => sum + point.generated_count, 0), won_count: points.reduce((sum, point) => sum + point.won_count, 0) };
-    });
     const quarterFor = (owner: Owner) => payload.quarter.find((point) => point.sf_user_id === owner.sf_user_id);
     const customPipe = payload.custom_pipe || emptyCustomPipe();
     const ownerRows = customPipe.by_owner.filter((row) => sellerIds.has(row.sf_user_id));
@@ -1095,7 +1112,7 @@ export default function WeeklyApp() {
     const followUps = (payload.follow_up_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
     const stagnant = (payload.stagnant_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
     return {
-      payload, weeks, latestWeek, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, pipeline, sellerIds,
+      payload, weeks, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, sellerIds,
       forecastHistory: payload.forecast_history || [], customPipe: scopedPipe, pace, target, followUps, stagnant,
       quarterBounds: payload.quarter_bounds || null,
     };
@@ -1103,12 +1120,9 @@ export default function WeeklyApp() {
 
   if (error && !model) return <main className="weekly-app weekly-app__state"><GlassCard className="weekly-error"><h2>Performance indisponible</h2><p>La récupération des données n’a pas abouti.</p><Button onClick={() => void loadPeriod(period)}>Réessayer</Button></GlassCard></main>;
   if (!model) return <Skeleton />;
-  const { payload, latestWeek, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, pipeline, sellerIds, forecastHistory, customPipe, pace, target, followUps, stagnant, quarterBounds } = model;
+  const { payload, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, sellerIds, forecastHistory, customPipe, pace, target, followUps, stagnant, quarterBounds } = model;
   const weekMode = period === "week";
-  const activeWeek = selectedWeek || latestWeek;
-  const selectedPipeline = pipeline.find((point) => point.week_start === activeWeek) || pipeline.find((point) => point.week_start === latestWeek) || pipeline[currentIndex];
   const hasActivity = payload.pulse.some((point) => point.calls || point.meetings || point.proposals) || payload.pipeline.some((point) => point.generated_amount || point.won_amount) || payload.effort.some((point) => point.progressions) || customPipe.count > 0 || followUps.length > 0 || stagnant.length > 0 || (pace?.signed_to_date || 0) > 0;
-  const showPipelineBars = !weekMode && visibleOwners.some((owner) => trackingOf(owner) === "commercial");
   const showForecast = !weekMode && visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
   const showCustomPipe = visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
   const showTeamRollup = mode === "team" && selectedOwnerId === "all" && visibleOwners.length > 1;
@@ -1120,7 +1134,7 @@ export default function WeeklyApp() {
       <div className="weekly-header__brand">
         <Tag variant="accent">Performance</Tag>
         <h2>Weekly Perf</h2>
-        <p className="weekly-period-hint">{weekMode ? "Semaine en cours comparée à S−1" : "Trimestre fiscal en cours, semaine par semaine"}</p>
+        <p className="weekly-period-hint">{weekMode ? "Semaine vs S−1" : "Trimestre en cours"}</p>
       </div>
       <div className="weekly-period weekly-seg" aria-label="Période">
         <Button variant={period === "week" ? "primary" : "secondary"} onClick={() => switchPeriod("week")}>Semaine</Button>
@@ -1189,7 +1203,6 @@ export default function WeeklyApp() {
           ))}
         </div>
       </section>}
-      <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} />
       <LeadingFunnel owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} weekMode={weekMode} currentIndex={currentIndex} />
       {showPace && pace && <section className="weekly-section">
         <div className="weekly-section-heading"><p>Cap</p><h3>{weekMode ? "Objectif du trimestre" : "Rythme du trimestre"}</h3></div>
@@ -1197,10 +1210,8 @@ export default function WeeklyApp() {
         {!weekMode && <ConversionRates owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} currentIndex={currentIndex} />}
       </section>}
       <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
-      {displayMode === "cards" && <>
-        {showPipelineBars && <section className="weekly-section"><div className="weekly-section-heading"><p>Pipeline</p><h3>Généré, puis gagné</h3></div><GlassCard className="weekly-chart-card"><div className="weekly-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={pipeline} onMouseMove={(state) => { const point = pipeline.find((item) => item.label === state.activeLabel); if (point) setSelectedWeek(point.week_start); }}><XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} /><YAxis hide /><Tooltip formatter={(value) => money.format(Number(value))} contentStyle={chartTooltipStyle} /><Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} /><Bar dataKey="generated_amount" name="Généré" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} /><Bar dataKey="won_amount" name="Gagné" fill="var(--xos-alert)" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div><p className="weekly-closing">{selectedPipeline?.label} · closing <strong className="xos-numeric">{selectedPipeline?.generated_count ? percent.format(selectedPipeline.won_count / selectedPipeline.generated_count) : "—"}</strong> nb · <strong className="xos-numeric">{selectedPipeline?.generated_amount ? percent.format(selectedPipeline.won_amount / selectedPipeline.generated_amount) : "—"}</strong> €</p></GlassCard></section>}
-        {showForecast && <section className="weekly-section"><div className="weekly-section-heading"><p>Effort</p><h3>Forecast vs réalisé</h3></div><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
-      </>}
+      {displayMode === "cards" && showForecast && <section className="weekly-section"><div className="weekly-section-heading"><p>Effort</p><h3>Forecast vs réalisé</h3></div><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
+      <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
       {showCustomPipe && <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />}
     </>}
   </main>;

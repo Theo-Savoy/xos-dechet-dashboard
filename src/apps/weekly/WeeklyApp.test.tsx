@@ -185,7 +185,7 @@ describe("Weekly Perf", () => {
     render(<WeeklyApp />);
     await screen.findByText("Ada Lovelace");
     fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
-    expect(await screen.findByText("Trimestre fiscal en cours, semaine par semaine")).toBeTruthy();
+    expect(await screen.findByText("Trimestre en cours")).toBeTruthy();
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("period=quarter"))).toBe(true);
   });
 
@@ -212,7 +212,7 @@ describe("Weekly Perf", () => {
     await screen.findByText("Ada Lovelace");
     expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
     fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
-    expect(await screen.findByText("Trimestre fiscal en cours, semaine par semaine")).toBeTruthy();
+    expect(await screen.findByText("Trimestre en cours")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
     expect(screen.getByText("Target trimestre")).toBeTruthy();
   });
@@ -265,13 +265,23 @@ describe("Weekly Perf", () => {
     expect(screen.getByText("Deal SM")).toBeTruthy();
   });
 
-  it("renders call funnel and leading flux before Cap", async () => {
+  it("renders leading flux before Cap and call funnel lower on the page", async () => {
     render(<WeeklyApp />);
-    expect(await screen.findByText("Funnel appels")).toBeTruthy();
-    expect(screen.getByText("Flux menant")).toBeTruthy();
-    expect(screen.getByText(/Les signés se lisent au Cap/)).toBeTruthy();
+    expect(await screen.findByText("Flux menant")).toBeTruthy();
+    expect(screen.queryByText(/Les signés se lisent au Cap/)).toBeNull();
     expect(screen.getByText("CA créé")).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
+    expect(screen.getByText("Projection fin de trimestre")).toBeTruthy();
+    expect(screen.getByText("Funnel appels")).toBeTruthy();
+    expect(screen.getByText("Non décroché")).toBeTruthy();
+    expect(screen.getByText("RDV planifié")).toBeTruthy();
+    expect(screen.queryByText("Généré, puis gagné")).toBeNull();
+
+    const leading = screen.getByText("Flux menant");
+    const cap = screen.getByText("Objectif du trimestre");
+    const funnel = screen.getByText("Funnel appels");
+    expect(leading.compareDocumentPosition(cap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cap.compareDocumentPosition(funnel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("computes table totals and week-over-week deltas client-side", async () => {
