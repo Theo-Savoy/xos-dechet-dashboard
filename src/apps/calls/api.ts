@@ -252,6 +252,38 @@ export async function deferContacts(
   });
 }
 
+export async function removeContact(
+  token: string,
+  sessionId: number,
+  contactId: number,
+): Promise<void> {
+  await apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "remove_contact",
+      session_id: sessionId,
+      contact_id: contactId,
+    }),
+  });
+}
+
+export async function updateRecall(
+  token: string,
+  sessionId: number,
+  contactId: number,
+  recallAt: string | null,
+): Promise<{ recall_at: string | null }> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "update_recall",
+      session_id: sessionId,
+      contact_id: contactId,
+      recall_at: recallAt,
+    }),
+  });
+}
+
 export async function fetchRecalls(token: string): Promise<RecallInboxItem[]> {
   const data = await apiFetch<{ recalls: RecallInboxItem[] }>(token, "/api/calls?resource=recalls");
   return data.recalls;

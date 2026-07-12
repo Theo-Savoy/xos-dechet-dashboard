@@ -21,6 +21,8 @@ import {
   fetchStats,
   logCall,
   logEvent,
+  removeContact,
+  updateRecall,
   updateSession,
   CallsApiError,
 } from "./api";
@@ -649,6 +651,68 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
+  const handleRemoveContacts = async (contactIds: number[]) => {
+    if (!token || contactIds.length === 0) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    const targets = contactIds
+      .map((contactId) => resolveLogTarget(contactId))
+      .filter((target): target is { sessionId: number; contactId: number } => target !== null);
+    const results = await Promise.allSettled(
+      targets.map((target) =>
+        view === "recalls"
+          ? updateRecall(token, target.sessionId, target.contactId, null)
+          : removeContact(token, target.sessionId, target.contactId),
+      ),
+    );
+    const failures = results.filter((result) => result.status === "rejected");
+    try {
+      if (focusedContactId && contactIds.includes(focusedContactId)) {
+        setFocusedContactId(null);
+      }
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+      } else if (activeSession) {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+        setActiveSession(refreshed.session);
+      }
+      if (failures.length) {
+        setRunnerError(
+          `${results.length - failures.length} retirés, ${failures.length} en échec — liste actualisée`,
+        );
+      }
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleUpdateRecall = async (contactId: number, recallAt: string | null) => {
+    if (!token) return;
+    const target = resolveLogTarget(contactId);
+    if (!target) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    try {
+      await updateRecall(token, target.sessionId, target.contactId, recallAt);
+      if (recallAt === null && focusedContactId === contactId) {
+        setFocusedContactId(null);
+      }
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+      } else if (activeSession) {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+      }
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
   const handleLogMany = async (contactIds: number[], payload: LogPayload) => {
     if (!token || contactIds.length === 0) return;
     if (payload.resultat === "RDV planifié") {
@@ -835,6 +899,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             void handleLogEvent(start, durationMin, invitees)
           }
           onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
+          onRemoveContacts={(ids) => void handleRemoveContacts(ids)}
+          onUpdateRecall={(contactId, recallAt) => void handleUpdateRecall(contactId, recallAt)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
         />
       )}

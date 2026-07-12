@@ -274,5 +274,88 @@ export async function handleLogging({ action, body, user, client, headers }) {
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers });
   }
+
+  if (action === "remove_contact") {
+    const { session_id, contact_id } = body;
+
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+    if (typeof contact_id !== "number" || !Number.isInteger(contact_id) || contact_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_contact_id" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionOwner(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+
+    const contactCheck = await assertSessionContact(client, session_id, contact_id);
+    if (contactCheck.error) {
+      return new Response(JSON.stringify({ error: contactCheck.error }), { status: contactCheck.status, headers });
+    }
+
+    const status = contactCheck.contact.status || "pending";
+    if (status !== "pending" && status !== "skipped") {
+      return new Response(JSON.stringify({ error: "contact_not_removable" }), { status: 409, headers });
+    }
+
+    const { error: deleteError } = await client
+      .from("call_session_contacts")
+      .delete()
+      .eq("id", contact_id)
+      .eq("session_id", session_id);
+
+    if (deleteError) {
+      return new Response(JSON.stringify({ error: "contact_delete_failed" }), { status: 500, headers });
+    }
+
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  }
+
+  if (action === "update_recall") {
+    const { session_id, contact_id, recall_at: recallAtInput } = body;
+
+    if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+    if (typeof contact_id !== "number" || !Number.isInteger(contact_id) || contact_id < 1) {
+      return new Response(JSON.stringify({ error: "invalid_contact_id" }), { status: 400, headers });
+    }
+    if (recallAtInput !== null && (typeof recallAtInput !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(recallAtInput))) {
+      return new Response(JSON.stringify({ error: "invalid_recall_at" }), { status: 400, headers });
+    }
+
+    const sessionCheck = await assertSessionOwner(client, session_id, user.id);
+    if (sessionCheck.error) {
+      return new Response(JSON.stringify({ error: sessionCheck.error }), { status: sessionCheck.status, headers });
+    }
+
+    const contactCheck = await assertSessionContact(client, session_id, contact_id);
+    if (contactCheck.error) {
+      return new Response(JSON.stringify({ error: contactCheck.error }), { status: contactCheck.status, headers });
+    }
+
+    const contact = contactCheck.contact;
+    if (contact.status !== "called") {
+      return new Response(JSON.stringify({ error: "contact_not_called" }), { status: 409, headers });
+    }
+    if (recallAtInput === null && !contact.recall_at) {
+      return new Response(JSON.stringify({ error: "recall_not_set" }), { status: 409, headers });
+    }
+
+    const { error: updateError } = await client
+      .from("call_session_contacts")
+      .update({ recall_at: recallAtInput })
+      .eq("id", contact_id)
+      .eq("session_id", session_id);
+
+    if (updateError) {
+      return new Response(JSON.stringify({ error: "contact_update_failed" }), { status: 500, headers });
+    }
+
+    return new Response(JSON.stringify({ ok: true, recall_at: recallAtInput }), { status: 200, headers });
+  }
+
   return null;
 }

@@ -764,6 +764,13 @@
   color: var(--xos-text-muted);
 }
 
+.calls-recall__skip-hint,
+.calls-npa-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .calls-recall__track {
   display: flex;
   flex-wrap: wrap;
@@ -1189,6 +1196,27 @@
   margin: 0.45rem 0 0;
   color: var(--xos-text-muted);
   font-size: 0.82rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+
+.calls-inline-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--xos-accent);
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.calls-inline-link:hover {
+  color: var(--xos-text);
 }
 
 .calls-contact-card__no-phone,
@@ -1706,6 +1734,11 @@
 
 .calls-cockpit-list__name small {
   color: var(--xos-text-muted);
+}
+
+.calls-cockpit-list__attempt {
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
 }
 
 .calls-cockpit-list__cell {

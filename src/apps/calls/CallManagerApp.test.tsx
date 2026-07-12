@@ -345,7 +345,7 @@ describe("CallManagerApp component", () => {
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "NPA" });
     await user.click(screen.getByRole("button", { name: "Fiche" }));
-    await user.click(screen.getByLabelText("Ne pas rappeler (NPA)"));
+    await user.click(screen.getByLabelText(/Ne pas rappeler \(NPA\)/));
     await user.click(screen.getByRole("button", { name: "Logguer & suivant" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(

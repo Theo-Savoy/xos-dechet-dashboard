@@ -922,6 +922,75 @@ describe("POST /api/calls", () => {
     });
   });
 
+  describe("remove_contact", () => {
+    it("deletes a pending contact from the session", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(makeReq("POST", { action: "remove_contact", session_id: 1, contact_id: 101 }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+    });
+
+    it("rejects a called contact", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-20" }, error: null });
+
+      const res = await POST(makeReq("POST", { action: "remove_contact", session_id: 1, contact_id: 101 }));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "contact_not_removable" });
+    });
+  });
+
+  describe("update_recall", () => {
+    it("reschedules a recall date", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-12" },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: "2026-07-20" }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, recall_at: "2026-07-20" });
+    });
+
+    it("clears a recall from the queue", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-12" },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: null }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, recall_at: null });
+    });
+
+    it("rejects update on a pending contact", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: "2026-07-20" }),
+      );
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "contact_not_called" });
+    });
+  });
+
   describe("update_session / delete_session", () => {
     it("updates session metadata", async () => {
       mockDb

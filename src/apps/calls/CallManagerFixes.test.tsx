@@ -138,6 +138,8 @@ describe("RunnerView", () => {
     onLogRdvAndNext: vi.fn(),
     onLogEvent: vi.fn(),
     onDeferContacts: vi.fn(),
+    onRemoveContacts: vi.fn(),
+    onUpdateRecall: vi.fn(),
     onLogMany: vi.fn(),
   };
 
@@ -395,6 +397,91 @@ describe("RunnerView", () => {
         resultat: "Appel décroché",
         recallAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       }),
+    );
+  });
+
+  it("allows skipping recall on unanswered without NPA", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    const current = { ...bob, status: "pending" as const, outcome: null, attempt_count: 2 };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogAndNext={onLogAndNext}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    expect(screen.getByText("2e tentative")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Appel non décroché" }));
+    expect((screen.getByLabelText(/Planifier un rappel/i) as HTMLInputElement).checked).toBe(true);
+    await user.click(screen.getByLabelText(/Planifier un rappel/i));
+    expect(screen.getByText(/Pas de rappel cette fois/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
+    expect(onLogAndNext).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        resultat: "Appel non décroché",
+        recallAt: null,
+        doNotCall: false,
+      }),
+    );
+  });
+
+  it("removes a pending contact from the session after confirm", async () => {
+    const user = userEvent.setup();
+    const onRemoveContacts = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onRemoveContacts={onRemoveContacts}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "Retirer" }));
+    expect(onRemoveContacts).toHaveBeenCalledWith([current.id]);
+  });
+
+  it("reschedules a recall from the recall queue", async () => {
+    const user = userEvent.setup();
+    const onUpdateRecall = vi.fn();
+    const current = {
+      ...bob,
+      status: "pending" as const,
+      outcome: "Appel non décroché" as const,
+      recall_at: "2026-07-12",
+      origin_session_id: 9,
+      origin_session_name: "Séance A",
+    };
+    render(
+      <RunnerView
+        {...runnerProps}
+        variant="recalls"
+        onUpdateRecall={onUpdateRecall}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "Reporter" }));
+    const panel = screen.getByRole("region", { name: "Reporter le rappel" });
+    expect(panel).toBeTruthy();
+    await user.click(within(panel).getByRole("button", { name: "+7 j" }));
+    await user.click(within(panel).getByRole("button", { name: "Enregistrer la date" }));
+    expect(onUpdateRecall).toHaveBeenCalledWith(
+      current.id,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     );
   });
 
