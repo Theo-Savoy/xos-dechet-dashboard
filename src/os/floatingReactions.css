@@ -1,0 +1,33 @@
+.xos-float-reactions {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 13000;
+  overflow: hidden;
+}
+
+.xos-float-reactions__emoji {
+  position: absolute;
+  bottom: -2rem;
+  line-height: 1;
+  opacity: 0;
+  filter: drop-shadow(0 0.35rem 0.6rem rgba(0, 0, 0, 0.35));
+  animation-name: xos-float-rise;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes xos-float-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--xos-float-drift, 0), -110vh, 0)
+      rotate(var(--xos-float-rotate, 0deg)) scale(1.05);
+  }
+}

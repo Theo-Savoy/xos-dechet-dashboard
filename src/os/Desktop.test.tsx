@@ -37,12 +37,19 @@ vi.mock("../lib/supabase", () => ({
         : {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
-                maybeSingle: vi.fn().mockResolvedValue({ data: { role: "admin" }, error: null }),
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { role: "admin", sf_auth_connected_at: "2026-07-01T00:00:00Z" },
+                  error: null,
+                }),
               }),
             }),
           },
     ),
   },
+}));
+
+vi.mock("../apps/calls/api", () => ({
+  prefetchComboHub: vi.fn(),
 }));
 
 describe("Desktop", () => {
@@ -61,6 +68,21 @@ describe("Desktop", () => {
         setItem: (key: string, value: string) => values.set(key, value),
       },
     });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/status")) {
+          return new Response(
+            JSON.stringify({
+              salesforce: { connected: true, orgConnected: true, userLinked: true },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
   });
   afterEach(() => {
     cleanup();
@@ -156,5 +178,28 @@ describe("Desktop", () => {
       headers: { Authorization: "Bearer jwt-token" },
     });
     expect(navigate).toHaveBeenCalledWith("https://login.salesforce.test/authorize");
+  });
+
+  it("shows a reconnect CTA when Salesforce API is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/status")) {
+          return new Response(
+            JSON.stringify({
+              salesforce: { connected: false, orgConnected: false, userLinked: true },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    render(<Desktop userEmail="theo@xos-learning.fr" accessToken="test-token" />);
+
+    expect(await screen.findByText("SF à reconnecter")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reconnecter Salesforce" })).toBeTruthy();
   });
 });

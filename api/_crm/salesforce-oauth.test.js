@@ -36,6 +36,7 @@ describe("Salesforce OAuth account linking", () => {
   beforeEach(() => {
     vi.stubEnv("SF_CLIENT_ID", "client-id");
     vi.stubEnv("SF_CLIENT_SECRET", "client-secret");
+    vi.stubEnv("SF_INSTANCE_URL", "https://db0000000d7rdeay.my.salesforce.com");
     vi.stubEnv("SF_LOGIN_URL", "https://login.salesforce.test");
     vi.stubEnv("SF_TOKEN_ENCRYPTION_KEY", Buffer.alloc(32, 9).toString("base64"));
   });
@@ -49,7 +50,8 @@ describe("Salesforce OAuth account linking", () => {
     });
 
     const authorization = new URL(result.authorizationUrl);
-    expect(authorization.origin).toBe("https://login.salesforce.test");
+    expect(authorization.origin).toBe("https://db0000000d7rdeay.my.salesforce.com");
+    expect(authorization.pathname).toBe("/services/oauth2/authorize");
     expect(authorization.searchParams.get("client_id")).toBe("client-id");
     expect(authorization.searchParams.get("redirect_uri")).toBe(
       "https://xos.hellotheo.fr/api/auth?flow=salesforce-callback",

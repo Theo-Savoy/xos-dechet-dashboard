@@ -1,4 +1,4 @@
-import { Suspense, type Dispatch } from "react";
+import { Suspense, useCallback, type Dispatch } from "react";
 import { Rnd } from "react-rnd";
 import { WindowBootScreen } from "../components/WindowBootScreen";
 import { getAppManifest } from "./registry";
@@ -10,6 +10,13 @@ type WindowManagerProps = {
 };
 
 export function WindowManager({ windows, dispatch }: WindowManagerProps) {
+  const handleParamsChange = useCallback(
+    (appId: string, params?: Record<string, string>) => {
+      dispatch({ type: "setParams", appId, params });
+    },
+    [dispatch],
+  );
+
   return (
     <div className="xos-window-layer">
       {windows.map((window) => {
@@ -94,7 +101,10 @@ export function WindowManager({ windows, dispatch }: WindowManagerProps) {
               </header>
               <div className="xos-window__content">
                 <Suspense fallback={<WindowBootScreen label="Ouverture…" />}>
-                  <AppComponent params={window.params} />
+                  <AppComponent
+                    params={window.params}
+                    onParamsChange={(params) => handleParamsChange(window.appId, params)}
+                  />
                 </Suspense>
               </div>
             </section>

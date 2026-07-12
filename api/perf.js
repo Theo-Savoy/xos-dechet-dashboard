@@ -1052,7 +1052,7 @@ export async function GET(request) {
     }
   }
 
-  const tokenResult = await fetchSFToken();
+  const tokenResult = await fetchSFToken({ client, userId: user.id });
   if (tokenResult.error || !tokenResult.accessToken) return json(502, { error: tokenResult.error || "sf_auth_error" });
   const { task, event, opportunity, opportunityHistory, user: sfUserObject } = mapping.objects;
   // SOQL : les littéraux date (YYYY-MM-DD) et datetime (ISO Z) ne se quotent PAS —

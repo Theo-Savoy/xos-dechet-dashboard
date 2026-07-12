@@ -24,10 +24,11 @@ describe("opportunityFilters", () => {
     expect(countOpportunitySemiJoins({ opp_ouverte: null, opp_perdue: false })).toBe(1);
   });
 
-  it("explains the open+lost workaround in the UI guidance", () => {
+  it("explains the open+lost combination in the UI guidance", () => {
     const guidance = getOpportunityFilterGuidance({ opp_ouverte: true, opp_perdue: true });
     expect(guidance.hint).toContain("ouverte");
-    expect(guidance.note).toContain("Limite Salesforce");
+    expect(guidance.hint).toContain("perdue");
+    expect(guidance.note).toBeNull();
     expect(guidance.disabled.opp_perdue).not.toContain(false);
   });
 

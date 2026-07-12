@@ -66,12 +66,22 @@ describe("Salesforce per-user credentials", () => {
     expect(String(fetchMock.mock.calls[0][1].body)).toContain("refresh_token=ada-refresh");
   });
 
-  it("falls back to the integration refresh token when the user is not linked", async () => {
+  it("fails closed when the user is not linked (no org fallback)", async () => {
     const { client } = profileClient({ sf_refresh_token_encrypted: null });
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: "integration-access" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchSFToken({ client, userId: "user-unlinked" })).resolves.toEqual({ accessToken: "integration-access" });
+    await expect(fetchSFToken({ client, userId: "user-unlinked" })).resolves.toEqual({ error: "sf_auth_error" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows explicit org fallback when requested", async () => {
+    const { client } = profileClient({ sf_refresh_token_encrypted: null });
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: "integration-access" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSFToken({ client, userId: "user-unlinked", allowOrgFallback: true }))
+      .resolves.toEqual({ accessToken: "integration-access" });
     expect(String(fetchMock.mock.calls[0][1].body)).toContain("refresh_token=integration-refresh");
   });
 

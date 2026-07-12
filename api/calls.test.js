@@ -63,15 +63,18 @@ const mockChain = {
   eq() { return this; },
   in() { return this; },
   not() { return this; },
+  gte() { return this; },
   order() { return this; },
   single() { return mockDb(); },
   maybeSingle() { return mockDb(); },
+  // head+count queries resolve via then → mockDb()
 };
 
 const mockFrom = vi.fn(() => mockChain);
+const mockRpc = vi.fn(() => Promise.resolve({ data: null, error: { message: "no rpc" } }));
 
 vi.mock("@supabase/supabase-js", () => ({
-  createClient: () => ({ from: mockFrom }),
+  createClient: () => ({ from: mockFrom, rpc: mockRpc }),
 }));
 
 const RESULTS = mapping.objects.task.results;
@@ -107,6 +110,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   mockDb.mockReset();
   mockFrom.mockClear();
+  mockRpc.mockReset();
+  mockRpc.mockResolvedValue({ data: null, error: { message: "no rpc" } });
   mockChain.insert.mockClear();
   mockFetchSFToken.mockReset();
   mockLogCall.mockReset();
@@ -202,14 +207,22 @@ describe("GET /api/calls", () => {
   });
 
   it("returns Salesforce-enabled team members with display labels", async () => {
-    mockDb.mockResolvedValueOnce({
-      data: [
-        { id: "user-1", full_name: "Alice Martin", email: "alice@example.com", sf_user_id: "005000000000001" },
-        { id: "user-2", full_name: null, email: "bob@example.com", sf_user_id: "005000000000002" },
-        { id: "user-3", full_name: "Sans Salesforce", email: "none@example.com", sf_user_id: null },
-      ],
-      error: null,
-    });
+    mockDb
+      .mockResolvedValueOnce({
+        data: [
+          { id: "user-1", full_name: "Alice Martin", email: "alice@example.com", sf_user_id: "005000000000001" },
+          { id: "user-2", full_name: null, email: "bob@example.com", sf_user_id: "005000000000002" },
+          { id: "user-3", full_name: "Sans Salesforce", email: "none@example.com", sf_user_id: null },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          { email: "christophe.hirtz@xos-learning.fr", sf_user_id: "005000000000003" },
+          { email: "alice@example.com", sf_user_id: "005000000000001" },
+        ],
+        error: null,
+      });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?resource=team"));
 
@@ -218,13 +231,17 @@ describe("GET /api/calls", () => {
       team: [
         { user_id: "user-1", label: "Alice Martin", sf_user_id: "005000000000001" },
         { user_id: "user-2", label: "bob@example.com", sf_user_id: "005000000000002" },
+        { user_id: "map:christophe.hirtz@xos-learning.fr", label: "Christophe Hirtz", sf_user_id: "005000000000003" },
       ],
     });
     expect(mockFrom).toHaveBeenCalledWith("profiles");
+    expect(mockFrom).toHaveBeenCalledWith("sf_user_map");
   });
 
   it("returns 500 when the team lookup fails", async () => {
     mockDb.mockResolvedValueOnce({ data: null, error: { message: "profiles failed" } });
+    // sf_user_map may still resolve in parallel
+    mockDb.mockResolvedValueOnce({ data: [], error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?resource=team"));
 
@@ -250,10 +267,13 @@ describe("GET /api/calls", () => {
 
   it("returns sessions with aggregated counts", async () => {
     mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({
-        data: [{ id: 1, name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
         error: null,
       })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({
         data: [
           { session_id: 1, status: "called" },
@@ -268,9 +288,60 @@ describe("GET /api/calls", () => {
     expect(body.sessions[0]).toMatchObject({ id: 1, total: 2, called: 1, pending: 1 });
   });
 
+  it("falls back when legacy RPC shape returns done instead of called", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{ session_id: 1, total: 2, pending: 1, done: 0, skipped: 0, do_not_call: 0 }],
+      error: null,
+    });
+    mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [
+          { session_id: 1, status: "called" },
+          { session_id: 1, status: "pending" },
+        ],
+        error: null,
+      });
+
+    const res = await GET(makeReq("GET", undefined));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sessions[0]).toMatchObject({ id: 1, total: 2, called: 1, pending: 1 });
+  });
+
+  it("uses RPC counts when called column is present", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{ session_id: 1, total: 3, called: 2, skipped: 0, pending: 1 }],
+      error: null,
+    });
+    mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    const res = await GET(makeReq("GET", undefined));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.sessions[0]).toMatchObject({ id: 1, total: 3, called: 2, pending: 1 });
+    expect(mockFrom).not.toHaveBeenCalledWith("call_session_contacts");
+  });
+
   it("returns 500 when contacts aggregation fails", async () => {
     mockDb
-      .mockResolvedValueOnce({ data: [{ id: 1, name: "X", status: "active", created_at: "2026-01-01" }], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 1, owner: "user-123", name: "X", status: "active", created_at: "2026-01-01" }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } });
 
     const res = await GET(makeReq("GET", undefined));
@@ -302,11 +373,13 @@ describe("GET /api/calls", () => {
   it("returns 404 for another owner even when the parallel contacts lookup has completed", async () => {
     mockDb
       .mockResolvedValueOnce({ data: { id: 1, owner: "other-user", name: "Test", status: "active" }, error: null })
-      .mockResolvedValueOnce({ data: [{ id: 101, session_id: 1 }], error: null });
+      .mockResolvedValueOnce({ data: [{ id: 101, session_id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: { id: 1, owner: "other-user", name: "Test", status: "active" }, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(404);
-    expect(mockDb).toHaveBeenCalledTimes(2);
+    expect(mockDb).toHaveBeenCalledTimes(4);
   });
 
   it("returns session detail with contacts", async () => {
@@ -320,7 +393,12 @@ describe("GET /api/calls", () => {
       .mockResolvedValueOnce({
         data: [{ id: 101, position: 0, sf_contact_id: "003000000000001", contact_name: "Marie", status: "pending", email: "marie@acme.fr", title: "DRH" }],
         error: null,
-      });
+      })
+      .mockResolvedValueOnce({
+        data: { id: 1, owner: "user-123", name: "Prospection", status: "active" },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(200);
@@ -352,6 +430,10 @@ describe("GET /api/calls", () => {
         }],
         error: null,
       })
+      .mockResolvedValueOnce({
+        data: { id: 1, owner: "user-123", name: "Prospection", status: "active" },
+        error: null,
+      })
       .mockResolvedValue({ data: null, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
@@ -365,7 +447,8 @@ describe("GET /api/calls", () => {
   it("returns 500 when detail contacts lookup fails", async () => {
     mockDb
       .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "X", status: "active", created_at: "2026-01-01" }, error: null })
-      .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } });
+      .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } })
+      .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "X", status: "active" }, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(500);
@@ -375,10 +458,14 @@ describe("GET /api/calls", () => {
 
   it("returns stats on success", async () => {
     mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({ data: [{ id: 1, status: "active" }, { id: 2, status: "completed" }], error: null })
       .mockResolvedValueOnce({
         data: [
           {
+            session_id: 1,
+            logged_by: "user-123",
             status: "called",
             outcome: "RDV planifié",
             called_at: new Date().toISOString(),
@@ -692,6 +779,10 @@ describe("POST /api/calls", () => {
       mockDb
         .mockResolvedValueOnce({ data: sessionRow, error: null })
         .mockResolvedValueOnce({ data: contactRow, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: { sf_user_id: "005000000000001AAA", full_name: "Jean Dupont" }, error: null })
         .mockResolvedValueOnce({ data: null, error: { message: "update failed" } });
 
@@ -753,6 +844,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-02-30T10:00:00Z",
         duration_min: 30,
       }));
@@ -765,6 +857,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 0,
       }));
@@ -778,6 +871,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 30,
       }));
@@ -798,6 +892,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 45,
       }));
@@ -820,6 +915,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 30,
       }));
@@ -902,7 +998,11 @@ describe("POST /api/calls", () => {
     it("skips contact successfully", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
-        .mockResolvedValueOnce({ data: { id: 101, session_id: 1 }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: null, error: null });
 
       const res = await POST(makeReq("POST", { action: "skip_contact", session_id: 1, contact_id: 101 }));
@@ -913,12 +1013,85 @@ describe("POST /api/calls", () => {
     it("returns 500 when skip update fails", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
-        .mockResolvedValueOnce({ data: { id: 101, session_id: 1 }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: null, error: { message: "update failed" } });
 
       const res = await POST(makeReq("POST", { action: "skip_contact", session_id: 1, contact_id: 101 }));
       expect(res.status).toBe(500);
       expect((await res.json()).error).toBe("contact_update_failed");
+    });
+  });
+
+  describe("remove_contact", () => {
+    it("deletes a pending contact from the session", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(makeReq("POST", { action: "remove_contact", session_id: 1, contact_id: 101 }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+    });
+
+    it("rejects a called contact", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-20" }, error: null });
+
+      const res = await POST(makeReq("POST", { action: "remove_contact", session_id: 1, contact_id: 101 }));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "contact_not_removable" });
+    });
+  });
+
+  describe("update_recall", () => {
+    it("reschedules a recall date", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-12" },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: "2026-07-20" }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, recall_at: "2026-07-20" });
+    });
+
+    it("clears a recall from the queue", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, session_id: 1, status: "called", recall_at: "2026-07-12" },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: null }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, recall_at: null });
+    });
+
+    it("rejects update on a pending contact", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null });
+
+      const res = await POST(
+        makeReq("POST", { action: "update_recall", session_id: 1, contact_id: 101, recall_at: "2026-07-20" }),
+      );
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "contact_not_called" });
     });
   });
 

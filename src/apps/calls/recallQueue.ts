@@ -14,6 +14,8 @@ export const RECALL_QUEUE_SESSION: SessionDetail = {
 
 export type RecallDateFilter = "today" | "overdue" | "upcoming" | "all";
 
+export type RecallSessionFilter = "all" | number;
+
 export function recallsToSessionContacts(recalls: RecallInboxItem[]): SessionContact[] {
   return recalls.map((item, index) => ({
     id: item.id,
@@ -49,6 +51,35 @@ export function matchesRecallDateFilter(
   if (filter === "today") return recallAt === today;
   if (filter === "overdue") return recallAt < today;
   return recallAt > today;
+}
+
+export function matchesRecallSessionFilter(
+  originSessionId: number | null | undefined,
+  filter: RecallSessionFilter,
+): boolean {
+  if (filter === "all") return true;
+  return originSessionId === filter;
+}
+
+export function listRecallOriginSessions(
+  contacts: Array<{ origin_session_id?: number | null; origin_session_name?: string | null }>,
+): Array<{ id: number; name: string; count: number }> {
+  const byId = new Map<number, { id: number; name: string; count: number }>();
+  for (const contact of contacts) {
+    const id = contact.origin_session_id;
+    if (typeof id !== "number" || id < 1) continue;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    byId.set(id, {
+      id,
+      name: contact.origin_session_name?.trim() || `Séance #${id}`,
+      count: 1,
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
 }
 
 export function countRecallDateFilters(recalls: RecallInboxItem[], today: string) {

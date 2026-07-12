@@ -136,7 +136,8 @@ export async function GET(request) {
     return new Response(JSON.stringify({ error: "invalid_query" }), { status: 400, headers: noStore });
   }
 
-  const tokenResult = await fetchSFToken();
+  const client = getServiceClient();
+  const tokenResult = await fetchSFToken(client ? { client, userId: user.id } : {});
   if (tokenResult.error) {
     return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers: noStore });
   }

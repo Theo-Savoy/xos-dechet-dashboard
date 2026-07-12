@@ -24,7 +24,8 @@ export type WindowAction =
   | { type: "minimize"; appId: string }
   | { type: "focus"; appId: string }
   | { type: "toggleMaximize"; appId: string }
-  | { type: "setBounds"; appId: string; bounds: WindowBounds };
+  | { type: "setBounds"; appId: string; bounds: WindowBounds }
+  | { type: "setParams"; appId: string; params?: Record<string, string> };
 
 export function createWindowState(): WindowManagerState {
   return { windows: [], nextZ: 1 };
@@ -53,6 +54,18 @@ function focusWindow(state: WindowManagerState, appId: string): WindowManagerSta
   return { ...focused, nextZ: state.nextZ + 1 };
 }
 
+function paramsEqual(
+  left?: Record<string, string>,
+  right?: Record<string, string>,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return !left && !right;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
 export function windowReducer(
   state: WindowManagerState,
   action: WindowAction,
@@ -64,7 +77,7 @@ export function windowReducer(
         const restored = updateWindow(state, action.appId, (window) => ({
           ...window,
           minimized: false,
-          params: action.params,
+          params: action.params ?? window.params,
         }));
         return focusWindow(restored, action.appId);
       }
@@ -125,6 +138,14 @@ export function windowReducer(
         y,
         w,
         h,
+      }));
+    }
+    case "setParams": {
+      const existing = state.windows.find((window) => window.appId === action.appId);
+      if (!existing || paramsEqual(existing.params, action.params)) return state;
+      return updateWindow(state, action.appId, (window) => ({
+        ...window,
+        params: action.params,
       }));
     }
   }

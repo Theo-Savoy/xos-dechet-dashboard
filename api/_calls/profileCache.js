@@ -17,7 +17,7 @@ export async function getProfile(client, userId) {
 
   const { data, error } = await client
     .from("profiles")
-    .select("sf_user_id, full_name, role")
+    .select("sf_user_id, full_name, role, sf_auth_connected_at")
     .eq("id", userId)
     .maybeSingle();
   if (error) return { error: "profile_lookup_failed" };
@@ -26,6 +26,8 @@ export async function getProfile(client, userId) {
     sfUserId: data?.sf_user_id || null,
     fullName: data?.full_name || null,
     role: data?.role || "commercial",
+    sfAuthConnectedAt: data?.sf_auth_connected_at || null,
+    userLinked: Boolean(data?.sf_auth_connected_at),
   };
   profileCache.set(userId, { profile, expiresAt: Date.now() + PROFILE_CACHE_TTL_MS });
   return profile;

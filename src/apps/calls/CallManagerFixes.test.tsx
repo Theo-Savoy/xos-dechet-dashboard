@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventPanel } from "./EventPanel";
 import { DedupBanner } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
@@ -17,6 +17,15 @@ import { emptyFilterTree, normalizeFilterTree } from "../../crm";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+beforeEach(() => {
+  try {
+    window.localStorage?.setItem("xos-combo-demo-seen", "1");
+    window.localStorage?.setItem("xos-combo-sounds", "0");
+  } catch {
+    /* jsdom without localStorage */
+  }
 });
 
 const session: SessionDetail = {
@@ -59,42 +68,18 @@ describe("EventPanel", () => {
     expect((screen.getByLabelText("Date & heure") as HTMLInputElement).value).toBe(localValue);
   });
 
-  it("blocks a past event with an inline alert", async () => {
+  it("keeps submission disabled until the event start is valid", async () => {
     const user = userEvent.setup();
     render(<EventPanel contactName="Alice" loading={false} onSubmit={vi.fn()} />);
 
     await user.clear(screen.getByLabelText("Date & heure"));
     await user.type(screen.getByLabelText("Date & heure"), "2000-01-01T10:00");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(screen.getByRole("alert").textContent?.toLowerCase()).toContain("date");
+    const submit = screen.getByRole("button", { name: /enregistrer le rdv/i });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(submit.getAttribute("title")).toContain("à venir");
   });
 
-  it("labels external invitees as CRM IDs and rejects an invalid ID before submitting", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn();
-    render(<EventPanel contactName="Alice" loading={false} onSubmit={onSubmit} />);
-
-    const invitees = screen.getByLabelText("Autres invités (ID CRM)");
-    await user.type(invitees, "not-an-id{Enter}");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(screen.getByRole("alert").textContent).toContain("15 ou 18");
-    expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  it("keeps manual invitees working when no team is available", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn();
-    render(<EventPanel contactName="Alice" loading={false} onSubmit={onSubmit} />);
-
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "003000000000001{Enter}");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.any(String), 30, ["003000000000001"]);
-  });
-
-  it("combines selected colleagues with manual invitees without duplicates", async () => {
+  it("defaults to discovery subject and 60 min for prospection", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(
@@ -102,23 +87,47 @@ describe("EventPanel", () => {
         contactName="Alice"
         loading={false}
         onSubmit={onSubmit}
+        sessionType="prospection"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Rdv découverte prospect/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /60\s*min/i }).getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.any(String),
+      60,
+      { subject: "Rdv découverte prospect", ownerSfUserId: null },
+    );
+  });
+
+  it("defaults SDR attribution to a commercial colleague", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <EventPanel
+        contactName="Alice"
+        loading={false}
+        onSubmit={onSubmit}
+        currentSfUserId="005Sb000007b6dWIAQ"
         team={[
-          { user_id: "user-1", label: "Alice", sf_user_id: "005000000000001" },
-          { user_id: "user-2", label: "Bob", sf_user_id: "005000000000002" },
+          { user_id: "user-1", label: "Yanis", sf_user_id: "005Sb000007b6dWIAQ" },
+          { user_id: "user-2", label: "Christophe", sf_user_id: "005000000000002" },
+          { user_id: "user-3", label: "Paul", sf_user_id: "005000000000003" },
         ]}
       />,
     );
 
-    await user.click(screen.getByLabelText("Alice"));
-    await user.click(screen.getByLabelText("Bob"));
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "003000000000001{Enter}");
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "005000000000001{Enter}");
+    const group = screen.getByRole("radiogroup", { name: "Attribué à" });
+    expect(within(group).getByRole("radio", { name: "Christophe" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(group).queryByRole("radio", { name: /^Moi$/ })).toBeNull();
+    await user.click(within(group).getByRole("radio", { name: "Paul" }));
     await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.any(String),
-      30,
-      ["005000000000001", "005000000000002", "003000000000001"],
+      60,
+      { subject: "Rdv découverte prospect", ownerSfUserId: "005000000000003" },
     );
   });
 });
@@ -138,6 +147,8 @@ describe("RunnerView", () => {
     onLogRdvAndNext: vi.fn(),
     onLogEvent: vi.fn(),
     onDeferContacts: vi.fn(),
+    onRemoveContacts: vi.fn(),
+    onUpdateRecall: vi.fn(),
     onLogMany: vi.fn(),
   };
 
@@ -168,7 +179,7 @@ describe("RunnerView", () => {
 
     await user.click(screen.getByRole("button", { name: "Fiche" }));
     expect(screen.getByText("RF · Acme")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "LinkedIn" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Ouvrir sur LinkedIn" }).getAttribute("href")).toBe(
       "https://linkedin.com/in/bob",
     );
     expect(screen.getByRole("button", { name: "Appel argumenté" })).toBeTruthy();
@@ -177,7 +188,50 @@ describe("RunnerView", () => {
     expect(screen.getByText("Restant")).toBeTruthy();
   });
 
-  it("toggles to list mode with session statuses", () => {
+  it("auto-opens the first pending fiche with next-contact and recall hints", () => {
+    const next = { ...bob, id: 3, contact_name: "Claire", position: 3 };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[bob, next]}
+        currentContact={bob}
+        awaitingEvent={null}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 3, name: "Bob Durand" })).toBeTruthy();
+    expect(screen.getByText("Claire")).toBeTruthy();
+    expect(screen.getByText("ou")).toBeTruthy();
+  });
+
+  it("logs with ⌘↵ for a planned meeting via the Event panel", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    const onLogRdvAndNext = vi.fn();
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[bob]}
+        currentContact={bob}
+        awaitingEvent={null}
+        onLogAndNext={onLogAndNext}
+        onLogRdvAndNext={onLogRdvAndNext}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+    expect(onLogAndNext).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "RDV planifié" }));
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+    expect(onLogAndNext).toHaveBeenCalledTimes(1);
+    expect(onLogRdvAndNext).toHaveBeenCalledTimes(1);
+    expect(onLogRdvAndNext.mock.calls[0][0]).toBe(bob.id);
+    expect(onLogRdvAndNext.mock.calls[0][1]).toMatchObject({ resultat: "RDV planifié" });
+  });
+
+  it("toggles to list mode with session statuses", async () => {
+    const user = userEvent.setup();
     render(
       <RunnerView
         {...runnerProps}
@@ -187,6 +241,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.getAllByText("À faire").length).toBeGreaterThan(0);
@@ -208,11 +263,12 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "RDV planifié" }));
 
     expect(screen.getByRole("heading", { name: "Détails du RDV" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Logguer appel + RDV & suivant" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Logguer & suivant" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Consigner appel + RDV & suivant" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Consigner & suivant" })).toBeNull();
   });
 
-  it("exposes poste, email and phone in the session list", () => {
+  it("exposes poste, email and phone in the session list", async () => {
+    const user = userEvent.setup();
     render(
       <RunnerView
         {...runnerProps}
@@ -222,6 +278,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Poste")).toBeTruthy();
     expect(screen.getByText("Email")).toBeTruthy();
     expect(screen.getByText("Tél.")).toBeTruthy();
@@ -295,7 +352,9 @@ describe("RunnerView", () => {
       />,
     );
 
-    expect(screen.queryByText("Appel décroché")).toBeNull();
+    const historyPanel = screen.getByRole("heading", { name: "Historique d'appels" }).closest(".calls-context-panel");
+    expect(historyPanel).toBeTruthy();
+    expect(within(historyPanel as HTMLElement).queryByText("Appel décroché")).toBeNull();
   });
 
   it("bulk-logs the same outcome for selected contacts", async () => {
@@ -313,6 +372,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByLabelText("Sélectionner Claire"));
     await user.click(screen.getByRole("button", { name: "Appel décroché" }));
@@ -342,9 +402,9 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "Appel décroché" }));
     expect(screen.getByLabelText(/Planifier un rappel/i)).toBeTruthy();
     await user.click(screen.getByLabelText(/Planifier un rappel/i));
-    expect(screen.getByRole("group", { name: "Délai de rappel" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Choisir la date de rappel" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /\+3 j/i })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
+    await user.click(screen.getByRole("button", { name: /Consigner & suivant/i }));
     expect(onLogAndNext).toHaveBeenCalledWith(
       current.id,
       expect.objectContaining({
@@ -352,6 +412,333 @@ describe("RunnerView", () => {
         recallAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       }),
     );
+  });
+
+  it("allows skipping recall on unanswered without NPA", async () => {
+    const user = userEvent.setup();
+    const onLogAndNext = vi.fn();
+    const current = { ...bob, status: "pending" as const, outcome: null, attempt_count: 1 };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onLogAndNext={onLogAndNext}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    expect(screen.getByText("2e tentative")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Appel non décroché" }));
+    expect((screen.getByLabelText(/Planifier un rappel/i) as HTMLInputElement).checked).toBe(true);
+    await user.click(screen.getByLabelText(/Planifier un rappel/i));
+    expect(screen.getByText(/Pas de rappel cette fois/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Consigner & suivant/i }));
+    expect(onLogAndNext).toHaveBeenCalledWith(
+      current.id,
+      expect.objectContaining({
+        resultat: "Appel non décroché",
+        recallAt: null,
+        doNotCall: false,
+      }),
+    );
+  });
+
+  it("removes a pending contact from the session after confirm", async () => {
+    const user = userEvent.setup();
+    const onRemoveContacts = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onRemoveContacts={onRemoveContacts}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "Retirer" }));
+    expect(onRemoveContacts).toHaveBeenCalledWith([current.id]);
+  });
+
+  it("reschedules a recall from the recall queue", async () => {
+    const user = userEvent.setup();
+    const onUpdateRecall = vi.fn();
+    const current = {
+      ...bob,
+      status: "pending" as const,
+      outcome: "Appel non décroché" as const,
+      recall_at: "2026-07-12",
+      origin_session_id: 9,
+      origin_session_name: "Séance A",
+    };
+    render(
+      <RunnerView
+        {...runnerProps}
+        variant="recalls"
+        onUpdateRecall={onUpdateRecall}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.click(screen.getByRole("button", { name: "Modifier la date de rappel" }));
+    const dialog = screen.getByRole("dialog", { name: "Modifier la date de rappel" });
+    await user.click(within(dialog).getByRole("button", { name: "20" }));
+    expect(onUpdateRecall).toHaveBeenCalledWith([current.id], "2026-07-20");
+  });
+
+  it("bulk-reschedules multiple recalls from the list selection", async () => {
+    const user = userEvent.setup();
+    const onUpdateRecall = vi.fn();
+    const a = {
+      ...bob,
+      id: 11,
+      status: "pending" as const,
+      outcome: "Appel non décroché" as const,
+      recall_at: "2026-07-12",
+      origin_session_id: 9,
+      origin_session_name: "Séance A",
+    };
+    const b = {
+      ...a,
+      id: 12,
+      contact_name: "Claire",
+      recall_at: "2026-07-12",
+    };
+    render(
+      <RunnerView
+        {...runnerProps}
+        variant="recalls"
+        onUpdateRecall={onUpdateRecall}
+        contacts={[a, b]}
+        currentContact={a}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Liste" }));
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByLabelText("Sélectionner Claire"));
+    await user.click(screen.getByRole("button", { name: /Reporter \(2\)/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Reporter les rappels" });
+    await user.click(within(dialog).getByRole("button", { name: "Aujourd'hui" }));
+    expect(onUpdateRecall).toHaveBeenCalledWith(
+      [11, 12],
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
+  });
+
+  it("bulk-reschedules called contacts with a recall inside a classic session", async () => {
+    const user = userEvent.setup();
+    const onUpdateRecall = vi.fn();
+    const calledA = {
+      ...bob,
+      id: 21,
+      status: "called" as const,
+      outcome: "Appel non décroché" as const,
+      recall_at: "2026-07-12",
+    };
+    const calledB = {
+      ...calledA,
+      id: 22,
+      contact_name: "Claire",
+      recall_at: "2026-07-14",
+    };
+    render(
+      <RunnerView
+        {...runnerProps}
+        onUpdateRecall={onUpdateRecall}
+        contacts={[calledA, calledB]}
+        currentContact={null}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
+    await user.click(screen.getByLabelText("Sélectionner Claire"));
+    await user.click(screen.getByRole("button", { name: /Reporter \(2\)/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Reporter les rappels" });
+    await user.click(within(dialog).getByRole("button", { name: "Aujourd'hui" }));
+    expect(onUpdateRecall).toHaveBeenCalledWith([21, 22], expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it("filters the recall queue by origin session", async () => {
+    const user = userEvent.setup();
+    const a = {
+      ...bob,
+      id: 31,
+      status: "pending" as const,
+      outcome: "Appel non décroché" as const,
+      recall_at: "2026-07-12",
+      origin_session_id: 3,
+      origin_session_name: "Prospection Lyon",
+      attempt_count: 1,
+    };
+    const b = {
+      ...a,
+      id: 32,
+      contact_name: "Claire",
+      origin_session_id: 4,
+      origin_session_name: "Relance Paris",
+    };
+    render(
+      <RunnerView
+        {...runnerProps}
+        variant="recalls"
+        contacts={[a, b]}
+        currentContact={a}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Liste" }));
+    expect(screen.getByText("Bob Durand")).toBeTruthy();
+    expect(screen.getByText("Claire")).toBeTruthy();
+    expect(screen.getAllByText("2e tentative").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /Prospection Lyon/i }));
+    expect(screen.getByText("Bob Durand")).toBeTruthy();
+    expect(screen.queryByText("Claire")).toBeNull();
+  });
+
+  it("opens the command bar with ⌘K and runs a resultat action", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    await user.keyboard("{Meta>}k{/Meta}");
+    expect(screen.getByRole("dialog", { name: "Command bar Combo" })).toBeTruthy();
+    await user.click(screen.getByRole("option", { name: /Appel décroché/i }));
+    expect(screen.getByRole("button", { name: /Appel décroché/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("selects a resultat with digit shortcuts", async () => {
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "F", code: "KeyF" });
+    // QWERTY "3" ou AZERTY """ — on lit Digit3
+    fireEvent.keyDown(document, { key: '"', code: "Digit3" });
+    expect(screen.getByRole("button", { name: /Appel décroché/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens Combo command bar with ⌘K even if the OS launcher also listens", () => {
+    const launcher = vi.fn((event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+      }
+    });
+    window.addEventListener("keydown", launcher);
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "k", code: "KeyK", metaKey: true, bubbles: true });
+    expect(screen.getByRole("dialog", { name: "Command bar Combo" })).toBeTruthy();
+    expect(screen.queryByText(/pour ouvrir/i)).toBeNull();
+    window.removeEventListener("keydown", launcher);
+  });
+  it("sets recall delay with Shift+digit via keyboard code (AZERTY-safe)", () => {
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "F" });
+    fireEvent.keyDown(document, { key: "3", code: "Digit3", shiftKey: true });
+    expect(screen.getByRole("button", { name: "+3 j" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens shortcut help with ? and closes with Escape", () => {
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "?" });
+    expect(screen.getByRole("dialog", { name: "Aide raccourcis Combo" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Aide raccourcis Combo" })).toBeNull();
+  });
+
+  it("marks the combo demo as seen when dismissed with Escape", async () => {
+    const { ComboOnboardingDemo } = await import("./ComboOnboardingDemo");
+    const store: Record<string, string> = {};
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => {
+          store[key] = String(value);
+        },
+        removeItem: (key: string) => {
+          delete store[key];
+        },
+      },
+    });
+    const onClose = vi.fn();
+    render(<ComboOnboardingDemo open onClose={onClose} />);
+    expect(screen.getByRole("dialog", { name: "Démo Combo" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+    expect(store["xos-combo-demo-seen"]).toBe("1");
+  });
+
+  it("ignores digit shortcuts while typing in comments", async () => {
+    const user = userEvent.setup();
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Fiche" }));
+    const comments = screen.getByLabelText("Commentaires");
+    await user.click(comments);
+    await user.keyboard("3");
+    expect(screen.getByRole("button", { name: /Appel non décroché/i }).getAttribute("aria-pressed")).toBe("true");
+    expect((comments as HTMLTextAreaElement).value).toContain("3");
   });
 
   it("keeps the in-progress result and comments when changing the default recall delay", async () => {
@@ -373,10 +760,12 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "+7 j" }));
 
     expect(screen.getByRole("button", { name: "Appel décroché" }).getAttribute("aria-pressed")).toBe("true");
-    expect((screen.getByPlaceholderText("Notes sur l'appel…") as HTMLTextAreaElement).value).toBe("À rappeler après validation");
+    const comments = screen.getByLabelText("Commentaires") as HTMLTextAreaElement;
+    expect(comments.value).toBe("À rappeler après validation");
+    expect(comments.placeholder).toBe("Motif du rappel…");
   });
 
-  it("opens continuation session panel from Non contacté with date", async () => {
+  it("opens continuation session panel from Reporter with date", async () => {
     const user = userEvent.setup();
     const onDeferContacts = vi.fn();
     const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
@@ -392,10 +781,11 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.queryByRole("button", { name: /Créer séance #2/i })).toBeNull();
-    await user.click(screen.getByRole("button", { name: /Sélectionner les à faire/i }));
-    await user.click(screen.getByRole("button", { name: "Non contacté" }));
-    expect(screen.getByText(/Non contacté → Prospection Lyon #2/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Sélectionner \(2\)/i }));
+    await user.click(screen.getByRole("button", { name: "Reporter" }));
+    expect(screen.getByText(/Reporter → Prospection Lyon #2/i)).toBeTruthy();
     expect(screen.getByLabelText("Date de la séance")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Créer Prospection Lyon #2/i }));
     expect(onDeferContacts).toHaveBeenCalledWith(
@@ -407,7 +797,7 @@ describe("RunnerView", () => {
     );
   });
 
-  it("opens defer panel for Non contacté", async () => {
+  it("opens defer panel for Reporter", async () => {
     const user = userEvent.setup();
     const current = { ...bob, status: "pending" as const, outcome: null };
     render(
@@ -420,13 +810,14 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
-    await user.click(screen.getByRole("button", { name: "Non contacté" }));
-    expect(screen.getByText(/Non contacté → Séance test #2/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Reporter" }));
+    expect(screen.getByText(/Reporter → Séance test #2/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Créer Séance test #2/i })).toBeTruthy();
   });
 
-  it("advances focus after Logguer & suivant when parent clears focusedContactId", async () => {
+  it("advances focus after Consigner & suivant when parent clears focusedContactId", async () => {
     const user = userEvent.setup();
     const onLogAndNext = vi.fn();
     const pendingA = { ...bob, id: 2, status: "pending" as const, outcome: null };
@@ -450,7 +841,7 @@ describe("RunnerView", () => {
 
     await user.click(screen.getByRole("button", { name: "Fiche" }));
     expect(screen.getByRole("heading", { level: 3, name: "Bob Durand" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /Logguer & suivant/i }));
+    await user.click(screen.getByRole("button", { name: /Consigner & suivant/i }));
     expect(onLogAndNext).toHaveBeenCalledWith(2, expect.any(Object));
 
     const calledA = { ...pendingA, status: "called" as const, outcome: "Appel non décroché" as const };
@@ -490,6 +881,7 @@ describe("RunnerView", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
     await user.click(screen.getByLabelText("Sélectionner Bob Durand"));
     await user.click(screen.getByRole("button", { name: /Consigner pour 1/i }));
@@ -508,7 +900,7 @@ describe("RunnerView", () => {
     );
 
     expect(screen.getByText("Liste de la séance")).toBeTruthy();
-    expect(screen.queryByText("Journaliser l'appel")).toBeNull();
+    expect(screen.queryByText("Consigner l'appel")).toBeNull();
     expect(screen.getByText("Appel non décroché")).toBeTruthy();
   });
 });
@@ -565,7 +957,7 @@ describe("SessionsView hub filters", () => {
       <SessionsView
         sessions={sessions}
         stats={null}
-        recalls={[]}
+        recallCount={0}
         recallsLoading={false}
         loading={false}
         error={null}
@@ -590,6 +982,55 @@ describe("SessionsView hub filters", () => {
     expect(screen.getByText("Déjà faite")).toBeTruthy();
   });
 
+  it("confirms session deletion in a custom modal", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onDeleteSession = vi.fn().mockResolvedValue(undefined);
+    const sessions = [
+      {
+        id: 1,
+        name: "Secteur public",
+        status: "active" as const,
+        created_at: "2026-07-10T10:00:00Z",
+        scheduled_for: "2026-07-12",
+        session_type: "prospection" as const,
+        total: 10,
+        called: 2,
+        skipped: 0,
+        pending: 8,
+      },
+    ];
+
+    render(
+      <SessionsView
+        sessions={sessions}
+        stats={null}
+        recallCount={0}
+        recallsLoading={false}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn()}
+        onNewSession={vi.fn()}
+        onOpenSession={vi.fn()}
+        onOpenRecalls={vi.fn()}
+        onUpdateSession={vi.fn()}
+        onDeleteSession={onDeleteSession}
+      />,
+    );
+
+    confirmSpy.mockClear();
+    await user.click(screen.getByRole("button", { name: "Supprimer" }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Supprimer la séance" });
+    expect(within(dialog).getByText(/Secteur public/i)).toBeTruthy();
+
+    await user.click(within(dialog).getByRole("button", { name: "Supprimer" }));
+    await waitFor(() => expect(onDeleteSession).toHaveBeenCalledWith(1));
+    expect(screen.queryByRole("dialog", { name: "Supprimer la séance" })).toBeNull();
+
+    confirmSpy.mockRestore();
+  });
+
   it("opens the recalls queue from the hub", async () => {
     const user = userEvent.setup();
     const onOpenRecalls = vi.fn();
@@ -597,22 +1038,7 @@ describe("SessionsView hub filters", () => {
       <SessionsView
         sessions={[]}
         stats={null}
-        recalls={[
-          {
-            id: 55,
-            session_id: 9,
-            session_name: "Prospection Lyon",
-            session_status: "active",
-            contact_name: "Alice Martin",
-            account_name: "Acme",
-            phone: null,
-            email: null,
-            title: "DRH",
-            recall_at: "2026-07-10",
-            outcome: "Appel non décroché",
-            attempt_count: 1,
-          },
-        ]}
+        recallCount={1}
         recallsLoading={false}
         loading={false}
         error={null}
@@ -756,7 +1182,7 @@ describe("call targeting copy and controls", () => {
       />,
     );
     expect(screen.getByRole("note")).toBeTruthy();
-    expect(screen.getByText(/aucune ouverte/i)).toBeTruthy();
+    expect(screen.getByText(/ouverte.*perdue|perdue.*ouverte/i)).toBeTruthy();
   });
 
   it("shows guidance when lost is set to Non", () => {
@@ -805,7 +1231,8 @@ describe("call targeting copy and controls", () => {
 
     render(<FilterBuilder {...filterBuilderProps} filters={legacyPreset} />);
 
-    expect(screen.getByLabelText("Finance")).toBeTruthy();
+    expect(screen.getByText("Finance")).toBeTruthy();
+    expect(screen.getByText("(obsolète)")).toBeTruthy();
     expect((screen.getByRole("checkbox", { name: /Jamais appelé/i }) as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByText("Durée min (sec)")).toBeNull();
   });
@@ -877,6 +1304,7 @@ describe("preview selection and enriched rows", () => {
       [preview[0]],
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       "prospection",
+      [],
     );
   });
 

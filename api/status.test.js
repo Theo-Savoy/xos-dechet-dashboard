@@ -124,9 +124,11 @@ describe('GET /api/status', () => {
         email: 'ada@xos-learning.fr',
         fullName: 'Ada Lovelace',
         sfUserId: '005xx',
+        sfLinked: false,
       },
       salesforce: {
         connected: true,
+        userLinked: false,
         dailyApiRequests: { max: 15000, remaining: 14900 },
       },
       cache: { cleaner: { version: 'native' } },
@@ -181,6 +183,27 @@ describe('GET /api/status', () => {
     await expect(response.json()).resolves.not.toHaveProperty(
       'settings.cleaner_v2',
     );
+  });
+
+  it('reports disconnected when the user OAuth token does not work', async () => {
+    mockGetProfile.mockResolvedValue({
+      fullName: 'Ada Lovelace',
+      sfUserId: '005xx',
+      role: 'manager',
+      userLinked: true,
+      sfAuthConnectedAt: '2026-07-01T00:00:00Z',
+    });
+    mockFetchSFToken.mockResolvedValue({ error: 'sf_auth_error' });
+
+    const response = await GET(request('GET'));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      salesforce: {
+        connected: false,
+        userLinked: true,
+        dailyApiRequests: null,
+      },
+    });
   });
 });
 

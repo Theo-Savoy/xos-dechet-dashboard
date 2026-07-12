@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   DEFAULT_RECALL_DAYS,
@@ -7,22 +7,67 @@ import {
   RELANCE_DEFAULT_RESULTATS,
   type ResultatCall,
 } from "../../crm";
-import { EventPanel } from "./EventPanel";
+import { EventPanel, type EventPanelHandle } from "./EventPanel";
+import { ShareSessionPanel } from "./ShareSessionPanel";
 import { EmptyState } from "./EmptyState";
-import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
+import { CommandBar, ShortcutHelp } from "./CommandBar";
+import { ComboOnboardingDemo } from "./ComboOnboardingDemo";
+import {
+  digitFromKeyboardCode,
+  hasSeenComboDemo,
+  isModKey,
+  isTypingTarget,
+  readSoundsEnabled,
+  RECALL_SHORTCUT_PRESETS,
+  resultatFromDigit,
+  type ComboActionId,
+  writeSoundsEnabled,
+} from "./comboKeyboard";
+import { playComboSound, playRdvCelebrateSound } from "./comboSounds";
+import { RdvConfetti } from "./RdvConfetti";
+import {
+  countSessionRdvs,
+  readRdvGoal,
+  rdvHeatLevel,
+  writeRdvGoal,
+  type RdvHeat,
+} from "./rdvCelebrate";
+import { DatePicker, formatActivityDateFr, formatIsoDateFr, RdvGoalPicker, todayParisIso } from "./formControls";
+import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
 import {
   countRecallDateFilters,
+  listRecallOriginSessions,
   matchesRecallDateFilter,
+  matchesRecallSessionFilter,
   type RecallDateFilter,
+  type RecallSessionFilter,
 } from "./recallQueue";
 import { nextContinuationName } from "./sessionNaming";
-import type { ContactContext, SessionContact, SessionDetail, SessionSummary, TeamMember } from "./types";
+import type {
+  ContactContext,
+  ContactEventItem,
+  ContactOpportunityItem,
+  SessionContact,
+  SessionDetail,
+  SessionSummary,
+  TeamMember,
+} from "./types";
 import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 
 const RECALL_DAYS_KEY = "xos-calls-default-recall-days";
 
 type RunnerMode = "list" | "detail";
+
+type RunnerToast =
+  | { kind: "plain"; message: string }
+  | {
+      kind: "rdv";
+      count: number;
+      goal: number | null;
+      goalJustHit: boolean;
+      heat: RdvHeat;
+    };
 
 type LogPayload = {
   resultat: ResultatCall;
@@ -52,20 +97,37 @@ type RunnerViewProps = {
   awaitingEvent: SessionContact | null;
   contactContext: ContactContext | null;
   contextContactId: number | null;
+  contextTargetContactId?: number | null;
   contextLoading: boolean;
   onBack: () => void;
   onPin?: () => Promise<void>;
+  onShareSession?: (memberUserIds: string[]) => Promise<void>;
   onFocusContact: (contactId: number) => void;
   onLogAndNext: (contactId: number, payload: LogPayload) => void;
   onLogRdvAndNext: (
     contactId: number,
     payload: LogPayload,
-    event: { start: string; durationMin: number; invitees: string[] },
+    event: {
+      start: string;
+      durationMin: number;
+      subject: string;
+      ownerSfUserId: string | null;
+    },
   ) => void;
   onLogMany: (contactIds: number[], payload: LogPayload) => void;
-  onLogEvent: (start: string, durationMin: number, invitees: string[]) => void;
+  onLogEvent: (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => void;
   onDeferContacts: (contactIds: number[], payload: DeferPayload) => void;
+  onRemoveContacts: (contactIds: number[]) => void;
+  onUpdateRecall: (contactIds: number[], recallAt: string | null) => void;
+  /** Social cheer when the session RDV goal is hit (shared sessions). */
+  onCelebrateGoal?: (payload: { goal: number; count: number }) => void;
   team?: TeamMember[];
+  currentSfUserId?: string | null;
+  currentUserId?: string | null;
 };
 
 function addDaysIso(days: number): string {
@@ -84,10 +146,47 @@ function readDefaultRecallDays(): number {
   }
 }
 
+/** `completedAttempts` = appels déjà journalisés ; on affiche le n° de la prochaine tentative. */
+function formatAttemptLabel(completedAttempts: number): string {
+  const next = Math.max(1, completedAttempts + 1);
+  if (next === 1) return "1re tentative";
+  return `${next}e tentative`;
+}
+
+function formatRelativeDaysFr(iso: string | null | undefined, today = todayParisIso()): string {
+  const value = String(iso ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return "";
+  const from = new Date(`${value}T12:00:00Z`).getTime();
+  const to = new Date(`${today}T12:00:00Z`).getTime();
+  const days = Math.max(0, Math.round((to - from) / 86_400_000));
+  if (days === 0) return "aujourd’hui";
+  if (days === 1) return "hier";
+  return `il y a ${days} j`;
+}
+
+function sortOpportunities(opportunities: ContactOpportunityItem[]): ContactOpportunityItem[] {
+  return [...opportunities].sort((a, b) => {
+    const link = Number(Boolean(b.linked_to_contact)) - Number(Boolean(a.linked_to_contact));
+    if (link !== 0) return link;
+    return Number(a.is_closed) - Number(b.is_closed);
+  });
+}
+
+function sortEvents(events: ContactEventItem[]): ContactEventItem[] {
+  return [...events].sort((a, b) => {
+    const link = Number(Boolean(b.linked_to_contact)) - Number(Boolean(a.linked_to_contact));
+    if (link !== 0) return link;
+    return String(b.start_date_time || "").localeCompare(String(a.start_date_time || ""));
+  });
+}
+
 function listStatusDisplay(contact: SessionContact): {
   label: string;
   variant: "success" | "warning" | "accent" | "muted" | "default";
 } {
+  if (contact.status === "pending" && contact.claim_active && contact.claimed_by_label) {
+    return { label: `Pris · ${contact.claimed_by_label}`, variant: "warning" };
+  }
   if (contact.status === "pending") return { label: "À faire", variant: "accent" };
   if (contact.status === "skipped") return { label: "Non contacté", variant: "warning" };
   if (contact.outcome === "RDV planifié") return { label: contact.outcome, variant: "success" };
@@ -101,11 +200,12 @@ function listStatusDisplay(contact: SessionContact): {
 function computeKpis(contacts: SessionContact[]) {
   const total = contacts.length;
   const remaining = contacts.filter((c) => c.status === "pending").length;
-  const called = contacts.filter((c) => c.status === "called");
-  const decroches = called.filter((c) => c.outcome && PIPE_DECROCHE.includes(c.outcome)).length;
-  const argumentes = called.filter((c) => c.outcome === "Appel argumenté").length;
-  const rdv = called.filter((c) => c.outcome === "RDV planifié").length;
-  return { total, remaining, decroches, argumentes, rdv };
+  const calledRows = contacts.filter((c) => c.status === "called");
+  const called = calledRows.length;
+  const decroches = calledRows.filter((c) => c.outcome && PIPE_DECROCHE.includes(c.outcome)).length;
+  const argumentes = calledRows.filter((c) => c.outcome === "Appel argumenté").length;
+  const rdv = calledRows.filter((c) => c.outcome === "RDV planifié").length;
+  return { total, remaining, called, decroches, argumentes, rdv };
 }
 
 function ResultButtons({
@@ -118,20 +218,22 @@ function ResultButtons({
   disabledValues?: ResultatCall[];
 }) {
   return (
-    <div className="calls-result-grid" role="group" aria-label="Résultat de l'appel">
-      {RESULTAT_OPTIONS.map((opt) => {
+    <div className="calls-result-seg" role="group" aria-label="Résultat de l'appel">
+      {RESULTAT_OPTIONS.map((opt, index) => {
         const disabled = disabledValues.includes(opt.value);
+        const digit = String(index + 1);
         return (
           <button
             key={opt.value}
             type="button"
-            className={`calls-result-btn${value === opt.value ? " calls-result-btn--active" : ""}`}
+            className={`calls-result-seg__btn${value === opt.value ? " calls-result-seg__btn--active" : ""}`}
             aria-pressed={value === opt.value}
             disabled={disabled}
-            title={disabled ? "Sélectionnez un seul contact pour planifier un RDV" : undefined}
+            title={disabled ? "Sélectionnez un seul contact pour planifier un RDV" : digit}
             onClick={() => onChange(opt.value)}
           >
-            {opt.label}
+            <span>{opt.label}</span>
+            <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">{digit}</kbd>
           </button>
         );
       })}
@@ -139,12 +241,12 @@ function ResultButtons({
   );
 }
 
-const RECALL_PRESETS: { days: number; label: string }[] = [
-  { days: 0, label: "Aujourd'hui" },
-  { days: 1, label: "+1 j" },
-  { days: 3, label: "+3 j" },
-  { days: 7, label: "+7 j" },
-  { days: 14, label: "+14 j" },
+const RECALL_PRESETS: { days: number; label: string; shiftDigit: string }[] = [
+  { days: 0, label: "Aujourd'hui", shiftDigit: "1" },
+  { days: 1, label: "+1 j", shiftDigit: "2" },
+  { days: 3, label: "+3 j", shiftDigit: "3" },
+  { days: 7, label: "+7 j", shiftDigit: "4" },
+  { days: 14, label: "+14 j", shiftDigit: "5" },
 ];
 
 function RecallFields({
@@ -162,10 +264,10 @@ function RecallFields({
   onRecallAtChange: (value: string) => void;
   onDefaultRecallDaysChange: (days: number) => void;
 }) {
-  const autoRecall = RELANCE_DEFAULT_RESULTATS.includes(resultat);
   if (!RECALL_ELIGIBLE_RESULTATS.includes(resultat)) return null;
 
   const activePreset = RECALL_PRESETS.find((preset) => addDaysIso(preset.days) === recallAt)?.days;
+  const customActive = activePreset == null;
 
   const pickPreset = (days: number) => {
     onDefaultRecallDaysChange(days);
@@ -177,40 +279,70 @@ function RecallFields({
       <div className="calls-recall__head">
         <p className="calls-recall__title">Rappel</p>
       </div>
-      {!autoRecall && (
-        <label className="calls-checkbox calls-checkbox--tight">
-          <input
-            type="checkbox"
-            checked={scheduleRecall}
-            onChange={(e) => onScheduleRecallChange(e.target.checked)}
-          />
-          Planifier un rappel
-        </label>
-      )}
-      {(autoRecall || scheduleRecall) && (
-        <div className="calls-recall__body">
-          <div className="calls-recall__presets" role="group" aria-label="Délai de rappel">
+      <label className="calls-checkbox calls-checkbox--tight">
+        <input
+          type="checkbox"
+          checked={scheduleRecall}
+          onChange={(e) => onScheduleRecallChange(e.target.checked)}
+          aria-label="Planifier un rappel"
+        />
+        <span aria-hidden="true">Planifier un rappel</span>
+        <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">R</kbd>
+      </label>
+      {scheduleRecall ? (
+        <div className="calls-recall__track" role="group" aria-label="Choisir la date de rappel">
+          <div className="calls-recall__presets" role="group" aria-label="Délai rapide">
             {RECALL_PRESETS.map((preset) => (
               <button
                 key={preset.days}
                 type="button"
                 className={`calls-recall__chip${activePreset === preset.days ? " calls-recall__chip--active" : ""}`}
                 aria-pressed={activePreset === preset.days}
+                aria-label={preset.label}
+                title={`⇧${preset.shiftDigit}`}
                 onClick={() => pickPreset(preset.days)}
               >
-                {preset.label}
+                <span aria-hidden="true">{preset.label}</span>
+                <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                  ⇧{preset.shiftDigit}
+                </kbd>
               </button>
             ))}
-            <DatePicker
-              compact
-              label="Date de rappel"
-              value={recallAt}
-              onChange={onRecallAtChange}
-            />
           </div>
+          <span className="calls-recall__or" aria-hidden="true">ou</span>
+          <DatePicker
+            compact
+            label="Choisir une date"
+            value={recallAt}
+            onChange={onRecallAtChange}
+            triggerClassName={`calls-recall__chip calls-recall__chip--date${customActive ? " calls-recall__chip--active" : ""}`}
+          />
         </div>
+      ) : (
+        <p className="calls-muted calls-recall__skip-hint">
+          Pas de rappel cette fois — le contact reste appelable (contrairement au NPA).
+        </p>
       )}
     </div>
+  );
+}
+
+function ContextSideSkeleton({ quiet = false }: { quiet?: boolean }) {
+  return (
+    <>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>Historique d&apos;appels</h3>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
+      </GlassCard>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>Opportunités du compte</h3>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
+      </GlassCard>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>RDV du compte</h3>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
+      </GlassCard>
+    </>
   );
 }
 
@@ -226,24 +358,34 @@ export function RunnerView({
   awaitingEvent,
   contactContext,
   contextContactId,
-  contextLoading,
+  contextTargetContactId = null,
+  contextLoading: _contextLoading,
   onBack,
   onPin,
+  onShareSession,
   onFocusContact,
   onLogAndNext,
   onLogRdvAndNext,
   onLogMany,
   onLogEvent,
   onDeferContacts,
+  onRemoveContacts,
+  onUpdateRecall,
+  onCelebrateGoal,
   team = [],
+  currentSfUserId = null,
+  currentUserId = null,
 }: RunnerViewProps) {
   const isRecallQueue = variant === "recalls";
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareSaving, setShareSaving] = useState(false);
   const today = todayParisIso();
   const [mode, setMode] = useState<RunnerMode>("list");
   const [focusedId, setFocusedId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [listStatusFilter, setListStatusFilter] = useState<ListStatusFilter>("all");
   const [recallDateFilter, setRecallDateFilter] = useState<RecallDateFilter>("today");
+  const [recallSessionFilter, setRecallSessionFilter] = useState<RecallSessionFilter>("all");
   const [listQuery, setListQuery] = useState("");
   const [resultat, setResultat] = useState<ResultatCall>(RESULTAT_OPTIONS[0].value);
   const [bulkResultat, setBulkResultat] = useState<ResultatCall>(RESULTAT_OPTIONS[0].value);
@@ -259,18 +401,77 @@ export function RunnerView({
   const [deferIds, setDeferIds] = useState<number[] | null>(null);
   const [deferDate, setDeferDate] = useState(() => addDaysIso(readDefaultRecallDays()));
   const [deferTargetId, setDeferTargetId] = useState<number | null>(null);
+  const [bulkRecallPicker, setBulkRecallPicker] = useState<{ ids: number[]; seed: string } | null>(null);
   const [pinned, setPinned] = useState(false);
+  const [toast, setToast] = useState<RunnerToast | null>(null);
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(() => !hasSeenComboDemo());
+  const [soundsEnabled, setSoundsEnabled] = useState(readSoundsEnabled);
+  const [sessionRdvCount, setSessionRdvCount] = useState(() => countSessionRdvs(contacts));
+  const [rdvGoal, setRdvGoal] = useState<number | null>(() =>
+    isRecallQueue ? null : readRdvGoal(session.id),
+  );
+  const [confettiBurst, setConfettiBurst] = useState(0);
+  const [confettiHeat, setConfettiHeat] = useState<RdvHeat>(1);
+  const [goalBurst, setGoalBurst] = useState(false);
+  const [kpiGoalPulse, setKpiGoalPulse] = useState(false);
+  const sessionRdvRef = useRef(sessionRdvCount);
+  const bootstrappedDetail = useRef(false);
+  const eventPanelRef = useRef<EventPanelHandle>(null);
 
   useEffect(() => {
     setPinned(false);
-  }, [session.id]);
+    const n = countSessionRdvs(contacts);
+    sessionRdvRef.current = n;
+    setSessionRdvCount(n);
+    setRdvGoal(isRecallQueue ? null : readRdvGoal(session.id));
+  }, [session.id, isRecallQueue]);
+
+  useEffect(() => {
+    const n = countSessionRdvs(contacts);
+    if (n >= sessionRdvRef.current) {
+      sessionRdvRef.current = n;
+      setSessionRdvCount(n);
+    }
+  }, [contacts]);
+
+  useEffect(() => {
+    if (bootstrappedDetail.current || !currentContact) return;
+    bootstrappedDetail.current = true;
+    if (currentContact.status !== "pending") return;
+    setFocusedId(currentContact.id);
+    onFocusContact(currentContact.id);
+    setMode("detail");
+  }, [currentContact, onFocusContact]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const ms =
+      toast.kind === "rdv"
+        ? toast.goalJustHit
+          ? 5200
+          : toast.heat >= 4
+            ? 3800
+            : toast.heat >= 3
+              ? 3200
+              : 2600
+        : 1500;
+    const timeout = window.setTimeout(() => setToast(null), ms);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!kpiGoalPulse) return;
+    const timeout = window.setTimeout(() => setKpiGoalPulse(false), 7200);
+    return () => window.clearTimeout(timeout);
+  }, [kpiGoalPulse]);
 
   const kpis = useMemo(() => computeKpis(contacts), [contacts]);
   const canRecall = RECALL_ELIGIBLE_RESULTATS.includes(resultat) && !doNotCall;
   const bulkCanRecall = RECALL_ELIGIBLE_RESULTATS.includes(bulkResultat) && !bulkDoNotCall;
-  const willSendRecall = canRecall && (RELANCE_DEFAULT_RESULTATS.includes(resultat) || scheduleRecall);
-  const bulkWillSendRecall =
-    bulkCanRecall && (RELANCE_DEFAULT_RESULTATS.includes(bulkResultat) || bulkScheduleRecall);
+  const willSendRecall = canRecall && scheduleRecall;
+  const bulkWillSendRecall = bulkCanRecall && bulkScheduleRecall;
   const pendingContacts = useMemo(() => contacts.filter((c) => c.status === "pending"), [contacts]);
   const statusCounts = useMemo(
     () => ({
@@ -281,29 +482,36 @@ export function RunnerView({
     }),
     [contacts],
   );
+  const recallOriginSessions = useMemo(
+    () => listRecallOriginSessions(contacts),
+    [contacts],
+  );
   const recallDateCounts = useMemo(
     () =>
       countRecallDateFilters(
-        contacts.map((c) => ({
-          id: c.id,
-          session_id: c.origin_session_id ?? 0,
-          session_name: c.origin_session_name ?? "",
-          session_status: "active" as const,
-          contact_name: c.contact_name,
-          account_name: c.account_name,
-          phone: c.phone,
-          recall_at: c.recall_at ?? "",
-          outcome: c.outcome,
-        })),
+        contacts
+          .filter((c) => matchesRecallSessionFilter(c.origin_session_id, recallSessionFilter))
+          .map((c) => ({
+            id: c.id,
+            session_id: c.origin_session_id ?? 0,
+            session_name: c.origin_session_name ?? "",
+            session_status: "active" as const,
+            contact_name: c.contact_name,
+            account_name: c.account_name,
+            phone: c.phone,
+            recall_at: c.recall_at ?? "",
+            outcome: c.outcome,
+          })),
         today,
       ),
-    [contacts, today],
+    [contacts, today, recallSessionFilter],
   );
   const filteredContacts = useMemo(() => {
     const q = listQuery.trim().toLowerCase();
     return contacts.filter((contact) => {
       if (isRecallQueue) {
         if (!matchesRecallDateFilter(contact.recall_at, recallDateFilter, today)) return false;
+        if (!matchesRecallSessionFilter(contact.origin_session_id, recallSessionFilter)) return false;
       } else if (listStatusFilter !== "all" && contact.status !== listStatusFilter) {
         return false;
       }
@@ -321,17 +529,32 @@ export function RunnerView({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [contacts, listStatusFilter, listQuery, isRecallQueue, recallDateFilter, today]);
+  }, [contacts, listStatusFilter, listQuery, isRecallQueue, recallDateFilter, recallSessionFilter, today]);
   const pendingSelected = useMemo(
     () => [...selectedIds].filter((id) => pendingContacts.some((c) => c.id === id)),
     [selectedIds, pendingContacts],
   );
-  const visiblePending = useMemo(
-    () => filteredContacts.filter((c) => c.status === "pending"),
-    [filteredContacts],
+  const recallManageSelected = useMemo(
+    () =>
+      contacts
+        .filter((contact) => {
+          if (!selectedIds.has(contact.id) || !contact.recall_at) return false;
+          return isRecallQueue || contact.status === "called";
+        })
+        .map((contact) => contact.id),
+    [contacts, selectedIds, isRecallQueue],
   );
-  const allPendingSelected =
-    visiblePending.length > 0 && visiblePending.every((c) => selectedIds.has(c.id));
+  const selectableContacts = useMemo(
+    () =>
+      filteredContacts.filter(
+        (contact) =>
+          contact.status === "pending"
+          || (Boolean(contact.recall_at) && (isRecallQueue || contact.status === "called")),
+      ),
+    [filteredContacts, isRecallQueue],
+  );
+  const allSelectableSelected =
+    selectableContacts.length > 0 && selectableContacts.every((c) => selectedIds.has(c.id));
   const singleSelectedId = pendingSelected.length === 1 ? pendingSelected[0] : null;
   const singleSelectedContact = singleSelectedId
     ? contacts.find((c) => c.id === singleSelectedId) ?? null
@@ -367,7 +590,39 @@ export function RunnerView({
     focusedContact?.title
     ?? (contextContactId === focusedContact?.id ? contactContext?.title : null)
     ?? null;
-  const contextApplies = contextContactId != null && contextContactId === focusedContact?.id;
+  const contextReady = Boolean(
+    contactContext && contextContactId != null && contextContactId === focusedContact?.id,
+  );
+  const contextBusy = Boolean(
+    focusedContact
+    && contextTargetContactId === focusedContact.id
+    && contextContactId !== focusedContact.id,
+  );
+  const contextApplies = contextReady;
+  const [showContextSkeleton, setShowContextSkeleton] = useState(false);
+
+  useEffect(() => {
+    if (!contextBusy) {
+      setShowContextSkeleton(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowContextSkeleton(true), 160);
+    return () => window.clearTimeout(timer);
+  }, [contextBusy, focusedContact?.id]);
+  const sortedOpportunities = useMemo(
+    () => sortOpportunities(contactContext?.opportunities ?? []),
+    [contactContext?.opportunities],
+  );
+  const sortedEvents = useMemo(
+    () => sortEvents(contactContext?.events ?? []),
+    [contactContext?.events],
+  );
+  const nextContact = useMemo(() => {
+    if (!focusedContact) return pendingContacts[0] ?? null;
+    const focusedIndex = contacts.findIndex((contact) => contact.id === focusedContact.id);
+    if (focusedIndex < 0) return pendingContacts.find((contact) => contact.id !== focusedContact.id) ?? null;
+    return contacts.slice(focusedIndex + 1).find((contact) => contact.status === "pending") ?? null;
+  }, [contacts, focusedContact, pendingContacts]);
 
   useEffect(() => {
     if (!isRecallQueue) return;
@@ -375,6 +630,14 @@ export function RunnerView({
       setRecallDateFilter("overdue");
     }
   }, [isRecallQueue, recallDateFilter, recallDateCounts.today, recallDateCounts.overdue]);
+
+  useEffect(() => {
+    if (!isRecallQueue) return;
+    if (recallSessionFilter === "all") return;
+    if (!recallOriginSessions.some((session) => session.id === recallSessionFilter)) {
+      setRecallSessionFilter("all");
+    }
+  }, [isRecallQueue, recallSessionFilter, recallOriginSessions]);
 
   useEffect(() => {
     if (awaitingEvent) setMode("detail");
@@ -420,18 +683,25 @@ export function RunnerView({
   }, [bulkResultat]);
 
   useEffect(() => {
-    // Drop selections that are no longer pending after a bulk action.
+    // Drop selections that are no longer actionable after a bulk action.
     setSelectedIds((current) => {
-      const next = new Set([...current].filter((id) => pendingContacts.some((c) => c.id === id)));
+      const next = new Set(
+        [...current].filter((id) => {
+          const contact = contacts.find((row) => row.id === id);
+          if (!contact) return false;
+          if (contact.status === "pending") return true;
+          return Boolean(contact.recall_at) && (isRecallQueue || contact.status === "called");
+        }),
+      );
       return next.size === current.size ? current : next;
     });
-  }, [pendingContacts]);
+  }, [contacts, isRecallQueue]);
 
-  const openDetail = (contactId: number) => {
+  const openDetail = useCallback((contactId: number) => {
     setFocusedId(contactId);
     onFocusContact(contactId);
     setMode("detail");
-  };
+  }, [onFocusContact]);
 
   const toggleSelected = (contactId: number) => {
     setSelectedIds((current) => {
@@ -442,12 +712,12 @@ export function RunnerView({
     });
   };
 
-  const toggleSelectAllPending = () => {
-    if (allPendingSelected) {
+  const toggleSelectAllSelectable = () => {
+    if (allSelectableSelected) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(visiblePending.map((c) => c.id)));
+    setSelectedIds(new Set(selectableContacts.map((c) => c.id)));
   };
 
   const handleDefaultRecallDays = (days: number) => {
@@ -461,7 +731,36 @@ export function RunnerView({
     }
   };
 
-  const handleSubmit = () => {
+  const celebrateRdv = useCallback(() => {
+    const next = sessionRdvRef.current + 1;
+    sessionRdvRef.current = next;
+    setSessionRdvCount(next);
+    const goalJustHit = rdvGoal != null && next === rdvGoal;
+    const heat = rdvHeatLevel(next, goalJustHit);
+    setConfettiHeat(heat);
+    setGoalBurst(goalJustHit);
+    setConfettiBurst((key) => key + 1);
+    if (goalJustHit) setKpiGoalPulse(true);
+    playRdvCelebrateSound(heat, soundsEnabled);
+    setToast({
+      kind: "rdv",
+      count: next,
+      goal: rdvGoal,
+      goalJustHit,
+      heat,
+    });
+    if (goalJustHit && rdvGoal != null && onCelebrateGoal) {
+      onCelebrateGoal({ goal: rdvGoal, count: next });
+    }
+  }, [onCelebrateGoal, rdvGoal, soundsEnabled]);
+
+  const handleRdvGoalChange = (goal: number | null) => {
+    if (isRecallQueue) return;
+    setRdvGoal(goal);
+    writeRdvGoal(session.id, goal);
+  };
+
+  const handleSubmit = useCallback(() => {
     if (!focusedContact || focusedContact.status !== "pending") return;
     if (resultat === "RDV planifié") return;
     onLogAndNext(focusedContact.id, {
@@ -470,9 +769,22 @@ export function RunnerView({
       recallAt: willSendRecall ? recallAt : null,
       doNotCall,
     });
-  };
+    playComboSound(willSendRecall ? "recall" : "success", soundsEnabled);
+    setToast({
+      kind: "plain",
+      message: willSendRecall
+        ? `Loggué · rappel ${formatIsoDateFr(recallAt)}`
+        : canRecall && !scheduleRecall
+          ? "Loggué · sans rappel"
+          : "Loggué",
+    });
+  }, [canRecall, comments, doNotCall, focusedContact, onLogAndNext, recallAt, resultat, scheduleRecall, soundsEnabled, willSendRecall]);
 
-  const handleRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
+  const handleRdvSubmit = (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => {
     if (!focusedContact || focusedContact.status !== "pending") return;
     onLogRdvAndNext(
       focusedContact.id,
@@ -482,9 +794,22 @@ export function RunnerView({
         recallAt: null,
         doNotCall,
       },
-      { start, durationMin, invitees },
+      { start, durationMin, subject: meta.subject, ownerSfUserId: meta.ownerSfUserId },
     );
+    celebrateRdv();
   };
+
+  const handleFinalizeEvent = useCallback(
+    (
+      start: string,
+      durationMin: number,
+      meta: { subject: string; ownerSfUserId: string | null },
+    ) => {
+      onLogEvent(start, durationMin, meta);
+      celebrateRdv();
+    },
+    [celebrateRdv, onLogEvent],
+  );
 
   const handleBulkLog = () => {
     if (pendingSelected.length === 0) return;
@@ -498,6 +823,10 @@ export function RunnerView({
     setBulkComments("");
     setBulkDoNotCall(false);
     setBulkRecallAt(addDaysIso(defaultRecallDays));
+    setToast({
+      kind: "plain",
+      message: bulkWillSendRecall ? `Loggué · rappel ${formatIsoDateFr(bulkRecallAt)}` : "Loggué",
+    });
   };
 
   const openDefer = (ids: number[]) => {
@@ -518,9 +847,317 @@ export function RunnerView({
     setSelectedIds(new Set());
   };
 
+  const openBulkRecallPicker = (ids: number[]) => {
+    if (ids.length === 0) return;
+    const seed =
+      contacts.find((contact) => contact.id === ids[0])?.recall_at
+      || addDaysIso(defaultRecallDays);
+    setBulkRecallPicker({ ids, seed });
+    setDeferIds(null);
+  };
+
+  const applyRecallDate = (ids: number[], next: string) => {
+    if (ids.length === 0) return;
+    onUpdateRecall(ids, next);
+    setSelectedIds(new Set());
+    setBulkRecallPicker(null);
+  };
+
+  const confirmRemove = (ids: number[], label: string) => {
+    if (ids.length === 0) return;
+    const clearingRecall = isRecallQueue
+      || ids.every((id) => {
+        const contact = contacts.find((row) => row.id === id);
+        return contact?.status === "called" && Boolean(contact.recall_at);
+      });
+    const message = clearingRecall
+      ? ids.length === 1
+        ? `Retirer ${label} des rappels ? L'historique d'appel est conservé.`
+        : `Retirer ${ids.length} contacts des rappels ? L'historique d'appel est conservé.`
+      : ids.length === 1
+        ? `Retirer ${label} de la séance ?`
+        : `Retirer ${ids.length} contacts de la séance ?`;
+    if (!window.confirm(message)) return;
+
+    if (isRecallQueue) {
+      onRemoveContacts(ids);
+    } else {
+      const toDelete: number[] = [];
+      const toClearRecall: number[] = [];
+      for (const id of ids) {
+        const contact = contacts.find((row) => row.id === id);
+        if (!contact) continue;
+        if (contact.status === "called" && contact.recall_at) toClearRecall.push(id);
+        else if (contact.status === "pending" || contact.status === "skipped") toDelete.push(id);
+      }
+      if (toDelete.length) onRemoveContacts(toDelete);
+      if (toClearRecall.length) onUpdateRecall(toClearRecall, null);
+    }
+    setSelectedIds(new Set());
+    setBulkRecallPicker(null);
+  };
+
+  const navigateContact = useCallback(
+    (direction: 1 | -1) => {
+      const pool = filteredContacts.length > 0 ? filteredContacts : contacts;
+      if (pool.length === 0) return;
+      const currentId = focusedContact?.id ?? focusedId ?? pool[0]?.id;
+      const index = pool.findIndex((c) => c.id === currentId);
+      const nextIndex = index < 0 ? 0 : (index + direction + pool.length) % pool.length;
+      const next = pool[nextIndex];
+      if (!next) return;
+      openDetail(next.id);
+      playComboSound("tick", soundsEnabled);
+    },
+    [contacts, filteredContacts, focusedContact?.id, focusedId, openDetail, soundsEnabled],
+  );
+
+  const runComboAction = useCallback(
+    (id: ComboActionId) => {
+      switch (id) {
+        case "result-1":
+        case "result-2":
+        case "result-3":
+        case "result-4":
+        case "result-5": {
+          if (mode !== "detail" || focusedContact?.status !== "pending") return;
+          const digit = id.slice(-1);
+          const next = resultatFromDigit(digit);
+          if (!next) return;
+          setResultat(next);
+          playComboSound("tick", soundsEnabled);
+          return;
+        }
+        case "toggle-recall": {
+          if (mode !== "detail" || focusedContact?.status !== "pending") return;
+          setScheduleRecall((v) => !v);
+          playComboSound("tick", soundsEnabled);
+          return;
+        }
+        case "recall-0":
+        case "recall-1":
+        case "recall-3":
+        case "recall-7":
+        case "recall-14": {
+          if (mode !== "detail" || focusedContact?.status !== "pending") return;
+          const preset = RECALL_SHORTCUT_PRESETS.find((item) => item.id === id);
+          if (!preset) return;
+          setScheduleRecall(true);
+          handleDefaultRecallDays(preset.days);
+          playComboSound("recall", soundsEnabled);
+          return;
+        }
+        case "toggle-npa": {
+          if (mode !== "detail" || focusedContact?.status !== "pending") return;
+          setDoNotCall((v) => !v);
+          playComboSound("warn", soundsEnabled);
+          return;
+        }
+        case "log-next":
+          handleSubmit();
+          return;
+        case "nav-next":
+          navigateContact(1);
+          return;
+        case "nav-prev":
+          navigateContact(-1);
+          return;
+        case "mode-list":
+          setMode("list");
+          playComboSound("tick", soundsEnabled);
+          return;
+        case "mode-fiche":
+          if (focusedContact) openDetail(focusedContact.id);
+          else if (currentContact) openDetail(currentContact.id);
+          else setMode("detail");
+          playComboSound("tick", soundsEnabled);
+          return;
+        case "call": {
+          const phone = focusedContact?.phone;
+          if (!phone) return;
+          window.open(`tel:${phone}`, "_self");
+          playComboSound("tick", soundsEnabled);
+          return;
+        }
+        case "defer": {
+          if (isRecallQueue || !focusedContact || focusedContact.status !== "pending") return;
+          openDefer([focusedContact.id]);
+          playComboSound("tick", soundsEnabled);
+          return;
+        }
+        case "remove": {
+          if (!focusedContact) return;
+          confirmRemove([focusedContact.id], focusedContact.contact_name);
+          return;
+        }
+        case "help":
+          setHelpOpen(true);
+          playComboSound("whoosh", soundsEnabled);
+          return;
+        case "command-bar":
+          setCommandBarOpen(true);
+          playComboSound("whoosh", soundsEnabled);
+          return;
+        case "replay-demo":
+          setDemoOpen(true);
+          return;
+        case "toggle-sounds": {
+          setSoundsEnabled((prev) => {
+            const next = !prev;
+            writeSoundsEnabled(next);
+            return next;
+          });
+          return;
+        }
+        default:
+          return;
+      }
+    },
+    [
+      currentContact,
+      focusedContact,
+      handleDefaultRecallDays,
+      handleSubmit,
+      isRecallQueue,
+      mode,
+      navigateContact,
+      openDetail,
+      soundsEnabled,
+    ],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Capture + stopPropagation : ⌘K ne doit pas ouvrir le launcher OS.
+      if (isModKey(event) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (demoOpen || helpOpen) return;
+        setCommandBarOpen(true);
+        playComboSound("whoosh", soundsEnabled);
+        return;
+      }
+
+      // Démo / overlays gèrent Esc + focus trap eux-mêmes.
+      if (demoOpen || commandBarOpen || helpOpen) return;
+
+      // ⌘↵ doit marcher même dans un champ (commentaires / date RDV).
+      if (
+        event.key === "Enter"
+        && isModKey(event)
+        && mode === "detail"
+        && !loading
+        && focusedContact?.status === "pending"
+      ) {
+        event.preventDefault();
+        if (resultat === "RDV planifié") {
+          eventPanelRef.current?.submit();
+        } else {
+          handleSubmit();
+        }
+        return;
+      }
+
+      if (isTypingTarget(event.target)) return;
+
+      if (event.key === "?" || (event.shiftKey && event.key === "/")) {
+        event.preventDefault();
+        setHelpOpen(true);
+        playComboSound("whoosh", soundsEnabled);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setBulkRecallPicker(null);
+        setDeferIds(null);
+        return;
+      }
+
+      if (event.shiftKey && event.code.startsWith("Digit")) {
+        const digit = event.code.replace("Digit", "");
+        const preset = RECALL_SHORTCUT_PRESETS.find((item) => item.shiftDigit === digit);
+        if (preset) {
+          event.preventDefault();
+          runComboAction(preset.id);
+        }
+        return;
+      }
+
+      // AZERTY : sans Shift, Digit1–5 émettent &é"'( — on lit event.code.
+      if (!event.shiftKey && !isModKey(event) && !event.altKey) {
+        const digit = digitFromKeyboardCode(event.code);
+        if (digit) {
+          event.preventDefault();
+          runComboAction(`result-${digit}` as ComboActionId);
+          return;
+        }
+      }
+
+      if (isModKey(event) || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "r") {
+        event.preventDefault();
+        runComboAction("toggle-recall");
+        return;
+      }
+      if (key === "n") {
+        event.preventDefault();
+        runComboAction("toggle-npa");
+        return;
+      }
+      if (key === "d") {
+        event.preventDefault();
+        runComboAction("defer");
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        runComboAction("remove");
+        return;
+      }
+      if (key === "j") {
+        event.preventDefault();
+        runComboAction("nav-next");
+        return;
+      }
+      if (key === "k") {
+        event.preventDefault();
+        runComboAction("nav-prev");
+        return;
+      }
+      if (key === "l") {
+        event.preventDefault();
+        runComboAction("mode-list");
+        return;
+      }
+      if (key === "f") {
+        event.preventDefault();
+        runComboAction("mode-fiche");
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    commandBarOpen,
+    demoOpen,
+    focusedContact?.status,
+    handleSubmit,
+    helpOpen,
+    loading,
+    mode,
+    resultat,
+    runComboAction,
+    soundsEnabled,
+  ]);
+
   const continuationLabel = nextContinuationName(session.name);
 
-  const handleBulkRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
+  const handleBulkRdvSubmit = (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => {
     if (!singleSelectedId) return;
     onLogRdvAndNext(
       singleSelectedId,
@@ -530,25 +1167,61 @@ export function RunnerView({
         recallAt: null,
         doNotCall: bulkDoNotCall,
       },
-      { start, durationMin, invitees },
+      { start, durationMin, subject: meta.subject, ownerSfUserId: meta.ownerSfUserId },
     );
     setSelectedIds(new Set());
     setBulkComments("");
     setBulkDoNotCall(false);
+    celebrateRdv();
   };
 
   const called = contacts.filter((c) => c.status === "called").length;
 
   return (
-    <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}`}>
-      <header className="calls-view__header">
-        <div className="calls-view__header-start">
-          <Button variant="secondary" onClick={onBack}>
+    <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}${mode === "detail" ? " calls-view--detail" : ""}`}>
+      {toast?.kind === "plain" && (
+        <div className="calls-runner-toast" role="status">
+          {toast.message}
+        </div>
+      )}
+      {toast?.kind === "rdv" && (
+        <div
+          className={`calls-runner-toast calls-runner-toast--rdv calls-runner-toast--heat-${toast.heat}${toast.goalJustHit ? " calls-runner-toast--goal" : ""}`}
+          role="status"
+        >
+          <p className="calls-runner-toast__eyebrow">
+            {toast.goalJustHit ? "Objectif atteint" : "RDV planifié"}
+          </p>
+          <p className="calls-runner-toast__title">
+            {toast.goalJustHit
+              ? `${toast.count} RDV — bravo`
+              : toast.count === 1
+                ? "Premier RDV de la séance"
+                : `${toast.count} RDV dans la séance`}
+          </p>
+          <p className="calls-runner-toast__meta">
+            {toast.goal
+              ? `Objectif ${toast.count}/${toast.goal}`
+              : toast.heat >= 3
+                ? "La séance chauffe"
+                : "Continue comme ça"}
+          </p>
+        </div>
+      )}
+      <RdvConfetti burstKey={confettiBurst} heat={confettiHeat} goalHit={goalBurst} />
+      <header className="calls-view__header calls-view__header--runner">
+        <div className="calls-view__nav">
+          <Button variant="secondary" className="calls-view__back" onClick={onBack}>
             Quitter
           </Button>
-          <div>
+          <div className="calls-view__titleblock">
             <Tag variant="accent">{isRecallQueue ? "File de rappels" : "Cockpit"}</Tag>
             <h2>{isRecallQueue ? "Rappels" : session.name}</h2>
+            {!isRecallQueue && (session.members?.length ?? 0) > 0 && (
+              <p className="calls-muted calls-share-hint">
+                Partagée avec {session.members!.map((m) => m.label).join(", ")}
+              </p>
+            )}
           </div>
         </div>
         <div className="calls-view__actions">
@@ -558,18 +1231,47 @@ export function RunnerView({
               className={`calls-mode-toggle__btn${mode === "list" ? " calls-mode-toggle__btn--active" : ""}`}
               aria-pressed={mode === "list"}
               onClick={() => setMode("list")}
+              title="L"
             >
-              Liste
+              Liste <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">L</kbd>
             </button>
             <button
               type="button"
               className={`calls-mode-toggle__btn${mode === "detail" ? " calls-mode-toggle__btn--active" : ""}`}
               aria-pressed={mode === "detail"}
               onClick={() => setMode("detail")}
+              title="F"
             >
-              Fiche
+              Fiche <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">F</kbd>
             </button>
           </div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setCommandBarOpen(true);
+              playComboSound("whoosh", soundsEnabled);
+            }}
+            title="Command bar (⌘K)"
+            aria-label="Command bar"
+          >
+            ⌘K
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setHelpOpen(true);
+              playComboSound("whoosh", soundsEnabled);
+            }}
+            title="Aide raccourcis (?)"
+            aria-label="Aide raccourcis"
+          >
+            ?
+          </Button>
+          {!isRecallQueue && onShareSession && (
+            <Button variant="secondary" onClick={() => setShareOpen(true)}>
+              Partager
+            </Button>
+          )}
           {!isRecallQueue && onPin && (
             <Button
               variant="secondary"
@@ -586,8 +1288,30 @@ export function RunnerView({
         </div>
       </header>
 
+      {shareOpen && onShareSession && currentUserId && (
+        <ShareSessionPanel
+          members={session.members ?? []}
+          team={team}
+          currentUserId={currentUserId}
+          saving={shareSaving}
+          onClose={() => setShareOpen(false)}
+          onSave={async (ids) => {
+            setShareSaving(true);
+            try {
+              await onShareSession(ids);
+              setShareOpen(false);
+            } finally {
+              setShareSaving(false);
+            }
+          }}
+        />
+      )}
+
       {!isRecallQueue && (
         <>
+          <div className={mode === "detail" ? "calls-progress-sticky" : undefined}>
+            <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
+          </div>
           <div className="calls-cockpit-kpis" aria-label="Indicateurs de séance">
             <GlassCard className="calls-stat">
               <span>Contacts</span>
@@ -599,43 +1323,99 @@ export function RunnerView({
             </GlassCard>
             <GlassCard className="calls-stat">
               <span>Décrochés</span>
-              <strong className="xos-numeric">{kpis.decroches}</strong>
+              <strong className="xos-numeric calls-stat__value">
+                {kpis.decroches}
+                {kpis.called > 0 && (
+                  <span className="calls-stat__rate">
+                    {Math.round((kpis.decroches / kpis.called) * 1000) / 10}&nbsp;%
+                  </span>
+                )}
+              </strong>
             </GlassCard>
             <GlassCard className="calls-stat">
               <span>Argumentés</span>
               <strong className="xos-numeric">{kpis.argumentes}</strong>
             </GlassCard>
-            <GlassCard className="calls-stat">
+            <GlassCard
+              className={[
+                "calls-stat",
+                "calls-stat--rdv",
+                rdvGoal != null && sessionRdvCount >= rdvGoal ? "calls-stat--rdv-goal" : "",
+                kpiGoalPulse ? "calls-stat--rdv-goal-hit" : "",
+                sessionRdvCount >= 2 ? `calls-stat--rdv-heat-${rdvHeatLevel(sessionRdvCount, false)}` : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
               <span>RDV</span>
-              <strong className="xos-numeric">{kpis.rdv}</strong>
+              <strong className="xos-numeric">
+                {sessionRdvCount}
+                {rdvGoal != null ? (
+                  <span className="calls-stat__goal">/{rdvGoal}</span>
+                ) : null}
+              </strong>
+              {!isRecallQueue && (
+                <RdvGoalPicker
+                  label="Objectif"
+                  value={rdvGoal}
+                  onChange={handleRdvGoalChange}
+                  compact
+                />
+              )}
             </GlassCard>
           </div>
-
-          <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
         </>
       )}
 
       {isRecallQueue && (
-        <div className="calls-recall-queue__filters" role="group" aria-label="Filtrer les rappels">
-          {(
-            [
-              ["today", "Aujourd'hui", recallDateCounts.today],
-              ["overdue", "En retard", recallDateCounts.overdue],
-              ["upcoming", "À venir", recallDateCounts.upcoming],
-              ["all", "Tous", recallDateCounts.all],
-            ] as const
-          ).map(([value, label, count]) => (
-            <button
-              key={value}
-              type="button"
-              className={`calls-list-filter-chip${recallDateFilter === value ? " calls-list-filter-chip--active" : ""}`}
-              aria-pressed={recallDateFilter === value}
-              onClick={() => setRecallDateFilter(value)}
-            >
-              {label}
-              <span className="xos-numeric">{count}</span>
-            </button>
-          ))}
+        <div className="calls-recall-queue__filters-wrap">
+          <div className="calls-recall-queue__filters" role="group" aria-label="Filtrer les rappels par date">
+            {(
+              [
+                ["today", "Aujourd'hui", recallDateCounts.today],
+                ["overdue", "En retard", recallDateCounts.overdue],
+                ["upcoming", "À venir", recallDateCounts.upcoming],
+                ["all", "Tous", recallDateCounts.all],
+              ] as const
+            ).map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                className={`calls-list-filter-chip${recallDateFilter === value ? " calls-list-filter-chip--active" : ""}`}
+                aria-pressed={recallDateFilter === value}
+                onClick={() => setRecallDateFilter(value)}
+              >
+                {label}
+                <span className="xos-numeric">{count}</span>
+              </button>
+            ))}
+          </div>
+          {recallOriginSessions.length > 1 && (
+            <div className="calls-recall-queue__filters" role="group" aria-label="Filtrer les rappels par séance">
+              <button
+                type="button"
+                className={`calls-list-filter-chip${recallSessionFilter === "all" ? " calls-list-filter-chip--active" : ""}`}
+                aria-pressed={recallSessionFilter === "all"}
+                onClick={() => setRecallSessionFilter("all")}
+              >
+                Toutes les séances
+                <span className="xos-numeric">{contacts.length}</span>
+              </button>
+              {recallOriginSessions.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  className={`calls-list-filter-chip${recallSessionFilter === session.id ? " calls-list-filter-chip--active" : ""}`}
+                  aria-pressed={recallSessionFilter === session.id}
+                  onClick={() => setRecallSessionFilter(session.id)}
+                  title={session.name}
+                >
+                  {session.name}
+                  <span className="xos-numeric">{session.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -649,7 +1429,7 @@ export function RunnerView({
         <GlassCard className="calls-empty calls-empty--hero">
           <EmptyState
             title="Rien à rappeler"
-            description="Inbox zero — dès qu'un appel planifie un rappel, il atterrit ici, prêt à être traité comme une séance."
+            description="Aucun rappel en attente — dès qu'un appel planifie un rappel, il atterrit ici."
             action={
               <Button variant="secondary" onClick={onBack}>
                 Retour au hub
@@ -659,19 +1439,24 @@ export function RunnerView({
         </GlassCard>
       ) : mode === "list" ? (
         <div className="calls-cockpit-list-wrap">
-          {pendingSelected.length > 0 && (
+          {(pendingSelected.length > 0 || recallManageSelected.length > 0) && (
             <GlassCard className="calls-bulk-bar">
               <div className="calls-bulk-bar__head">
                 <strong>
-                  {pendingSelected.length} contact{pendingSelected.length > 1 ? "s" : ""} sélectionné
-                  {pendingSelected.length > 1 ? "s" : ""}
+                  {(pendingSelected.length || recallManageSelected.length)} contact
+                  {(pendingSelected.length || recallManageSelected.length) > 1 ? "s" : ""} sélectionné
+                  {(pendingSelected.length || recallManageSelected.length) > 1 ? "s" : ""}
                 </strong>
                 <span className="calls-muted">
-                  {singleSelectedId
-                    ? "Consigner, planifier un RDV, ou reporter en follow-up"
-                    : "Même résultat pour toute la sélection"}
+                  {pendingSelected.length > 0
+                    ? singleSelectedId
+                      ? "Consigner, planifier un RDV, ou reporter"
+                      : "Même action pour toute la sélection"
+                    : "Reporter ou retirer les rappels sélectionnés"}
                 </span>
               </div>
+              {pendingSelected.length > 0 && (
+                <>
               <div className="calls-fb-control">
                 <div className="calls-fb-control__label">
                   <span>Résultat</span>
@@ -700,7 +1485,7 @@ export function RunnerView({
                     checked={bulkDoNotCall}
                     onChange={(e) => setBulkDoNotCall(e.target.checked)}
                   />
-                  Ne pas rappeler (NPA)
+                  Ne pas rappeler (NPA) — définitif
                 </label>
                 <label className="calls-field">
                   <span>Commentaires (optionnel)</span>
@@ -718,10 +1503,17 @@ export function RunnerView({
                   contactName={singleSelectedContact.contact_name}
                   loading={loading}
                   onSubmit={handleBulkRdvSubmit}
-                  submitLabel="Logguer appel + RDV & suivant"
+                  submitLabel="Consigner appel + RDV & suivant"
                   heading={`Détails du RDV — ${singleSelectedContact.contact_name}`}
                   className="calls-event-panel--inline"
                   team={team}
+                  sessionType={session.session_type}
+                  currentSfUserId={currentSfUserId}
+                  defaultOwnerSfUserId={
+                    contextApplies && contextContactId === singleSelectedContact.id
+                      ? contactContext?.account_owner_sf_user_id ?? null
+                      : null
+                  }
                 />
               ) : (
                 <div className="calls-runner-actions">
@@ -735,11 +1527,96 @@ export function RunnerView({
                       variant="secondary"
                       onClick={() => openDefer(pendingSelected)}
                       disabled={loading}
-                      title={`Reporter vers « ${continuationLabel} »`}
+                      title={`Reporter vers « ${continuationLabel} » · D`}
                     >
-                      Non contacté
+                      Reporter
+                      <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                        D
+                      </kbd>
                     </Button>
                   )}
+                  {recallManageSelected.length > 0 && (
+                    bulkRecallPicker
+                      && bulkRecallPicker.ids.length === recallManageSelected.length
+                      && bulkRecallPicker.ids.every((id) => recallManageSelected.includes(id)) ? (
+                      <DatePicker
+                        compact
+                        defaultOpen
+                        label="Reporter les rappels"
+                        triggerLabel={
+                          recallManageSelected.length > 1
+                            ? `Reporter (${recallManageSelected.length})`
+                            : "Reporter"
+                        }
+                        value={bulkRecallPicker.seed}
+                        onChange={(next) => applyRecallDate(bulkRecallPicker.ids, next)}
+                        triggerClassName="xos-btn xos-btn--secondary"
+                      />
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        onClick={() => openBulkRecallPicker(recallManageSelected)}
+                        disabled={loading}
+                      >
+                        Reporter{recallManageSelected.length > 1 ? ` (${recallManageSelected.length})` : ""}
+                      </Button>
+                    )
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      confirmRemove(
+                        isRecallQueue ? recallManageSelected : pendingSelected,
+                        singleSelectedContact?.contact_name ?? "ces contacts",
+                      )
+                    }
+                    disabled={loading}
+                  >
+                    {isRecallQueue ? "Retirer des rappels" : "Retirer"}
+                  </Button>
+                </div>
+              )}
+                </>
+              )}
+              {pendingSelected.length === 0 && recallManageSelected.length > 0 && (
+                <div className="calls-runner-actions">
+                  {bulkRecallPicker
+                    && bulkRecallPicker.ids.length === recallManageSelected.length
+                    && bulkRecallPicker.ids.every((id) => recallManageSelected.includes(id)) ? (
+                    <DatePicker
+                      compact
+                      defaultOpen
+                      label="Reporter les rappels"
+                      triggerLabel={
+                        recallManageSelected.length > 1
+                          ? `Reporter (${recallManageSelected.length})`
+                          : "Reporter"
+                      }
+                      value={bulkRecallPicker.seed}
+                      onChange={(next) => applyRecallDate(bulkRecallPicker.ids, next)}
+                      triggerClassName="xos-btn xos-btn--secondary"
+                    />
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      onClick={() => openBulkRecallPicker(recallManageSelected)}
+                      disabled={loading}
+                    >
+                      Reporter{recallManageSelected.length > 1 ? ` (${recallManageSelected.length})` : ""}
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      confirmRemove(
+                        recallManageSelected,
+                        contacts.find((c) => c.id === recallManageSelected[0])?.contact_name ?? "ces contacts",
+                      )
+                    }
+                    disabled={loading}
+                  >
+                    Retirer des rappels
+                  </Button>
                 </div>
               )}
             </GlassCard>
@@ -748,7 +1625,7 @@ export function RunnerView({
           {deferIds && !isRecallQueue && (
             <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
               <strong>
-                Non contacté → {continuationLabel}
+                Reporter → {continuationLabel}
               </strong>
               <p className="calls-defer-panel__empty">
                 Choisissez la date de la séance suivante
@@ -807,12 +1684,12 @@ export function RunnerView({
               <div className="calls-preview__actions">
                 <Button
                   variant="secondary"
-                  disabled={loading || visiblePending.length === 0}
-                  onClick={toggleSelectAllPending}
+                  disabled={loading || selectableContacts.length === 0}
+                  onClick={toggleSelectAllSelectable}
                 >
-                  {allPendingSelected
+                  {allSelectableSelected
                     ? "Tout désélectionner"
-                    : `Sélectionner les à faire (${visiblePending.length})`}
+                    : `Sélectionner (${selectableContacts.length})`}
                 </Button>
               </div>
             </div>
@@ -881,13 +1758,21 @@ export function RunnerView({
                     <input
                       type="checkbox"
                       checked={selectedIds.has(contact.id)}
-                      disabled={contact.status !== "pending"}
+                      disabled={
+                        contact.status !== "pending"
+                        && !(contact.recall_at && (isRecallQueue || contact.status === "called"))
+                      }
                       onChange={() => toggleSelected(contact.id)}
                       aria-label={`Sélectionner ${contact.contact_name}`}
                     />
                   </label>
                   <button type="button" className="calls-cockpit-list__name" onClick={() => openDetail(contact.id)}>
                     <strong title={contact.contact_name}>{contact.contact_name}</strong>
+                    {(contact.attempt_count ?? 0) > 0 && (
+                      <small className="calls-cockpit-list__attempt">
+                        {formatAttemptLabel(contact.attempt_count ?? 0)}
+                      </small>
+                    )}
                   </button>
                   <span className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap" title={contact.title ?? undefined}>
                     {contact.title ?? "—"}
@@ -958,65 +1843,97 @@ export function RunnerView({
       ) : focusedContact ? (
         <div className="calls-cockpit-detail">
           <GlassCard className="calls-contact-card">
-            <div className="calls-contact-card__bar">
-              <div className="calls-contact-card__chips">
-                {isRecallQueue && focusedContact.origin_session_name && (
-                  <Tag variant="accent">{focusedContact.origin_session_name}</Tag>
-                )}
-                {(focusedContact.attempt_count ?? 0) > 0 && (
-                  <Tag variant="muted">Tentative {focusedContact.attempt_count}</Tag>
-                )}
-                {focusedContact.status !== "pending" && (
-                  <Tag variant={listStatusDisplay(focusedContact).variant}>
-                    {listStatusDisplay(focusedContact).label}
-                  </Tag>
-                )}
-                {!contextLoading && contextApplies && contactContext?.npa && (
-                  <Tag variant="alert">Ne pas rappeler (NPA)</Tag>
-                )}
-              </div>
-              <div className="calls-contact-card__links">
-                {sfContactUrl && (
-                  <a
-                    href={sfContactUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="calls-sf-link"
-                  >
-                    Fiche Salesforce
-                  </a>
-                )}
-                {focusedContact.linkedin_url && (
-                  <a href={focusedContact.linkedin_url} target="_blank" rel="noopener noreferrer">
-                    LinkedIn
-                  </a>
-                )}
-              </div>
-            </div>
-
-            <div className="calls-contact-card__body">
-              <div className="calls-contact-card__identity">
+            <div className="calls-contact-card__main">
+              <div className="calls-contact-card__who">
+                <div className="calls-contact-card__chips">
+                  {focusedContact.claim_active && focusedContact.claimed_by_label && (
+                    <Tag variant="alert">Pris par {focusedContact.claimed_by_label}</Tag>
+                  )}
+                  {isRecallQueue && focusedContact.origin_session_name && (
+                    <Tag variant="accent">{focusedContact.origin_session_name}</Tag>
+                  )}
+                  {(focusedContact.attempt_count ?? 0) > 0 && (
+                    <Tag variant={isRecallQueue ? "accent" : "muted"}>
+                      {formatAttemptLabel(focusedContact.attempt_count ?? 0)}
+                    </Tag>
+                  )}
+                  {focusedContact.status !== "pending" && (
+                    <Tag variant={listStatusDisplay(focusedContact).variant}>
+                      {listStatusDisplay(focusedContact).label}
+                    </Tag>
+                  )}
+                  {!contextBusy && contextApplies && contactContext?.npa && (
+                    <Tag variant="alert">Ne pas rappeler (NPA)</Tag>
+                  )}
+                </div>
                 <h3>{focusedContact.contact_name}</h3>
                 <p className="calls-contact-card__role">
                   {[displayTitle, focusedContact.account_name || "Compte inconnu"].filter(Boolean).join(" · ")}
                 </p>
-                {focusedContact.status !== "pending" && focusedContact.recall_at && (
-                  <p className="calls-contact-card__recall-meta">
-                    Rappel {formatIsoDateFr(focusedContact.recall_at)}
+                <div
+                  className={`calls-contact-card__context-meta${contextBusy ? " calls-contact-card__context-meta--loading" : ""}`}
+                >
+                {contextApplies && contactContext?.industry && (
+                  <p className="calls-contact-card__industry">
+                    Secteur · {contactContext.industry}
                   </p>
                 )}
-              </div>
-
-              <div className="calls-contact-card__reach">
-                {focusedContact.phone ? (
-                  <div className="calls-contact-card__phone">
-                    <a href={`tel:${focusedContact.phone}`} className="calls-phone-link xos-numeric">
-                      {focusedContact.phone}
-                    </a>
-                    <Button onClick={() => window.open(`tel:${focusedContact.phone}`, "_self")}>
-                      Appeler
-                    </Button>
+                {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
+                  <div className="calls-contact-card__peers" aria-label="Références clients">
+                    <span className="calls-contact-card__peers-label">Refs</span>
+                    <ul className="calls-contact-card__peers-list">
+                      {contactContext.peer_clients.map((peer) => (
+                        <li key={peer.id}>
+                          {peer.record_url ? (
+                            <a
+                              className="calls-contact-card__peer"
+                              href={peer.record_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={peer.name}
+                            >
+                              {peer.name}
+                            </a>
+                          ) : (
+                            <span className="calls-contact-card__peer calls-contact-card__peer--static" title={peer.name}>
+                              {peer.name}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
+                )}
+                </div>
+                {(isRecallQueue || focusedContact.status !== "pending") && focusedContact.recall_at && (
+                  <div className="calls-contact-card__recall-meta">
+                    <span>Rappel</span>
+                    <DatePicker
+                      compact
+                      label="Modifier la date de rappel"
+                      value={focusedContact.recall_at}
+                      onChange={(next) => {
+                        if (next !== focusedContact.recall_at) {
+                          onUpdateRecall([focusedContact.id], next);
+                        }
+                      }}
+                      triggerClassName="calls-inline-link"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="calls-contact-card__links">
+                {sfContactUrl && <SalesforceRecordLink href={sfContactUrl} />}
+                {focusedContact.linkedin_url && <LinkedInRecordLink href={focusedContact.linkedin_url} />}
+              </div>
+            </div>
+
+            <div className="calls-contact-card__cta">
+              <div className="calls-contact-card__cta-copy">
+                {focusedContact.phone ? (
+                  <a href={`tel:${focusedContact.phone}`} className="calls-phone-link xos-numeric">
+                    {focusedContact.phone}
+                  </a>
                 ) : (
                   <p className="calls-contact-card__no-phone">Aucun numéro</p>
                 )}
@@ -1028,32 +1945,34 @@ export function RunnerView({
                   <p className="calls-contact-card__no-email">Aucun email</p>
                 )}
               </div>
+              {focusedContact.phone && (
+                <Button onClick={() => window.open(`tel:${focusedContact.phone}`, "_self")}>
+                  Appeler
+                </Button>
+              )}
             </div>
           </GlassCard>
 
-          <div className={`calls-cockpit-side${contextLoading ? " calls-cockpit-side--loading" : ""}`}>
-            {contextLoading ? (
-              <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
-                <p className="calls-muted">Chargement historique & opportunités…</p>
-              </GlassCard>
+          <div className="calls-cockpit-side">
+            {contextBusy ? (
+              <ContextSideSkeleton quiet={!showContextSkeleton} />
             ) : (
               <>
             <GlassCard className="calls-context-panel">
               <h3>Historique d&apos;appels</h3>
               {contextApplies && contactContext && contactContext.tasks.length === 0 && (
-                <p className="calls-muted">Aucun appel Salesforce récent.</p>
+                <p className="calls-muted">Aucun appel récent.</p>
               )}
               {contextApplies && contactContext && contactContext.tasks.length > 0 && (
                 <ul className="calls-context-list">
-                  {contactContext.tasks.map((task) => (
-                    <li key={task.id}>
+                  {contactContext.tasks.map((task, index) => (
+                    <li key={task.id} className={index === 0 ? "calls-context-list__row--latest" : undefined}>
                       <strong>{task.result ?? task.subject ?? "Appel"}</strong>
-                      <span className="xos-numeric">{task.activity_date ?? "—"}</span>
-                      {task.record_url && (
-                        <a href={task.record_url} target="_blank" rel="noopener noreferrer">
-                          SF
-                        </a>
-                      )}
+                      <span className="calls-context-list__date xos-numeric">
+                        {formatActivityDateFr(task.activity_date)}
+                        <small>{formatRelativeDaysFr(task.activity_date)}</small>
+                      </span>
+                      {task.record_url ? <SalesforceRecordLink href={task.record_url} /> : <span />}
                     </li>
                   ))}
                 </ul>
@@ -1061,21 +1980,60 @@ export function RunnerView({
             </GlassCard>
 
             <GlassCard className="calls-context-panel">
-              <h3>Opportunités</h3>
+              <h3>Opportunités du compte</h3>
               {contextApplies && contactContext && contactContext.opportunities.length === 0 && (
-                <p className="calls-muted">Aucune opportunité sur le compte.</p>
+                <p className="calls-muted">Aucune opportunité sur ce compte.</p>
               )}
               {contextApplies && contactContext && contactContext.opportunities.length > 0 && (
                 <ul className="calls-context-list">
-                  {contactContext.opportunities.map((opp) => (
-                    <li key={opp.id}>
-                      <strong>{opp.name}</strong>
+                  {sortedOpportunities.map((opp) => (
+                    <li
+                      key={opp.id}
+                      className={[
+                        opp.is_closed ? "calls-context-list__row--closed" : "",
+                        opp.linked_to_contact ? "calls-context-list__row--linked" : "",
+                      ].filter(Boolean).join(" ") || undefined}
+                    >
+                      <strong>
+                        {opp.name}
+                        {opp.linked_to_contact && (
+                          <span className="calls-context-list__chip" title="Contact associé à cette opportunité dans Salesforce">
+                            Associé
+                          </span>
+                        )}
+                      </strong>
                       <span>{opp.stage_name ?? "—"}</span>
-                      {opp.record_url && (
-                        <a href={opp.record_url} target="_blank" rel="noopener noreferrer">
-                          SF
-                        </a>
-                      )}
+                      {opp.record_url ? <SalesforceRecordLink href={opp.record_url} /> : <span />}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </GlassCard>
+
+            <GlassCard className="calls-context-panel">
+              <h3>RDV du compte</h3>
+              {contextApplies && contactContext && (contactContext.events?.length ?? 0) === 0 && (
+                <p className="calls-muted">Aucun RDV sur ce compte.</p>
+              )}
+              {contextApplies && contactContext && (contactContext.events?.length ?? 0) > 0 && (
+                <ul className="calls-context-list">
+                  {sortedEvents.map((event) => (
+                    <li
+                      key={event.id}
+                      className={event.linked_to_contact ? "calls-context-list__row--linked" : undefined}
+                    >
+                      <strong>
+                        {event.subject || "RDV"}
+                        {event.linked_to_contact && (
+                          <span className="calls-context-list__chip" title="RDV associé à ce contact (WhoId)">
+                            Associé
+                          </span>
+                        )}
+                      </strong>
+                      <span className="calls-context-list__date xos-numeric">
+                        {formatActivityDateFr(event.start_date_time)}
+                      </span>
+                      {event.record_url ? <SalesforceRecordLink href={event.record_url} /> : <span />}
                     </li>
                   ))}
                 </ul>
@@ -1089,13 +2047,20 @@ export function RunnerView({
             <EventPanel
               contactName={awaitingEvent.contact_name}
               loading={loading}
-              onSubmit={onLogEvent}
+              onSubmit={handleFinalizeEvent}
               heading={`Finaliser le RDV — ${awaitingEvent.contact_name}`}
               team={team}
+              sessionType={session.session_type}
+              currentSfUserId={currentSfUserId}
+              defaultOwnerSfUserId={
+                contextApplies && contextContactId === awaitingEvent.id
+                  ? contactContext?.account_owner_sf_user_id ?? null
+                  : null
+              }
             />
           ) : focusedContact.status === "pending" ? (
             <GlassCard className="calls-log-form">
-              <h3>Journaliser l&apos;appel</h3>
+              <h3>Consigner l&apos;appel</h3>
               <div className="calls-fb-control">
                 <div className="calls-fb-control__label">
                   <span>Résultat</span>
@@ -1119,9 +2084,16 @@ export function RunnerView({
                   type="checkbox"
                   checked={doNotCall}
                   onChange={(e) => setDoNotCall(e.target.checked)}
+                  aria-label="Ne pas rappeler (NPA) — définitif"
                 />
-                Ne pas rappeler (NPA)
+                <span aria-hidden="true">Ne pas rappeler (NPA) — définitif</span>
+                <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">N</kbd>
               </label>
+              {doNotCall && (
+                <p className="calls-muted calls-npa-hint">
+                  Marque le contact NPA dans Salesforce. Pour seulement ne pas replanifier, décoche le rappel ci-dessus.
+                </p>
+              )}
 
               <label className="calls-field">
                 <span>Commentaires</span>
@@ -1130,35 +2102,72 @@ export function RunnerView({
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
                   rows={3}
-                  placeholder="Notes sur l'appel…"
+                  placeholder={willSendRecall ? "Motif du rappel…" : "Notes sur l'appel…"}
                 />
               </label>
 
               {resultat === "RDV planifié" ? (
                 <EventPanel
+                  ref={eventPanelRef}
                   contactName={focusedContact.contact_name}
                   loading={loading}
                   onSubmit={handleRdvSubmit}
-                  submitLabel="Logguer appel + RDV & suivant"
+                  submitLabel="Consigner appel + RDV & suivant"
                   heading="Détails du RDV"
                   className="calls-event-panel--inline"
                   team={team}
+                  sessionType={session.session_type}
+                  currentSfUserId={currentSfUserId}
+                  showSubmitShortcut
+                  defaultOwnerSfUserId={
+                    contextApplies ? contactContext?.account_owner_sf_user_id ?? null : null
+                  }
                 />
               ) : (
-                <div className="calls-runner-actions">
-                  <Button onClick={handleSubmit} disabled={loading}>
-                    {loading ? "Enregistrement…" : "Logguer & suivant"}
-                  </Button>
-                  {!isRecallQueue && (
+                <div className="calls-runner-actions calls-runner-actions--sticky">
+                  {nextContact && (
+                    <p className="calls-next-hint">
+                      Ensuite : <strong>{nextContact.contact_name}</strong>
+                    </p>
+                  )}
+                  <div className="calls-runner-actions__row">
+                    <Button onClick={handleSubmit} disabled={loading} title="⌘↵">
+                      {loading ? (
+                        "Enregistrement…"
+                      ) : (
+                        <>
+                          Consigner & suivant
+                          <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                            ⌘↵
+                          </kbd>
+                        </>
+                      )}
+                    </Button>
+                    {!isRecallQueue && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => openDefer([focusedContact.id])}
+                        disabled={loading}
+                        title={`Reporter vers « ${continuationLabel} » · D`}
+                      >
+                        Reporter
+                        <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                          D
+                        </kbd>
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
-                      onClick={() => openDefer([focusedContact.id])}
+                      onClick={() => confirmRemove([focusedContact.id], focusedContact.contact_name)}
                       disabled={loading}
-                      title={`Reporter vers « ${continuationLabel} »`}
+                      title="⌫"
                     >
-                      Non contacté
+                      {isRecallQueue ? "Retirer des rappels" : "Retirer"}
+                      <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                        ⌫
+                      </kbd>
                     </Button>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -1168,16 +2177,30 @@ export function RunnerView({
                     variant="secondary"
                     onClick={() => openDefer([focusedContact.id])}
                     disabled={loading}
-                    title={`Reporter vers « ${continuationLabel} »`}
+                    title={`Reporter vers « ${continuationLabel} » · D`}
                   >
-                    Non contacté
+                    Reporter
+                    <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                      D
+                    </kbd>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => confirmRemove([focusedContact.id], focusedContact.contact_name)}
+                    disabled={loading}
+                    title="⌫"
+                  >
+                    Retirer
+                    <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                      ⌫
+                    </kbd>
                   </Button>
                 </div>
               )}
 
               {deferIds && mode === "detail" && !isRecallQueue && (
                 <div className="calls-defer-panel" role="region" aria-label="Créer la séance suivante">
-                  <strong>Non contacté → {continuationLabel}</strong>
+                  <strong>Reporter → {continuationLabel}</strong>
                   <p className="calls-defer-panel__empty">
                     Choisissez la date de la séance suivante.
                   </p>
@@ -1219,6 +2242,20 @@ export function RunnerView({
           ) : (
             <GlassCard className="calls-empty">
               <p>Contact déjà traité — choisissez le suivant dans la liste.</p>
+              {focusedContact.recall_at && (
+                <div className="calls-runner-actions">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (!window.confirm("Retirer ce rappel ? L'historique d'appel est conservé.")) return;
+                      onUpdateRecall([focusedContact.id], null);
+                    }}
+                    disabled={loading}
+                  >
+                    Retirer le rappel
+                  </Button>
+                </div>
+              )}
               <Button variant="secondary" onClick={() => setMode("list")}>
                 Voir la liste
               </Button>
@@ -1230,6 +2267,19 @@ export function RunnerView({
           <p>Tous les contacts ont été traités.</p>
         </GlassCard>
       )}
+
+      <CommandBar
+        open={commandBarOpen}
+        onClose={() => setCommandBarOpen(false)}
+        onRun={runComboAction}
+        soundsEnabled={soundsEnabled}
+      />
+      <ShortcutHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onOpenCommandBar={() => setCommandBarOpen(true)}
+      />
+      <ComboOnboardingDemo open={demoOpen} onClose={() => setDemoOpen(false)} />
     </div>
   );
 }

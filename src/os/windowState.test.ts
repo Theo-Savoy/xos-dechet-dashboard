@@ -130,6 +130,60 @@ describe("windowReducer", () => {
     const closed = windowReducer(second, { type: "close", appId: "notes" });
     expect(closed.windows.map((window) => window.appId)).toEqual(["insights"]);
   });
+
+  it("persists navigation params and keeps them when reopening from the dock", () => {
+    const opened = windowReducer(createWindowState(), {
+      type: "open",
+      appId: "calls",
+      defaultSize,
+    });
+    const withParams = windowReducer(opened, {
+      type: "setParams",
+      appId: "calls",
+      params: { view: "pilotage" },
+    });
+    const minimized = windowReducer(withParams, { type: "minimize", appId: "calls" });
+    const restored = windowReducer(minimized, {
+      type: "open",
+      appId: "calls",
+      defaultSize,
+    });
+
+    expect(restored.windows[0].params).toEqual({ view: "pilotage" });
+  });
+
+  it("replaces params when opening with explicit shortcut params", () => {
+    const opened = windowReducer(createWindowState(), {
+      type: "open",
+      appId: "calls",
+      defaultSize,
+      params: { view: "pilotage" },
+    });
+    const fromShortcut = windowReducer(opened, {
+      type: "open",
+      appId: "calls",
+      defaultSize,
+      params: { session_id: "42" },
+    });
+
+    expect(fromShortcut.windows[0].params).toEqual({ session_id: "42" });
+  });
+
+  it("ignores duplicate setParams updates", () => {
+    const opened = windowReducer(createWindowState(), {
+      type: "open",
+      appId: "calls",
+      defaultSize,
+      params: { view: "pilotage" },
+    });
+    const again = windowReducer(opened, {
+      type: "setParams",
+      appId: "calls",
+      params: { view: "pilotage" },
+    });
+
+    expect(again).toBe(opened);
+  });
 });
 
 describe("window persistence", () => {

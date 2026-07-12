@@ -22,8 +22,9 @@ Helpers **non exposés** (importés seulement) : `api/_auth.js`, `api/_crm/*`, `
 
 - ✅ Migration `supabase/migrations/015_salesforce_user_oauth.sql` appliquée en Production le 2026-07-11.
 - ✅ `SF_TOKEN_ENCRYPTION_KEY` ajoutée à Vercel Production (32 octets aléatoires, base64).
-- Conserver `SF_REFRESH_TOKEN` : il reste le fallback d'intégration pour les comptes non liés ou révoqués.
+- `SF_REFRESH_TOKEN` : optionnel, réservé aux scripts legacy / fallback explicite (`allowOrgFallback`). Le runtime produit utilise uniquement l’OAuth utilisateur.
 - Callback Connected App : `https://xos.hellotheo.fr/api/auth?flow=salesforce-callback`.
+- Authorize URL : `SF_INSTANCE_URL` (My Domain org), pas `login.salesforce.com`.
 - Ne jamais faire tourner la clé de chiffrement sans relier ensuite tous les comptes Salesforce.
 - Le login Salesforce synchronise automatiquement `provider_refresh_token`; la route dédiée sert de reliaison/secours.
 

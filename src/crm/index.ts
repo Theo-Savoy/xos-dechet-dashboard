@@ -23,60 +23,9 @@ export type Tier = (typeof TIER_VALUES)[number];
 export const MAX_PER_COMPANY_OPTIONS = [1, 2, 3, 5] as const;
 export type MaxPerCompany = (typeof MAX_PER_COMPANY_OPTIONS)[number];
 
-export const SECTEUR_VALUES = [
-  "Secteur public",
-  "Aéronautique et Défense",
-  "Biens de consommation alimentaires",
-  "Communication et Médias",
-  "Distribution spécialisée",
-  "Divertissement",
-  "E-Commerce, VAD",
-  "Editeur de logiciels",
-  "Education - Formation",
-  "Entité à but non lucratif",
-  "Environnement",
-  "Finance",
-  "Grande distribution alimentaire",
-  "Industrie de l'emballage",
-  "Matériaux de construction et extraction d'autres matériaux (hors énergie)",
-  "Messagerie, courrier",
-  "Ordinateurs & Electronique grand public",
-  "Portails, pure players Internet",
-  "Relation Client",
-  "Services aux entreprises ou aux collectivités",
-  "Services de conseils",
-  "Services informatiques",
-  "Télévision, radio, cinéma",
-  "Transports",
-  "Publicité/Marketing/Relations publiques",
-  "BTP / construction",
-  "Chimie (fine et lourde) / plastique",
-  "Agroalimentaire / agriculture",
-  "Assurance / Réassurance / caisses de retraite",
-  "Automobiles / équipementiers",
-  "Banque / finance",
-  "Construction mécanique / métallurgie / sidérurgie / machines-outils",
-  "Culture & Loisirs",
-  "Distribution BtoB",
-  "Droguerie / parfumerie / hygiène / cosmétiques",
-  "Energie",
-  "Equipement de la maison / électroménager",
-  "Equipement de la personne (vêtements, accessoires)",
-  "Etablissements médicaux / centre de soins",
-  "Immobilier / promotion immobilière",
-  "Ingénierie / certifications et inspections techniques",
-  "Luxe",
-  "Matériels et composants électroniques / électriques / informatique",
-  "Presse / édition / imprimerie",
-  "Restauration collective / chaînes",
-  "Santé / pharmacie / biotech",
-  "Services à la personne / action sociale",
-  "Services environnementaux / facility management",
-  "Support, maintenance et logistique",
-  "Télécommunications",
-  "Tourisme / hôtellerie",
-] as const;
-export type Secteur = (typeof SECTEUR_VALUES)[number];
+import type { Secteur } from "./secteurValues";
+export { SECTEUR_VALUES, type Secteur } from "./secteurValues";
+export { SECTEUR_FAMILIES, secteurFamilyByValue, type SecteurFamily } from "./secteurFamilies";
 
 export const FONCTION_PRESETS = [
   { id: "responsable_formation", label: "Responsable formation" },

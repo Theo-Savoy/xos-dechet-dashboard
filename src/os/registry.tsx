@@ -11,11 +11,16 @@ import {
 
 export type AppRole = "admin" | "manager" | "commercial";
 
+export type AppComponentProps = {
+  params?: Record<string, string>;
+  onParamsChange?: (params?: Record<string, string>) => void;
+};
+
 export interface AppManifest {
   id: string;
   title: string;
   icon: ReactNode;
-  component: LazyExoticComponent<FC<{ params?: Record<string, string> }>>;
+  component: LazyExoticComponent<FC<AppComponentProps>>;
   defaultSize: { w: number; h: number };
   roles?: AppRole[];
 }

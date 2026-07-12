@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   countRecallDateFilters,
+  listRecallOriginSessions,
   matchesRecallDateFilter,
+  matchesRecallSessionFilter,
   recallsToSessionContacts,
 } from "./recallQueue";
 import type { RecallInboxItem } from "./types";
@@ -50,5 +52,20 @@ describe("recallQueue", () => {
       "2026-07-11",
     );
     expect(counts).toEqual({ today: 1, overdue: 1, upcoming: 1, all: 3 });
+  });
+
+  it("lists and matches origin sessions", () => {
+    const contacts = recallsToSessionContacts([
+      sample,
+      { ...sample, id: 11, session_id: 4, session_name: "Relance Nord" },
+      { ...sample, id: 12, session_id: 3, session_name: "Prospection SP" },
+    ]);
+    expect(listRecallOriginSessions(contacts)).toEqual([
+      { id: 3, name: "Prospection SP", count: 2 },
+      { id: 4, name: "Relance Nord", count: 1 },
+    ]);
+    expect(matchesRecallSessionFilter(3, "all")).toBe(true);
+    expect(matchesRecallSessionFilter(3, 3)).toBe(true);
+    expect(matchesRecallSessionFilter(4, 3)).toBe(false);
   });
 });

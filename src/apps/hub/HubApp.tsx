@@ -25,9 +25,11 @@ type Status = {
     email: string | null;
     fullName: string | null;
     sfUserId: string | null;
+    sfLinked?: boolean;
   };
   salesforce: {
     connected: boolean;
+    userLinked?: boolean;
     dailyApiRequests: { max: number; remaining: number } | null;
   };
   cache: { cleaner: { version: string | null } };
@@ -354,6 +356,14 @@ export default function HubApp() {
               </Tag>
             </span>
             <span>
+              Compte lié{' '}
+              <Tag
+                variant={status.salesforce.userLinked ? 'success' : 'warning'}
+              >
+                {status.salesforce.userLinked ? 'Oui' : 'Non'}
+              </Tag>
+            </span>
+            <span>
               API SF (24 h glissantes){' '}
               <strong>
                 {quota
@@ -361,6 +371,13 @@ export default function HubApp() {
                   : 'Indisponible'}
               </strong>
             </span>
+            {!status.salesforce.connected ? (
+              <span className="hub-status__hint">
+                {status.salesforce.userLinked
+                  ? 'Token Salesforce expiré ou révoqué — reconnectez-vous via le bandeau menubar.'
+                  : 'Aucun compte Salesforce lié — utilisez « Lier Salesforce » dans le bandeau menubar.'}
+              </span>
+            ) : null}
             <span>
               Cache Labo{' '}
               <strong>

@@ -21,19 +21,19 @@ function instanceUrl() {
   );
 }
 
-async function fetchSalesforceStatus() {
+async function fetchSalesforceStatus({ client, userId }) {
+  const empty = { connected: false, dailyApiRequests: null };
   try {
-    const token = await fetchSFToken();
-    if (token.error || !token.accessToken)
-      return { connected: false, dailyApiRequests: null };
-    const response = await fetch(
-      `${instanceUrl()}/services/data/v67.0/limits`,
-      {
-        headers: { Authorization: `Bearer ${token.accessToken}` },
-        signal: AbortSignal.timeout(10_000),
-      },
-    );
-    if (!response.ok) return { connected: false, dailyApiRequests: null };
+    // Single credential model: the signed-in user's Salesforce OAuth token.
+    const liveToken = await fetchSFToken({ client, userId });
+    const connected = Boolean(liveToken.accessToken && !liveToken.error);
+    if (!connected) return empty;
+
+    const response = await fetch(`${instanceUrl()}/services/data/v67.0/limits`, {
+      headers: { Authorization: `Bearer ${liveToken.accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return empty;
     const limits = await response.json();
     const daily = limits.DailyApiRequests;
     return {
@@ -43,7 +43,7 @@ async function fetchSalesforceStatus() {
         : null,
     };
   } catch {
-    return { connected: false, dailyApiRequests: null };
+    return empty;
   }
 }
 
@@ -85,7 +85,7 @@ export async function GET(request) {
   if (profile.error) return respond(500, { error: profile.error });
 
   const [salesforce, settings, profiles] = await Promise.all([
-    fetchSalesforceStatus(),
+    fetchSalesforceStatus({ client, userId: user.id }),
     canManageSettings(profile.role)
       ? listSettings(client)
       : Promise.resolve(undefined),
@@ -106,8 +106,12 @@ export async function GET(request) {
       email: user.email || null,
       fullName: profile.fullName,
       sfUserId: profile.sfUserId,
+      sfLinked: Boolean(profile.userLinked),
     },
-    salesforce,
+    salesforce: {
+      ...salesforce,
+      userLinked: Boolean(profile.userLinked),
+    },
     cache: { cleaner: nativeCleanerCache() },
     version: process.env.VERCEL_GIT_COMMIT_SHA || 'dev',
     ...(settings !== undefined

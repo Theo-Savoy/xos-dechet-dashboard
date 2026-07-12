@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { RDV_GOAL_PRESETS } from "./rdvCelebrate";
 import type { SessionType } from "./types";
 import { SESSION_TYPE_OPTIONS } from "./types";
 
@@ -10,6 +11,18 @@ export function formatIsoDateFr(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   return new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", {
     weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Date courte FR pour listes (historique, etc.). */
+export function formatActivityDateFr(value: string | null | undefined): string {
+  if (!value) return "—";
+  const iso = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return String(value);
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -69,6 +82,73 @@ export function SessionTypePicker({
   );
 }
 
+const RDV_GOAL_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: "—" },
+  ...RDV_GOAL_PRESETS.map((n) => ({ value: n, label: String(n) })),
+];
+
+/** Objectif de RDV pour la séance (chips / segment, pas de select natif). */
+export function RdvGoalPicker({
+  label = "Objectif de RDV",
+  value,
+  onChange,
+  compact = false,
+  id,
+}: {
+  label?: string;
+  value: number | null;
+  onChange: (next: number | null) => void;
+  compact?: boolean;
+  id?: string;
+}) {
+  const autoId = useId();
+  const fieldId = id ?? autoId;
+
+  if (compact) {
+    return (
+      <div className="calls-rdv-goal" id={fieldId}>
+        <span className="calls-rdv-goal__label">{label}</span>
+        <div className="calls-seg calls-rdv-goal__seg" role="radiogroup" aria-label={label}>
+          {RDV_GOAL_OPTIONS.map((opt) => (
+            <button
+              key={opt.label}
+              type="button"
+              role="radio"
+              aria-checked={value === opt.value}
+              className={`calls-seg__btn calls-rdv-goal__btn${value === opt.value ? " calls-seg__btn--active" : ""}`}
+              onClick={() => onChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="calls-fb-control" id={fieldId}>
+      <div className="calls-fb-control__label">
+        <span>{label}</span>
+      </div>
+      <div className="calls-chip-row" role="radiogroup" aria-label={label}>
+        {RDV_GOAL_OPTIONS.map((opt) => (
+          <button
+            key={opt.label}
+            type="button"
+            role="radio"
+            className={`calls-chip${value === opt.value ? " calls-chip--active" : ""}`}
+            aria-checked={value === opt.value}
+            onClick={() => onChange(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Date picker custom (calendrier mois). */
 export function DatePicker({
   label = "Date",
@@ -76,6 +156,9 @@ export function DatePicker({
   onChange,
   id,
   compact = false,
+  triggerClassName,
+  triggerLabel,
+  defaultOpen = false,
 }: {
   label?: string;
   value: string;
@@ -83,11 +166,17 @@ export function DatePicker({
   id?: string;
   /** Trigger seul, sans label — pour s’aligner dans une rangée de chips. */
   compact?: boolean;
+  /** Classes CSS du bouton trigger (ex. même style que les chips rappel). */
+  triggerClassName?: string;
+  /** Remplace l’affichage de la date sur le trigger (ex. « Reporter »). */
+  triggerLabel?: string;
+  /** Ouvre le popover au montage (ex. action « Reporter »). */
+  defaultOpen?: boolean;
 }) {
   const autoId = useId();
   const fieldId = id ?? autoId;
   const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const initial = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date();
   const [cursor, setCursor] = useState({ year: initial.getFullYear(), month: initial.getMonth() });
 
@@ -119,6 +208,13 @@ export function DatePicker({
     year: "numeric",
   });
   const today = todayParisIso();
+  const triggerClasses = [
+    compact ? null : "calls-input",
+    "calls-datepicker__trigger",
+    compact ? "calls-datepicker__trigger--compact" : null,
+    triggerClassName,
+  ].filter(Boolean).join(" ");
+  const displayed = triggerLabel ?? (value ? formatIsoDateFr(value) : "Choisir une date");
 
   return (
     <div className={`calls-field calls-datepicker${compact ? " calls-datepicker--compact" : ""}`} ref={rootRef}>
@@ -126,14 +222,14 @@ export function DatePicker({
       <button
         type="button"
         id={fieldId}
-        className={`calls-input calls-datepicker__trigger${compact ? " calls-datepicker__trigger--compact" : ""}`}
+        className={triggerClasses}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={label}
         aria-labelledby={compact ? undefined : `${fieldId}-label`}
         onClick={() => setOpen((v) => !v)}
       >
-        {value ? formatIsoDateFr(value) : "Choisir une date"}
+        {displayed}
       </button>
       {open && (
         <div className="calls-datepicker__popover" role="dialog" aria-label={label}>

@@ -16,10 +16,15 @@ async function stateHash(state) {
 }
 
 function oauthConfig() {
+  const instanceUrl = (process.env.SF_INSTANCE_URL || "https://db0000000d7rdeay.my.salesforce.com").replace(/\/$/, "");
+  const loginUrl = (process.env.SF_LOGIN_URL || "").replace(/\/$/, "");
   return {
     clientId: process.env.SF_CLIENT_ID || "",
     clientSecret: process.env.SF_CLIENT_SECRET || "",
-    loginUrl: process.env.SF_LOGIN_URL || "https://login.salesforce.com",
+    // Authorize on My Domain so users land on the org login page.
+    authorizeUrl: instanceUrl,
+    // Token endpoint: prefer login host when set, else instance.
+    tokenUrl: loginUrl || instanceUrl,
   };
 }
 
@@ -56,11 +61,11 @@ export async function storeSalesforceRefreshToken({ client, user, refreshToken }
     .maybeSingle();
   if (lookupError || !profile) return { error: "profile_lookup_failed" };
 
-  const { clientId, clientSecret, loginUrl } = oauthConfig();
+  const { clientId, clientSecret, tokenUrl } = oauthConfig();
   if (!clientId || !clientSecret) return { error: "sf_missing_credentials" };
   let response;
   try {
-    response = await fetch(`${loginUrl}/services/oauth2/token`, {
+    response = await fetch(`${tokenUrl}/services/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -87,7 +92,7 @@ export async function storeSalesforceRefreshToken({ client, user, refreshToken }
 }
 
 export async function startSalesforceOAuth({ client, user, origin }) {
-  const { clientId, clientSecret, loginUrl } = oauthConfig();
+  const { clientId, clientSecret, authorizeUrl } = oauthConfig();
   if (!clientId || !clientSecret) return { error: "sf_missing_credentials" };
   const state = randomState();
   const { error } = await client.from("profiles").update({
@@ -96,7 +101,7 @@ export async function startSalesforceOAuth({ client, user, origin }) {
   }).eq("id", user.id);
   if (error) return { error: "sf_state_store_failed" };
 
-  const authorization = new URL("/services/oauth2/authorize", loginUrl);
+  const authorization = new URL("/services/oauth2/authorize", authorizeUrl);
   authorization.search = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
@@ -128,11 +133,11 @@ export async function completeSalesforceOAuth({ client, url }) {
   }).eq("id", profile.id).eq("sf_oauth_state_hash", hash);
   if (consumeError) return { error: "sf_state_store_failed" };
 
-  const { clientId, clientSecret, loginUrl } = oauthConfig();
+  const { clientId, clientSecret, tokenUrl } = oauthConfig();
   if (!clientId || !clientSecret) return { error: "sf_missing_credentials" };
   let tokenResponse;
   try {
-    tokenResponse = await fetch(`${loginUrl}/services/oauth2/token`, {
+    tokenResponse = await fetch(`${tokenUrl}/services/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({

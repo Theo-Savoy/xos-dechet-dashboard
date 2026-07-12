@@ -2,7 +2,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { ProgressBar } from "./ProgressBar";
 import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
-import type { CallStats, PeriodKpis, RecallInboxItem, SessionSummary, SessionType } from "./types";
+import type { CallStats, PeriodKpis, SessionSummary, SessionType } from "./types";
 import { SESSION_TYPE_OPTIONS, sessionTypeLabel } from "./types";
 
 type HubViewMode = "list" | "calendar";
@@ -12,19 +12,22 @@ type ScheduleFilter = "upcoming" | "done" | "all";
 type SessionsViewProps = {
   sessions: SessionSummary[];
   stats: CallStats | null;
-  recalls: RecallInboxItem[];
+  recallCount: number;
   recallsLoading: boolean;
   loading: boolean;
   error: string | null;
+  canPilotage?: boolean;
   onRefresh: () => void;
   onNewSession: () => void;
   onOpenSession: (sessionId: number, contactId?: number) => void;
   onOpenRecalls: () => void;
+  onOpenPilotage?: () => void;
   onUpdateSession: (
     sessionId: number,
     patch: { name?: string; scheduled_for?: string | null; session_type?: SessionType },
   ) => Promise<void>;
   onDeleteSession: (sessionId: number) => Promise<void>;
+  onShareSession?: (sessionId: number) => void;
 };
 
 function formatDate(iso: string): string {
@@ -100,16 +103,19 @@ function sortSessions(list: SessionSummary[], filter: ScheduleFilter): SessionSu
 export function SessionsView({
   sessions,
   stats,
-  recalls,
+  recallCount,
   recallsLoading,
   loading,
   error,
+  canPilotage = false,
   onRefresh,
   onNewSession,
   onOpenSession,
   onOpenRecalls,
+  onOpenPilotage,
   onUpdateSession,
   onDeleteSession,
+  onShareSession,
 }: SessionsViewProps) {
   const today = todayParisIso();
   const [viewMode, setViewMode] = useState<HubViewMode>("list");
@@ -125,6 +131,7 @@ export function SessionsView({
   const [editDate, setEditDate] = useState("");
   const [editType, setEditType] = useState<SessionType>("prospection");
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<SessionSummary | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [dayOverflow, setDayOverflow] = useState<{ key: string; sessions: SessionSummary[] } | null>(
     null,
@@ -195,12 +202,18 @@ export function SessionsView({
     }
   };
 
-  const confirmDelete = async (session: SessionSummary, e: MouseEvent) => {
+  const requestDelete = (session: SessionSummary, e: MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Supprimer la séance « ${session.name} » ?`)) return;
+    setPendingDelete(session);
+  };
+
+  const executeDelete = async () => {
+    if (!pendingDelete) return;
+    const session = pendingDelete;
     setDeletingId(session.id);
     try {
       await onDeleteSession(session.id);
+      setPendingDelete(null);
     } finally {
       setDeletingId(null);
     }
@@ -223,6 +236,11 @@ export function SessionsView({
           <h2>Prospection</h2>
         </div>
         <div className="calls-view__actions">
+          {canPilotage && onOpenPilotage && (
+            <Button variant="secondary" onClick={onOpenPilotage}>
+              Pilotage
+            </Button>
+          )}
           <Button variant="secondary" onClick={onRefresh} disabled={loading}>
             Actualiser
           </Button>
@@ -313,8 +331,8 @@ export function SessionsView({
                 Rappels
                 {recallsLoading ? (
                   <span className="calls-seg__count">…</span>
-                ) : recalls.length > 0 ? (
-                  <span className="calls-seg__count xos-numeric">{recalls.length}</span>
+                ) : recallCount > 0 ? (
+                  <span className="calls-seg__count xos-numeric">{recallCount}</span>
                 ) : null}
               </button>
             </div>
@@ -370,7 +388,7 @@ export function SessionsView({
           </div>
         </div>
 
-        {loading && <p className="calls-state">Chargement des séances…</p>}
+        {loading && sessions.length === 0 && <p className="calls-state">Chargement des séances…</p>}
         {error && (
           <GlassCard className="calls-error">
             <p>{error}</p>
@@ -384,7 +402,7 @@ export function SessionsView({
           <GlassCard className="calls-empty calls-empty--hero">
             <Tag variant="accent">Prêt à prospecter</Tag>
             <h3>Aucune séance pour le moment</h3>
-            <p>Composez une liste ciblée, planifiez une séance et suivez vos KPIs ici.</p>
+            <p>Composez une liste ciblée, planifiez une séance et suivez vos indicateurs ici.</p>
             <Button onClick={onNewSession}>Créer une première séance</Button>
           </GlassCard>
         )}
@@ -414,7 +432,7 @@ export function SessionsView({
           </GlassCard>
         )}
 
-        {!loading && !error && viewMode === "list" && filteredSessions.length > 0 && (
+        {!error && viewMode === "list" && filteredSessions.length > 0 && (
           <ul className="calls-session-list">
             {filteredSessions.map((session) => (
               <li key={session.id}>
@@ -434,6 +452,12 @@ export function SessionsView({
                           <Tag variant={session.status === "active" ? "accent" : "default"}>
                             {session.status === "active" ? "En cours" : "Terminée"}
                           </Tag>
+                          {session.shared && (
+                            <Tag variant="accent">
+                              Partagée{session.member_count ? ` · ${session.member_count}` : ""}
+                            </Tag>
+                          )}
+                          {session.is_owner === false && <Tag variant="muted">Invité</Tag>}
                         </div>
                       </div>
                       <span className="calls-session-card__date">
@@ -457,12 +481,23 @@ export function SessionsView({
                       </div>
                     </button>
                     <div className="calls-session-card__actions">
+                      {session.is_owner !== false && onShareSession && (
+                        <Button
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onShareSession(session.id);
+                          }}
+                        >
+                          Partager
+                        </Button>
+                      )}
                       <Button variant="secondary" onClick={(e) => openEdit(session, e)}>
                         Modifier
                       </Button>
                       <Button
                         variant="secondary"
-                        onClick={(e) => void confirmDelete(session, e)}
+                        onClick={(e) => requestDelete(session, e)}
                         disabled={deletingId === session.id}
                       >
                         {deletingId === session.id ? "Suppression…" : "Supprimer"}
@@ -475,7 +510,7 @@ export function SessionsView({
           </ul>
         )}
 
-        {!loading && !error && viewMode === "calendar" && !trulyEmpty && (
+        {!error && viewMode === "calendar" && !trulyEmpty && (
           <GlassCard className="calls-calendar">
             <div className="calls-calendar__nav">
               <Button
@@ -635,6 +670,38 @@ export function SessionsView({
                 {saving ? "Enregistrement…" : "Enregistrer"}
               </Button>
               <Button variant="secondary" onClick={() => setEditing(null)} disabled={saving}>
+                Annuler
+              </Button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div
+          className="calls-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-session-title"
+          onClick={() => deletingId == null && setPendingDelete(null)}
+        >
+          <GlassCard className="calls-modal__panel" onClick={(e: MouseEvent) => e.stopPropagation()}>
+            <h3 id="delete-session-title">Supprimer la séance</h3>
+            <p className="calls-muted">
+              Supprimer « <strong>{pendingDelete.name}</strong> » ? Cette action est irréversible.
+            </p>
+            <div className="calls-runner-actions">
+              <Button
+                onClick={() => void executeDelete()}
+                disabled={deletingId === pendingDelete.id}
+              >
+                {deletingId === pendingDelete.id ? "Suppression…" : "Supprimer"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setPendingDelete(null)}
+                disabled={deletingId === pendingDelete.id}
+              >
                 Annuler
               </Button>
             </div>

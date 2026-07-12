@@ -29,12 +29,12 @@ export function RecapView({
 
   return (
     <div className="calls-view">
-      <header className="calls-view__header">
-        <div className="calls-view__header-start">
-          <Button variant="secondary" onClick={onBack}>
+      <header className="calls-view__header calls-view__header--runner">
+        <div className="calls-view__nav">
+          <Button variant="secondary" className="calls-view__back" onClick={onBack}>
             Retour au hub
           </Button>
-          <div>
+          <div className="calls-view__titleblock">
             <Tag variant="alert">Terminée</Tag>
             <h2>{session.name}</h2>
           </div>

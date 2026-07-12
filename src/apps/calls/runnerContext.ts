@@ -13,3 +13,20 @@ export function resolveContextContactId(
   }
   return contacts.find((contact) => contact.status === "pending")?.id ?? null;
 }
+
+/**
+ * Prochains pending dans l’ordre de la file (après le contact courant),
+ * aligné sur le « Ensuite : » du runner — pour prefetch contexte CRM.
+ */
+export function pendingContactsAhead(
+  contacts: SessionContact[],
+  currentId: number | null,
+  limit: number,
+): SessionContact[] {
+  if (limit <= 0) return [];
+  const startIndex = currentId == null
+    ? -1
+    : contacts.findIndex((contact) => contact.id === currentId);
+  const slice = startIndex >= 0 ? contacts.slice(startIndex + 1) : contacts;
+  return slice.filter((contact) => contact.status === "pending").slice(0, limit);
+}

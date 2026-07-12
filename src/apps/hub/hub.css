@@ -10,6 +10,15 @@
 .hub-details div, .hub-status span, .hub-setting, .hub-profile { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .hub-details dt, .hub-status span { color: var(--xos-text-muted); font-size: .82rem; }.hub-details dd { margin: 0; text-align: right; }
 .hub-status strong { color: var(--xos-text); font-weight: 600; }
+.hub-status__hint {
+  display: block !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  color: var(--xos-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  opacity: 0.9;
+}
 .hub-settings, .hub-profiles { display: grid; gap: .5rem; }.hub-setting, .hub-profile { padding: .65rem .75rem; border-radius: .6rem; background: rgba(255,255,255,.035); }.hub-setting span { overflow: hidden; text-overflow: ellipsis; color: var(--xos-text-muted); }.hub-profile small { display: block; color: var(--xos-text-muted); margin-top: .15rem; }
 .hub-form { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 1fr) auto; gap: .5rem; }.hub-form input, .hub-profile select { min-width: 0; border: 1px solid var(--xos-border); border-radius: .55rem; padding: .58rem .65rem; color: var(--xos-text); background: rgba(255,255,255,.05); font: inherit; }
 @media (max-width: 640px) { .hub-grid { grid-template-columns: 1fr; }.hub-form { grid-template-columns: 1fr; } }

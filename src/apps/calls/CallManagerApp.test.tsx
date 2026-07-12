@@ -19,12 +19,25 @@ vi.mock("../../auth/useSession", () => ({
   })),
 }));
 
-// Évite de tirer lib/supabase (qui exige les env VITE_*) via os/shortcuts.
+// Évite de tirer lib/supabase (qui exige les env VITE_*) via os/shortcuts / profils.
 vi.mock("../../os/shortcuts", () => ({
   addShortcut: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../lib/supabase", () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: { role: "manager" }, error: null }),
+        }),
+      }),
+    }),
+  },
+}));
+
 import CallManagerApp from "./CallManagerApp";
+import { invalidateComboHubCache } from "./api";
 
 const mockSessions = {
   sessions: [
@@ -74,20 +87,34 @@ const mockStats = {
   },
 };
 
+const mockHub = {
+  sessions: mockSessions.sessions,
+  stats: mockStats.stats,
+  recall_count: 0,
+};
+
+function hubResponse() {
+  return Promise.resolve(new Response(JSON.stringify(mockHub), { status: 200 }));
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  invalidateComboHubCache();
 });
 
 beforeEach(() => {
+  invalidateComboHubCache();
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) => {
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls") {
         return Promise.resolve(
           new Response(JSON.stringify(mockSessions), { status: 200 }),
         );
       }
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") {
         return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       }
@@ -139,7 +166,7 @@ describe("CallManagerApp component", () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        "/api/calls",
+        "/api/calls?resource=hub",
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: "Bearer test-token-abc",
@@ -163,6 +190,21 @@ describe("CallManagerApp component", () => {
     expect(screen.getByText("Aperçu de la liste")).toBeTruthy();
   });
 
+  it("restores new session view from persisted params", async () => {
+    render(<CallManagerApp params={{ view: "new" }} />);
+    expect(await screen.findByText("Composer une liste")).toBeTruthy();
+  });
+
+  it("syncs navigation params when changing view", async () => {
+    const onParamsChange = vi.fn();
+    const user = userEvent.setup();
+    render(<CallManagerApp onParamsChange={onParamsChange} />);
+    await screen.findByText("Nouvelle séance");
+    onParamsChange.mockClear();
+    await user.click(screen.getByText("Nouvelle séance"));
+    expect(onParamsChange).toHaveBeenCalledWith({ view: "new" });
+  });
+
   it("invalidates the preview and ignores an older preview response", async () => {
     const user = userEvent.setup();
     let resolveFirst!: (response: Response) => void;
@@ -177,6 +219,7 @@ describe("CallManagerApp component", () => {
 
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") {
         return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       }
@@ -264,10 +307,11 @@ describe("CallManagerApp component", () => {
 
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") {
         return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       }
-      if (url.startsWith("/api/calls?session_id=1&context_contact_id=")) {
+      if (url.includes("context_contact_id=")) {
         contextFetches += 1;
         return Promise.resolve(
           new Response(
@@ -303,11 +347,11 @@ describe("CallManagerApp component", () => {
 
     expect(await screen.findByRole("heading", { name: "Détails du RDV" })).toBeTruthy();
     expect(contextFetches).toBe(1);
-    expect(screen.queryByRole("button", { name: "Logguer & suivant" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Consigner & suivant" })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Logguer appel + RDV & suivant" }));
+    await user.click(screen.getByRole("button", { name: "Consigner appel + RDV & suivant" }));
     await screen.findByText("Terminée");
-    expect(postedActions).toEqual(["log_call", "log_event", "complete_session"]);
+    expect(postedActions).toEqual(["claim_contact", "log_call", "log_event", "complete_session"]);
   });
 
   it("warns about a failed NPA sync without blocking runner progression", async () => {
@@ -323,6 +367,7 @@ describe("CallManagerApp component", () => {
 
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       if (url === "/api/calls?session_id=1") {
         sessionFetches += 1;
@@ -331,7 +376,7 @@ describe("CallManagerApp component", () => {
           contacts: sessionFetches === 1 ? [pendingContact] : [{ ...pendingContact, status: "called" }],
         }), { status: 200 }));
       }
-      if (url.startsWith("/api/calls?session_id=1&context_contact_id=")) {
+      if (url.includes("context_contact_id=")) {
         return Promise.resolve(new Response(JSON.stringify({ context: { contact_record_url: null, account_record_url: null, tasks: [], opportunities: [] } }), { status: 200 }));
       }
       if (url === "/api/calls" && init?.method === "POST") {
@@ -345,8 +390,8 @@ describe("CallManagerApp component", () => {
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "NPA" });
     await user.click(screen.getByRole("button", { name: "Fiche" }));
-    await user.click(screen.getByLabelText("Ne pas rappeler (NPA)"));
-    await user.click(screen.getByRole("button", { name: "Logguer & suivant" }));
+    await user.click(screen.getByLabelText(/Ne pas rappeler \(NPA\)/));
+    await user.click(screen.getByRole("button", { name: "Consigner & suivant" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Appel consigné, mais le marquage NPA a échoué dans Salesforce — vérifie la fiche.",
@@ -373,9 +418,10 @@ describe("CallManagerApp component", () => {
     const contextFetches: string[] = [];
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       if (url === "/api/calls?session_id=1") return Promise.resolve(new Response(JSON.stringify({ session: activeSession, contacts }), { status: 200 }));
-      if (url.startsWith("/api/calls?session_id=1&context_contact_id=")) {
+      if (url.includes("context_contact_id=")) {
         contextFetches.push(url);
         return Promise.resolve(new Response(JSON.stringify({ context: { contact_record_url: null, account_record_url: null, tasks: [], opportunities: [] } }), { status: 200 }));
       }
@@ -386,14 +432,18 @@ describe("CallManagerApp component", () => {
     const user = userEvent.setup();
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Changement de contact" });
-    await waitFor(() => expect(contextFetches).toEqual(["/api/calls?session_id=1&context_contact_id=101"]));
+    await waitFor(() => {
+      expect(contextFetches[0]).toContain("context_contact_id=101");
+      expect(contextFetches.some((u) => u.includes("context_contact_id=101"))).toBe(true);
+    });
 
+    await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByRole("button", { name: "Bruno Martin" }));
 
-    await waitFor(() => expect(contextFetches).toEqual([
-      "/api/calls?session_id=1&context_contact_id=101",
-      "/api/calls?session_id=1&context_contact_id=102",
-    ]));
+    await waitFor(() => {
+      expect(contextFetches.some((u) => u.includes("context_contact_id=101"))).toBe(true);
+      expect(contextFetches.some((u) => u.includes("context_contact_id=102"))).toBe(true);
+    });
   });
 
   it("logs selected contacts in waves of four and aggregates failures", async () => {
@@ -418,6 +468,7 @@ describe("CallManagerApp component", () => {
 
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
       if (url === "/api/calls?stats=1") return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
       if (url === "/api/calls?resource=recalls") return Promise.resolve(new Response(JSON.stringify({ recalls: [] }), { status: 200 }));
       if (url === "/api/calls?session_id=1") {
@@ -427,7 +478,7 @@ describe("CallManagerApp component", () => {
           contacts: sessionFetches === 1 ? contacts : contacts.map((contact) => ({ ...contact, status: "called" })),
         }), { status: 200 }));
       }
-      if (url.startsWith("/api/calls?session_id=1&context_contact_id=")) {
+      if (url.includes("context_contact_id=")) {
         return Promise.resolve(new Response(JSON.stringify({ session: activeSession, contacts, context: { contact_record_url: null, account_record_url: null, tasks: [], opportunities: [] } }), { status: 200 }));
       }
       if (url === "/api/calls" && init?.method === "POST") {
@@ -442,7 +493,8 @@ describe("CallManagerApp component", () => {
     const user = userEvent.setup();
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Vagues" });
-    await user.click(screen.getByRole("button", { name: "Sélectionner les à faire (7)" }));
+    await user.click(screen.getByRole("button", { name: "Liste" }));
+    await user.click(screen.getByRole("button", { name: "Sélectionner (7)" }));
     await user.click(screen.getByRole("button", { name: "Consigner pour 7" }));
 
     await waitFor(() => expect(resolvers).toHaveLength(4));

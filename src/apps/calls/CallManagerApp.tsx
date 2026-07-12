@@ -7,6 +7,8 @@ import {
   createFollowUpSession,
   createPreset,
   createSession,
+  celebrateGoal,
+  claimContact,
   deferContacts,
   deletePreset,
   deleteSession,
@@ -17,25 +19,32 @@ import {
   fetchTeam,
   fetchRecalls,
   fetchSession,
-  fetchSessions,
-  fetchStats,
+  fetchComboHub,
+  invalidateComboHubCache,
   logCall,
   logEvent,
+  removeContact,
+  setSessionMembers,
+  updateRecall,
   updateSession,
   CallsApiError,
 } from "./api";
 import { addShortcut } from "../../os/shortcuts";
-import { resolveContextContactId } from "./runnerContext";
+import { resolveContextContactId, pendingContactsAhead } from "./runnerContext";
+import { PilotageView } from "./PilotageView";
+import { supabase } from "../../lib/supabase";
+import type { AppRole } from "../../os/registry";
+import { createDialerLogQueue } from "./dialerLogQueue";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
 import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
+import { ShareSessionPanel } from "./ShareSessionPanel";
 import type {
   CallStats,
   ContactContext,
   ContactPreview,
-  RecallInboxItem,
   SessionContact,
   SessionDetail,
   SessionSummary,
@@ -44,14 +53,58 @@ import type {
 } from "./types";
 import "./calls.css";
 
-type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "loading-params";
+const CONTEXT_PREFETCH_AHEAD = 3;
+const CONTEXT_CACHE_MAX = 32;
 
-function findNextPending(contacts: SessionContact[]): SessionContact | null {
-  return contacts.find((c) => c.status === "pending") ?? null;
+type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
+
+function viewFromParams(params?: Record<string, string>): View {
+  if (params?.session_id) return "loading-params";
+  switch (params?.view) {
+    case "pilotage":
+      return "pilotage";
+    case "new":
+      return "new";
+    case "recalls":
+      return "recalls";
+    case "runner":
+    case "recap":
+      return params.session_id ? "loading-params" : "sessions";
+    default:
+      return "sessions";
+  }
+}
+
+function navigationParamsForView(view: View, sessionId?: number | null): Record<string, string> | undefined {
+  switch (view) {
+    case "pilotage":
+      return { view: "pilotage" };
+    case "new":
+      return { view: "new" };
+    case "recalls":
+      return { view: "recalls" };
+    case "runner":
+      return sessionId ? { view: "runner", session_id: String(sessionId) } : undefined;
+    case "recap":
+      return sessionId ? { view: "recap", session_id: String(sessionId) } : undefined;
+    case "sessions":
+    case "loading-params":
+    default:
+      return undefined;
+  }
+}
+
+function findNextPending(contacts: SessionContact[], userId?: string): SessionContact | null {
+  return contacts.find((c) => {
+    if (c.status !== "pending") return false;
+    if (c.claim_active && c.claimed_by && userId && c.claimed_by !== userId) return false;
+    return true;
+  }) ?? null;
 }
 
 type CallManagerAppProps = {
   params?: Record<string, string>;
+  onParamsChange?: (params?: Record<string, string>) => void;
 };
 
 function errorMessage(err: unknown): string {
@@ -71,27 +124,31 @@ function errorMessage(err: unknown): string {
         ? `Salesforce a refusé l'opération : ${hint.slice(0, 220)}`
         : err.code === "sf_query_error"
           ? "Salesforce a refusé la requête (filtres trop complexes ou champ invalide)."
-          : "Salesforce a refusé l'enregistrement.";
+          : err.code === "sf_auth_error"
+            ? "Salesforce a refusé l'authentification — reconnectez-vous via le bandeau en haut à droite."
+            : "Salesforce a refusé l'enregistrement.";
     }
     return `Erreur API (${err.code})`;
   }
   return "Une erreur est survenue.";
 }
 
-export default function CallManagerApp({ params }: CallManagerAppProps) {
+export default function CallManagerApp({ params, onParamsChange }: CallManagerAppProps) {
   const { session } = useSession();
   const token = session?.access_token ?? "";
 
   // Si on arrive avec un session_id dans les params (ex. raccourci bureau), on
   // saute la page d'accueil "sessions" et on affiche un loader le temps du
   // fetch. La view bascule ensuite vers runner/recap via openSession().
-  const [view, setView] = useState<View>(() =>
-    params?.session_id ? "loading-params" : "sessions",
-  );
+  // params.view=pilotage ouvre le cockpit manager.
+  const [view, setView] = useState<View>(() => viewFromParams(params));
+  const [appRole, setAppRole] = useState<AppRole>("commercial");
+  const canPilotage = appRole === "manager" || appRole === "admin";
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const sessionsRef = useRef<SessionSummary[]>([]);
   const [stats, setStats] = useState<CallStats | null>(null);
-  const [recalls, setRecalls] = useState<RecallInboxItem[]>([]);
-  const [recallsLoading, setRecallsLoading] = useState(false);
+  const [recallCount, setRecallCount] = useState(0);
+  const [recallsLoading, setRecallsLoading] = useState(true);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
@@ -109,6 +166,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const matchCountRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
+  const [shareSessionId, setShareSessionId] = useState<number | null>(null);
+  const [shareSaving, setShareSaving] = useState(false);
 
   const [presets, setPresets] = useState<CallTargetPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
@@ -124,36 +183,66 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [contactContext, setContactContext] = useState<ContactContext | null>(null);
   const [contextContactId, setContextContactId] = useState<number | null>(null);
+  const [contextTargetContactId, setContextTargetContactId] = useState<number | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
+  const contextTargetRef = useRef<number | null>(null);
   const lastContextKey = useRef<string | null>(null);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
+  const contextCacheRef = useRef<Map<string, ContactContext>>(new Map());
+  const contextInflightRef = useRef<Map<string, Promise<ContactContext>>>(new Map());
+  const contactsRef = useRef<SessionContact[]>([]);
+  const pendingLogsRef = useRef(0);
+  const logQueueRef = useRef(
+    createDialerLogQueue((pending) => {
+      pendingLogsRef.current = pending;
+    }),
+  );
+
+  const currentSfUserId = team.find((member) => member.user_id === session?.user?.id)?.sf_user_id ?? null;
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (pendingLogsRef.current <= 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   useEffect(() => {
     lastContextKey.current = null;
   }, [activeSession?.id]);
 
-  const loadSessions = useCallback(async () => {
+  const loadSessions = useCallback(async (opts?: { force?: boolean }) => {
     if (!token) return;
-    setSessionsLoading(true);
-    setRecallsLoading(true);
+    const hasSessions = sessionsRef.current.length > 0;
+    if (!hasSessions) setSessionsLoading(true);
     setSessionsError(null);
+
     try {
-      const [sessionList, statsData, recallList] = await Promise.all([
-        fetchSessions(token),
-        fetchStats(token).catch(() => null),
-        fetchRecalls(token).catch(() => []),
-      ]);
-      setSessions(sessionList);
-      setStats(statsData);
-      setRecalls(recallList);
+      const hub = await fetchComboHub(token, { force: opts?.force === true });
+      sessionsRef.current = hub.sessions;
+      setSessions(hub.sessions);
+      setStats(hub.stats);
+      setRecallCount(hub.recall_count);
+      setRecallsLoading(false);
+      setSessionsLoading(false);
     } catch (err) {
       setSessionsError(errorMessage(err));
-    } finally {
       setSessionsLoading(false);
       setRecallsLoading(false);
     }
   }, [token]);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   const loadPresets = useCallback(async () => {
     if (!token) return;
@@ -178,10 +267,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   }, [token]);
 
   useEffect(() => {
-    if (view === "runner" || view === "recalls") {
+    if (view === "runner" || view === "recalls" || view === "new" || shareSessionId != null) {
       void loadTeam();
     }
-  }, [view, loadTeam]);
+  }, [view, loadTeam, shareSessionId]);
 
   const openSession = useCallback(
     async (sessionId: number, focusContactId?: number) => {
@@ -219,6 +308,26 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   }, [token, loadSessions]);
 
   useEffect(() => {
+    const email = session?.user?.email;
+    if (!email) return;
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("role")
+      .eq("email", email)
+      .maybeSingle()
+      .then(({ data }) => {
+        const value = data?.role;
+        if (!cancelled && (value === "admin" || value === "manager" || value === "commercial")) {
+          setAppRole(value);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email]);
+
+  useEffect(() => {
     const sessionId = params?.session_id;
     if (sessionId && token) {
       const id = Number(sessionId);
@@ -227,6 +336,22 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       }
     }
   }, [params?.session_id, token, openSession]);
+
+  useEffect(() => {
+    if (params?.session_id) return;
+    const next = viewFromParams(params);
+    if (next !== "loading-params") {
+      setView(next);
+    }
+  }, [params?.view, params?.session_id]);
+
+  const onParamsChangeRef = useRef(onParamsChange);
+  onParamsChangeRef.current = onParamsChange;
+
+  useEffect(() => {
+    if (view === "loading-params") return;
+    onParamsChangeRef.current?.(navigationParamsForView(view, activeSession?.id));
+  }, [view, activeSession?.id]);
 
   const invalidatePreview = () => {
     previewRequest.current += 1;
@@ -335,15 +460,24 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     contactList: ContactPreview[],
     scheduledFor: string,
     sessionType: SessionType,
+    memberUserIds: string[] = [],
   ) => {
     if (!token) return;
     setCreateLoading(true);
     setNewError(null);
     try {
-      const data = await createSession(token, name, contactList, scheduledFor, sessionType);
+      const data = await createSession(
+        token,
+        name,
+        contactList,
+        scheduledFor,
+        sessionType,
+        memberUserIds,
+      );
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
+      invalidateComboHubCache();
       setView("runner");
     } catch (err) {
       setNewError(errorMessage(err));
@@ -359,7 +493,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     if (!token) return;
     try {
       await updateSession(token, sessionId, patch);
-      await loadSessions();
+      invalidateComboHubCache();
+      await loadSessions({ force: true });
     } catch (err) {
       setSessionsError(errorMessage(err));
       throw err;
@@ -370,7 +505,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     if (!token) return;
     try {
       await deleteSession(token, sessionId);
-      await loadSessions();
+      invalidateComboHubCache();
+      await loadSessions({ force: true });
     } catch (err) {
       setSessionsError(errorMessage(err));
       throw err;
@@ -396,27 +532,89 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   };
 
   const loadContactContext = useCallback(
-    async (sessionId: number, contactId: number) => {
+    async (sessionId: number, contactId: number, options?: { silent?: boolean }) => {
       if (!token) return;
-      const requestId = contextRequest.current + 1;
-      contextRequest.current = requestId;
-      setContactContext(null);
-      setContextContactId(null);
-      setContextLoading(true);
+      const cacheKey = `${sessionId}:${contactId}`;
+      const cached = contextCacheRef.current.get(cacheKey);
+
+      // Cache hit : affichage immédiat, pas de re-fetch (le prefetch a déjà peuplé).
+      if (cached) {
+        if (!options?.silent) {
+          contextTargetRef.current = contactId;
+          setContextTargetContactId(contactId);
+          setContactContext(cached);
+          setContextContactId(contactId);
+          setContextLoading(false);
+        }
+        return;
+      }
+
+      let requestId = contextRequest.current;
+      if (!options?.silent) {
+        requestId = contextRequest.current + 1;
+        contextRequest.current = requestId;
+        contextTargetRef.current = contactId;
+        setContextTargetContactId(contactId);
+        // Only show loading if we don't already have an in-flight prefetch for this contact.
+        if (!contextInflightRef.current.has(cacheKey)) {
+          setContextLoading(true);
+        }
+      }
+
+      let pending = contextInflightRef.current.get(cacheKey);
+      if (!pending) {
+        pending = fetchContactContext(token, sessionId, contactId, {
+          lite: Boolean(options?.silent),
+        })
+          .then((context) => {
+            contextCacheRef.current.set(cacheKey, context);
+            while (contextCacheRef.current.size > CONTEXT_CACHE_MAX) {
+              const first = contextCacheRef.current.keys().next().value;
+              if (!first) break;
+              contextCacheRef.current.delete(first);
+            }
+            return context;
+          })
+          .finally(() => {
+            contextInflightRef.current.delete(cacheKey);
+          });
+        contextInflightRef.current.set(cacheKey, pending);
+      }
+
       try {
-        const context = await fetchContactContext(token, sessionId, contactId);
+        const context = await pending;
+        if (options?.silent) {
+          if (contextTargetRef.current === contactId) {
+            setContactContext(context);
+            setContextContactId(contactId);
+            setContextLoading(false);
+          }
+          return;
+        }
         if (contextRequest.current !== requestId) return;
         setContactContext(context);
         setContextContactId(contactId);
       } catch {
+        if (options?.silent) return;
         if (contextRequest.current !== requestId) return;
         setContactContext(null);
         setContextContactId(null);
       } finally {
-        if (contextRequest.current === requestId) setContextLoading(false);
+        if (!options?.silent && contextRequest.current === requestId) setContextLoading(false);
       }
     },
     [token],
+  );
+
+  const prefetchContactContexts = useCallback(
+    (sessionId: number, contactIds: number[]) => {
+      for (const contactId of contactIds) {
+        const key = `${sessionId}:${contactId}`;
+        if (contextCacheRef.current.has(key) || contextInflightRef.current.has(key)) continue;
+        void loadContactContext(sessionId, contactId, { silent: true });
+      }
+    },
+    [loadContactContext],
   );
 
   useEffect(() => {
@@ -434,28 +632,60 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         lastContextKey.current = null;
         setContactContext(null);
         setContextContactId(null);
+        setContextTargetContactId(null);
+        contextTargetRef.current = null;
         return;
       }
       const contextKey = `${focused.origin_session_id}:${focused.id}`;
-      if (lastContextKey.current === contextKey) return;
-      lastContextKey.current = contextKey;
-      void loadContactContext(focused.origin_session_id, focused.id);
+      if (lastContextKey.current !== contextKey) {
+        lastContextKey.current = contextKey;
+        void loadContactContext(focused.origin_session_id, focused.id);
+      }
+      const focusedIndex = contacts.findIndex((c) => c.id === focused.id);
+      const ahead = (focusedIndex >= 0 ? contacts.slice(focusedIndex + 1) : contacts)
+        .slice(0, CONTEXT_PREFETCH_AHEAD)
+        .filter((c) => c.origin_session_id)
+        .map((c) => ({ sessionId: c.origin_session_id as number, contactId: c.id }));
+      for (const row of ahead) {
+        const key = `${row.sessionId}:${row.contactId}`;
+        if (contextCacheRef.current.has(key) || contextInflightRef.current.has(key)) continue;
+        void loadContactContext(row.sessionId, row.contactId, { silent: true });
+      }
       return;
     }
 
     if (!activeSession) return;
     const targetId = resolveContextContactId(contacts, awaitingEvent?.id, focusedContactId);
+
+    // Warm the cache as soon as the runner opens: current + next N pending.
+    const warmIds = [
+      ...(targetId != null ? [targetId] : []),
+      ...pendingContactsAhead(contacts, targetId, CONTEXT_PREFETCH_AHEAD).map((c) => c.id),
+    ];
+    prefetchContactContexts(activeSession.id, [...new Set(warmIds)]);
+
     if (!targetId) {
       lastContextKey.current = null;
       setContactContext(null);
       setContextContactId(null);
+      setContextTargetContactId(null);
+      contextTargetRef.current = null;
       return;
     }
     const contextKey = `${activeSession.id}:${targetId}`;
-    if (lastContextKey.current === contextKey) return;
-    lastContextKey.current = contextKey;
-    void loadContactContext(activeSession.id, targetId);
-  }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
+    if (lastContextKey.current !== contextKey) {
+      lastContextKey.current = contextKey;
+      void loadContactContext(activeSession.id, targetId);
+    }
+  }, [
+    view,
+    activeSession?.id,
+    awaitingEvent?.id,
+    focusedContactId,
+    contacts,
+    loadContactContext,
+    prefetchContactContexts,
+  ]);
 
   const openRecalls = useCallback(async () => {
     if (!token) return;
@@ -469,7 +699,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     setView("recalls");
     try {
       const list = await fetchRecalls(token);
-      setRecalls(list);
+      setRecallCount(list.length);
       setContacts(recallsToSessionContacts(list));
     } catch (err) {
       setRunnerError(errorMessage(err));
@@ -482,7 +712,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const refreshRecallsQueue = async () => {
     if (!token) return [];
     const list = await fetchRecalls(token);
-    setRecalls(list);
+    setRecallCount(list.length);
     setContacts(recallsToSessionContacts(list));
     return list;
   };
@@ -497,112 +727,234 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     return { sessionId: activeSession.id, contactId };
   };
 
-  const handleLogAndNext = async (contactId: number, payload: LogPayload) => {
+  const finishSessionIfDone = async (sessionId: number) => {
     if (!token) return;
-    const target = resolveLogTarget(contactId);
-    if (!target) return;
-
+    if (contactsRef.current.some((c) => c.status === "pending")) return;
+    // Pendant l'exécution d'une tâche, pending >= 1 (la tâche courante).
+    if (pendingLogsRef.current > 1) return;
     setRunnerLoading(true);
-    setRunnerError(null);
     try {
-      const result = await logCall(token, target.sessionId, target.contactId, payload.resultat, {
-        comments: payload.comments,
-        recallAt: payload.recallAt,
-        doNotCall: payload.doNotCall,
-      });
-      const syncWarnings = [
-        ...(result.recall_failed ? ["Appel consigné, mais la création du rappel a échoué dans Salesforce — vérifie la fiche."] : []),
-        ...(result.npa_failed ? ["Appel consigné, mais le marquage NPA a échoué dans Salesforce — vérifie la fiche."] : []),
-      ];
-      if (syncWarnings.length) {
-        setRunnerError(syncWarnings.join(" "));
-      }
-      if (view === "recalls") {
-        setFocusedContactId(null);
-        await refreshRecallsQueue();
-        return;
-      }
-      if (result.needs_event) {
-        const refreshed = await fetchSession(token, target.sessionId);
-        const updatedCurrent = refreshed.contacts.find((c) => c.id === contactId);
-        setContacts(refreshed.contacts);
-        setAwaitingEvent(updatedCurrent ?? null);
-      } else {
-        setFocusedContactId(null);
-        await advanceOrComplete(target.sessionId);
-      }
-    } catch (err) {
-      setRunnerError(errorMessage(err));
+      await completeSession(token, sessionId);
+      const finalData = await refreshRunner(sessionId);
+      setActiveSession(finalData.session);
+      setContacts(finalData.contacts);
+      setView("recap");
     } finally {
       setRunnerLoading(false);
     }
   };
 
-  const handleLogRdvAndNext = async (
+  const rollbackContact = (contactId: number, snapshot: SessionContact) => {
+    setContacts((current) => current.map((c) => (c.id === contactId ? snapshot : c)));
+    setFocusedContactId(contactId);
+  };
+
+  const handleLogAndNext = (contactId: number, payload: LogPayload) => {
+    if (!token) return;
+    const target = resolveLogTarget(contactId);
+    if (!target) return;
+
+    let snapshot: SessionContact | undefined;
+    let remainingPending = false;
+
+    setContacts((current) => {
+      snapshot = current.find((c) => c.id === contactId);
+      if (!snapshot || snapshot.status !== "pending") return current;
+      const optimistic: SessionContact = {
+        ...snapshot,
+        status: "called",
+        outcome: payload.resultat,
+        comments: payload.comments || null,
+        recall_at: payload.recallAt,
+        marked_npa: payload.doNotCall ? true : snapshot.marked_npa,
+        called_at: new Date().toISOString(),
+      };
+      const nextContacts = current.map((c) => (c.id === contactId ? optimistic : c));
+      remainingPending = nextContacts.some((c) => c.status === "pending");
+      return nextContacts;
+    });
+
+    if (!snapshot) return;
+
+    setFocusedContactId(null);
+    setRunnerError(null);
+    const rollback = snapshot;
+    const wasLast = !remainingPending;
+    const viewAtEnqueue = view;
+
+    logQueueRef.current.enqueue(async () => {
+      try {
+        const result = await logCall(token, target.sessionId, target.contactId, payload.resultat, {
+          comments: payload.comments,
+          recallAt: payload.recallAt,
+          doNotCall: payload.doNotCall,
+        });
+        const syncWarnings = [
+          ...(result.recall_failed
+            ? ["Appel consigné, mais la création du rappel a échoué dans Salesforce — vérifie la fiche."]
+            : []),
+          ...(result.npa_failed
+            ? ["Appel consigné, mais le marquage NPA a échoué dans Salesforce — vérifie la fiche."]
+            : []),
+        ];
+        if (syncWarnings.length) {
+          setRunnerError(syncWarnings.join(" "));
+        }
+
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+          return;
+        }
+
+        if (result.needs_event) {
+          const refreshed = await fetchSession(token, target.sessionId);
+          setContacts(refreshed.contacts);
+          setAwaitingEvent(refreshed.contacts.find((c) => c.id === contactId) ?? null);
+          setFocusedContactId(contactId);
+          return;
+        }
+
+        if (wasLast) {
+          await finishSessionIfDone(target.sessionId);
+        }
+      } catch (err) {
+        if (
+          err instanceof CallsApiError
+          && err.status === 409
+          && err.code === "contact_already_processed"
+        ) {
+          if (wasLast) await finishSessionIfDone(target.sessionId);
+          else if (viewAtEnqueue === "recalls") await refreshRecallsQueue();
+          return;
+        }
+        rollbackContact(contactId, rollback);
+        setRunnerError(errorMessage(err));
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+        }
+      }
+    });
+  };
+
+  const handleLogRdvAndNext = (
     contactId: number,
     payload: LogPayload,
-    event: { start: string; durationMin: number; invitees: string[] },
+    event: {
+      start: string;
+      durationMin: number;
+      subject: string;
+      ownerSfUserId: string | null;
+    },
   ) => {
     if (!token) return;
     const target = resolveLogTarget(contactId);
     if (!target) return;
 
-    setRunnerLoading(true);
+    let snapshot: SessionContact | undefined;
+    let remainingPending = false;
+
+    setContacts((current) => {
+      snapshot = current.find((c) => c.id === contactId);
+      if (!snapshot || snapshot.status !== "pending") return current;
+      const optimistic: SessionContact = {
+        ...snapshot,
+        status: "called",
+        outcome: "RDV planifié",
+        comments: payload.comments || null,
+        recall_at: null,
+        marked_npa: payload.doNotCall ? true : snapshot.marked_npa,
+        called_at: new Date().toISOString(),
+      };
+      const nextContacts = current.map((c) => (c.id === contactId ? optimistic : c));
+      remainingPending = nextContacts.some((c) => c.status === "pending");
+      return nextContacts;
+    });
+
+    if (!snapshot) return;
+
+    setAwaitingEvent(null);
+    setFocusedContactId(null);
     setRunnerError(null);
-    try {
-      const result = await logCall(token, target.sessionId, target.contactId, "RDV planifié", {
-        comments: payload.comments,
-        doNotCall: payload.doNotCall,
-      });
-      if (result.needs_event) {
-        await logEvent(
-          token,
-          target.sessionId,
-          target.contactId,
-          event.start,
-          event.durationMin,
-          event.invitees,
-        );
-      }
-      setAwaitingEvent(null);
-      setFocusedContactId(null);
-      if (view === "recalls") {
-        await refreshRecallsQueue();
-        return;
-      }
-      await advanceOrComplete(target.sessionId);
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-      if (view === "recalls") return;
+    const rollback = snapshot;
+    const wasLast = !remainingPending;
+    const viewAtEnqueue = view;
+
+    logQueueRef.current.enqueue(async () => {
       try {
-        const refreshed = await fetchSession(token, target.sessionId);
-        setContacts(refreshed.contacts);
-        const updated = refreshed.contacts.find((c) => c.id === contactId);
-        if (updated?.outcome === "RDV planifié" && !updated.sf_event_id) {
-          setAwaitingEvent(updated);
+        const result = await logCall(token, target.sessionId, target.contactId, "RDV planifié", {
+          comments: payload.comments,
+          doNotCall: payload.doNotCall,
+        });
+        if (result.needs_event) {
+          await logEvent(
+            token,
+            target.sessionId,
+            target.contactId,
+            event.start,
+            event.durationMin,
+            [],
+            { subject: event.subject, ownerSfUserId: event.ownerSfUserId },
+          );
         }
-      } catch {
-        /* keep current */
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+          return;
+        }
+        if (wasLast) {
+          await finishSessionIfDone(target.sessionId);
+        }
+      } catch (err) {
+        rollbackContact(contactId, rollback);
+        setRunnerError(errorMessage(err));
+        if (viewAtEnqueue === "recalls") return;
+        try {
+          const refreshed = await fetchSession(token, target.sessionId);
+          setContacts(refreshed.contacts);
+          const updated = refreshed.contacts.find((c) => c.id === contactId);
+          if (updated?.outcome === "RDV planifié" && !updated.sf_event_id) {
+            setAwaitingEvent(updated);
+            setFocusedContactId(contactId);
+          }
+        } catch {
+          /* keep rollback UI */
+        }
       }
-    } finally {
-      setRunnerLoading(false);
-    }
+    });
   };
 
-  const handleLogEvent = async (start: string, durationMin: number, invitees: string[]) => {
+  const handleLogEvent = (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => {
     if (!token || !activeSession || !awaitingEvent) return;
-    setRunnerLoading(true);
+    const sessionId = activeSession.id;
+    const contactId = awaitingEvent.id;
+    const snapshot = awaitingEvent;
+
+    setAwaitingEvent(null);
+    setFocusedContactId(null);
     setRunnerError(null);
-    try {
-      await logEvent(token, activeSession.id, awaitingEvent.id, start, durationMin, invitees);
-      setAwaitingEvent(null);
-      setFocusedContactId(null);
-      await advanceOrComplete(activeSession.id);
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
-    }
+
+    const remainingPending = contactsRef.current.some(
+      (c) => c.id !== contactId && c.status === "pending",
+    );
+
+    logQueueRef.current.enqueue(async () => {
+      try {
+        await logEvent(token, sessionId, contactId, start, durationMin, [], {
+          subject: meta.subject,
+          ownerSfUserId: meta.ownerSfUserId,
+        });
+        if (!remainingPending) {
+          await finishSessionIfDone(sessionId);
+        }
+      } catch (err) {
+        setAwaitingEvent(snapshot);
+        setFocusedContactId(contactId);
+        setRunnerError(errorMessage(err));
+      }
+    });
   };
 
   const handleDeferContacts = async (
@@ -621,7 +973,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         payload.targetSessionId,
         payload.name,
       );
-      await loadSessions();
+      invalidateComboHubCache();
+      await loadSessions({ force: true });
       if (result.target_session) {
         setFocusedContactId(null);
         setAwaitingEvent(null);
@@ -644,6 +997,77 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       } catch {
         /* keep */
       }
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleRemoveContacts = async (contactIds: number[]) => {
+    if (!token || contactIds.length === 0) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    const targets = contactIds
+      .map((contactId) => resolveLogTarget(contactId))
+      .filter((target): target is { sessionId: number; contactId: number } => target !== null);
+    const results = await Promise.allSettled(
+      targets.map((target) =>
+        view === "recalls"
+          ? updateRecall(token, target.sessionId, target.contactId, null)
+          : removeContact(token, target.sessionId, target.contactId),
+      ),
+    );
+    const failures = results.filter((result) => result.status === "rejected");
+    try {
+      if (focusedContactId && contactIds.includes(focusedContactId)) {
+        setFocusedContactId(null);
+      }
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+      } else if (activeSession) {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+        setActiveSession(refreshed.session);
+      }
+      if (failures.length) {
+        setRunnerError(
+          `${results.length - failures.length} retirés, ${failures.length} en échec — liste actualisée`,
+        );
+      }
+    } catch (err) {
+      setRunnerError(errorMessage(err));
+    } finally {
+      setRunnerLoading(false);
+    }
+  };
+
+  const handleUpdateRecall = async (contactIds: number[], recallAt: string | null) => {
+    if (!token || contactIds.length === 0) return;
+    setRunnerLoading(true);
+    setRunnerError(null);
+    const targets = contactIds
+      .map((contactId) => resolveLogTarget(contactId))
+      .filter((target): target is { sessionId: number; contactId: number } => target !== null);
+    const results = await Promise.allSettled(
+      targets.map((target) => updateRecall(token, target.sessionId, target.contactId, recallAt)),
+    );
+    const failures = results.filter((result) => result.status === "rejected");
+    try {
+      if (recallAt === null && focusedContactId && contactIds.includes(focusedContactId)) {
+        setFocusedContactId(null);
+      }
+      if (view === "recalls") {
+        await refreshRecallsQueue();
+      } else if (activeSession) {
+        const refreshed = await fetchSession(token, activeSession.id);
+        setContacts(refreshed.contacts);
+      }
+      if (failures.length) {
+        setRunnerError(
+          `${results.length - failures.length} mis à jour, ${failures.length} en échec — liste actualisée`,
+        );
+      }
+    } catch (err) {
+      setRunnerError(errorMessage(err));
     } finally {
       setRunnerLoading(false);
     }
@@ -711,6 +1135,88 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     }
   };
 
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (view !== "runner" || !token || !activeSession || !focusedContactId || !userId) return;
+    if (activeSession.id === RECALL_QUEUE_SESSION.id) return;
+    const contact = contacts.find((c) => c.id === focusedContactId);
+    if (!contact || contact.status !== "pending") return;
+    if (contact.claim_active && contact.claimed_by && contact.claimed_by !== userId) return;
+    if (contact.claimed_by === userId && contact.claim_active) return;
+
+    let cancelled = false;
+    void claimContact(token, activeSession.id, focusedContactId)
+      .then((result) => {
+        if (cancelled) return;
+        setContacts((prev) =>
+          prev.map((row) =>
+            row.id === focusedContactId
+              ? {
+                  ...row,
+                  claimed_by: result.claimed_by,
+                  claimed_at: result.claimed_at,
+                  claim_active: true,
+                  claimed_by_label: null,
+                }
+              : row,
+          ),
+        );
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof CallsApiError && err.code === "contact_claimed") {
+          void openSession(activeSession.id, focusedContactId);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit `contacts` — only claim when focus/session changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, token, activeSession?.id, focusedContactId, session?.user?.id]);
+
+  const handleShareSession = async (memberUserIds: string[]) => {
+    if (!token || !activeSession || activeSession.id === RECALL_QUEUE_SESSION.id) return;
+    const members = await setSessionMembers(token, activeSession.id, memberUserIds);
+    setActiveSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            members,
+            is_owner: prev.is_owner ?? true,
+          }
+        : prev,
+    );
+  };
+
+  const handleHubShareSession = async (memberUserIds: string[]) => {
+    if (!token || shareSessionId == null) return;
+    const members = await setSessionMembers(token, shareSessionId, memberUserIds);
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === shareSessionId
+          ? {
+              ...session,
+              members,
+              shared: members.length > 0,
+              member_count: members.length,
+            }
+          : session,
+      ),
+    );
+    setShareSessionId(null);
+  };
+
+  const shareTargetSession =
+    shareSessionId != null ? sessions.find((session) => session.id === shareSessionId) ?? null : null;
+
+  const handleCelebrateGoal = (payload: { goal: number; count: number }) => {
+    if (!token || !activeSession || activeSession.id === RECALL_QUEUE_SESSION.id) return;
+    void celebrateGoal(token, activeSession.id, payload.goal, payload.count).catch(() => {
+      /* fire-and-forget */
+    });
+  };
+
   const handlePin = async () => {
     if (!activeSession || activeSession.id === RECALL_QUEUE_SESSION.id) return;
     const dateLabel = activeSession.scheduled_for
@@ -721,6 +1227,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       : "";
     const label = dateLabel ? `${activeSession.name} · ${dateLabel}` : activeSession.name;
     await addShortcut("calls", { session_id: String(activeSession.id) }, label);
+  };
+
+  const handlePinPilotage = async () => {
+    await addShortcut("calls", { view: "pilotage" }, "Pilotage");
   };
 
   const goToSessions = () => {
@@ -752,11 +1262,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         <SessionsView
           sessions={sessions}
           stats={stats}
-          recalls={recalls}
+          recallCount={recallCount}
           recallsLoading={recallsLoading}
           loading={sessionsLoading}
           error={sessionsError}
-          onRefresh={() => void loadSessions()}
+          canPilotage={canPilotage}
+          onRefresh={() => void loadSessions({ force: true })}
           onNewSession={() => {
             setView("new");
             setFilters(emptyFilterTree());
@@ -772,9 +1283,15 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           }}
           onOpenSession={(id, contactId) => void openSession(id, contactId)}
           onOpenRecalls={() => void openRecalls()}
+          onOpenPilotage={() => setView("pilotage")}
           onUpdateSession={handleUpdateSession}
           onDeleteSession={handleDeleteSession}
+          onShareSession={(id) => setShareSessionId(id)}
         />
+      )}
+
+      {view === "pilotage" && (
+        <PilotageView onBack={goToSessions} onPin={handlePinPilotage} />
       )}
 
       {view === "new" && (
@@ -798,13 +1315,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           presetsLoading={presetsLoading}
           savingPreset={savingPreset}
           currentUserId={session.user.id}
+          team={team}
           onBack={goToSessions}
           onPreview={() => void handlePreview()}
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
-          onCreate={(name, list, scheduledFor, sessionType) =>
-            void handleCreate(name, list, scheduledFor, sessionType)
+          onCreate={(name, list, scheduledFor, sessionType, memberUserIds) =>
+            void handleCreate(name, list, scheduledFor, sessionType, memberUserIds)
           }
         />
       )}
@@ -814,7 +1332,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           session={activeSession}
           contacts={contacts}
           hubSessions={sessions}
-          currentContact={findNextPending(contacts)}
+          currentContact={findNextPending(contacts, session.user.id)}
           focusedContactId={focusedContactId}
           variant={view === "recalls" ? "recalls" : "session"}
           loading={runnerLoading || (view === "recalls" && recallsLoading)}
@@ -822,20 +1340,31 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           awaitingEvent={awaitingEvent}
           contactContext={contactContext}
           contextContactId={contextContactId}
+          contextTargetContactId={contextTargetContactId}
           contextLoading={contextLoading}
           team={team}
+          currentSfUserId={currentSfUserId}
+          currentUserId={session.user.id}
           onBack={goToSessions}
           onPin={handlePin}
+          onShareSession={
+            activeSession.is_owner !== false && view === "runner"
+              ? handleShareSession
+              : undefined
+          }
           onFocusContact={setFocusedContactId}
           onLogAndNext={(contactId, payload) => void handleLogAndNext(contactId, payload)}
           onLogRdvAndNext={(contactId, payload, event) =>
             void handleLogRdvAndNext(contactId, payload, event)
           }
-          onLogEvent={(start, durationMin, invitees) =>
-            void handleLogEvent(start, durationMin, invitees)
+          onLogEvent={(start, durationMin, meta) =>
+            void handleLogEvent(start, durationMin, meta)
           }
           onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
+          onRemoveContacts={(ids) => void handleRemoveContacts(ids)}
+          onUpdateRecall={(contactIds, recallAt) => void handleUpdateRecall(contactIds, recallAt)}
           onLogMany={(ids, payload) => void handleLogMany(ids, payload)}
+          onCelebrateGoal={handleCelebrateGoal}
         />
       )}
 
@@ -847,6 +1376,24 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           error={runnerError}
           onBack={goToSessions}
           onCreateFollowUp={() => void handleCreateFollowUp()}
+        />
+      )}
+
+      {shareTargetSession && (
+        <ShareSessionPanel
+          members={shareTargetSession.members ?? []}
+          team={team}
+          currentUserId={session.user.id}
+          saving={shareSaving}
+          onClose={() => setShareSessionId(null)}
+          onSave={async (ids) => {
+            setShareSaving(true);
+            try {
+              await handleHubShareSession(ids);
+            } finally {
+              setShareSaving(false);
+            }
+          }}
         />
       )}
     </div>

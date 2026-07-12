@@ -53,6 +53,21 @@ export function hasRelanceQueryFilters(filters = {}) {
   );
 }
 
+/** Opportunity account predicates are applied in JS (see filterByOpportunityAccounts). */
+export function hasOpportunityQueryFilters(filters = {}) {
+  const enterprise = filters.entreprise || {};
+  return (
+    enterprise.opp_ouverte === true
+    || enterprise.opp_ouverte === false
+    || enterprise.opp_perdue === true
+    || enterprise.opp_perdue === false
+  );
+}
+
+function needsWideContactFetch(filters = {}) {
+  return hasRelanceQueryFilters(filters) || hasOpportunityQueryFilters(filters);
+}
+
 function taskSubquery(mapping) {
   const task = mapping.objects.task;
   const fields = task.fields;
@@ -83,15 +98,15 @@ function buildFonctionConditions(fonctionIds, mapping) {
 }
 
 /**
- * Builds the Contact SOQL query. Last-call predicates that SOQL cannot express
- * on Task anti/semi-joins are completed in filterTargetContacts.
+ * Builds the Contact SOQL query. Relance and opportunity predicates that SOQL
+ * cannot express reliably are completed in filterTargetContacts / filterByOpportunityAccounts.
  */
-export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserId) {
+export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserId, options = {}) {
   const account = mapping.objects.account;
   const contact = mapping.objects.contact;
-  const opportunity = mapping.objects.opportunity;
   const enterprise = filters.entreprise || {};
   const contactFilters = filters.contact || {};
+  const includeTasks = options.includeTasks !== false;
   const conditions = [];
 
   const sectors = stringList(enterprise.secteurs);
@@ -104,24 +119,6 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
   if (tiers.length) conditions.push(`Account.${account.fields.tier} IN (${escapedList(tiers)})`);
   if (typeof enterprise.compte_principal === "string" && enterprise.compte_principal) {
     conditions.push(`Account.${account.fields.parentId} = '${escapeSOQL(enterprise.compte_principal)}'`);
-  }
-
-  if (enterprise.opp_ouverte === true) {
-    conditions.push(`${contact.fields.accountId} IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false)`);
-  }
-  if (enterprise.opp_ouverte === false) {
-    conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false)`);
-  }
-  if (enterprise.opp_perdue === true) {
-    conditions.push(`${contact.fields.accountId} IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.stageName} = '${escapeSOQL(opportunity.closedLostStage)}')`);
-    // Spec: lost + zero open. Skip the NOT IN when opp_ouverte is already true
-    // (accounts with both open and lost) — SF allows at most 2 semi-join subqueries.
-    if (enterprise.opp_ouverte !== true && enterprise.opp_ouverte !== false) {
-      conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false)`);
-    }
-  }
-  if (enterprise.opp_perdue === false) {
-    conditions.push(`${contact.fields.accountId} NOT IN (SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.stageName} = '${escapeSOQL(opportunity.closedLostStage)}')`);
   }
 
   if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
@@ -146,10 +143,10 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
     `${contact.fields.accountId}`,
     `Account.${account.fields.id}`,
     `Account.${account.fields.name}`,
-    taskSubquery(mapping),
+    ...(includeTasks ? [taskSubquery(mapping)] : []),
   ].join(", ");
   const where = conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const limit = hasRelanceQueryFilters(filters) ? SOQL_FETCH_CAP : boundedLimit(filters.limit);
+  const limit = needsWideContactFetch(filters) ? SOQL_FETCH_CAP : boundedLimit(filters.limit);
   return `SELECT ${select} FROM ${contact.name}${where} LIMIT ${limit}`;
 }
 
@@ -174,6 +171,113 @@ function hasAnyCall(record, mapping) {
 function callInLastNDays(call, days, now, fields) {
   const age = dateAgeDays(call[fields.activityDate], now);
   return age !== null && age >= 0 && age <= days;
+}
+
+function accountIdFromContactRecord(record, mapping) {
+  const contact = mapping.objects.contact.fields;
+  const account = mapping.objects.account.fields;
+  return record?.Account?.[account.id] ?? record?.[contact.accountId] ?? null;
+}
+
+function accountIdsFromOpportunityRecords(records, accountField) {
+  const ids = new Set();
+  for (const record of Array.isArray(records) ? records : []) {
+    const accountId = record?.[accountField];
+    if (typeof accountId === "string" && accountId) ids.add(accountId);
+  }
+  return ids;
+}
+
+const OPP_ACCOUNT_CACHE_TTL_MS = 60_000;
+const oppAccountIdCache = {
+  open: { ids: null, fetchedAt: 0 },
+  lost: { ids: null, fetchedAt: 0 },
+};
+
+/** Test-only hook to isolate module-scope opportunity account cache. */
+export function __resetOpportunityAccountCache() {
+  oppAccountIdCache.open = { ids: null, fetchedAt: 0 };
+  oppAccountIdCache.lost = { ids: null, fetchedAt: 0 };
+}
+
+/** Which Opportunity account-id sets are required for the active tri-state filters. */
+export function opportunityAccountSetNeeds(filters = {}) {
+  const enterprise = filters.entreprise || {};
+  const needOpen =
+    enterprise.opp_ouverte === true
+    || enterprise.opp_ouverte === false
+    || (enterprise.opp_perdue === true && enterprise.opp_ouverte !== true);
+  const needLost = enterprise.opp_perdue === true || enterprise.opp_perdue === false;
+  return { needOpen, needLost };
+}
+
+async function fetchOpportunityAccountIds(token, mapping, kind) {
+  const opportunity = mapping.objects.opportunity;
+  const cache = kind === "lost" ? oppAccountIdCache.lost : oppAccountIdCache.open;
+  if (cache.ids && Date.now() - cache.fetchedAt < OPP_ACCOUNT_CACHE_TTL_MS) {
+    return { ids: cache.ids };
+  }
+
+  const soql = kind === "lost"
+    ? `SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.stageName} = '${escapeSOQL(opportunity.closedLostStage)}' LIMIT ${SOQL_FETCH_CAP}`
+    : `SELECT ${opportunity.fields.accountId} FROM ${opportunity.name} WHERE ${opportunity.fields.isClosed} = false LIMIT ${SOQL_FETCH_CAP}`;
+
+  const result = await searchContacts(token, soql);
+  if (result.error) return result;
+
+  const ids = accountIdsFromOpportunityRecords(result.records, opportunity.fields.accountId);
+  cache.ids = ids;
+  cache.fetchedAt = Date.now();
+  return { ids };
+}
+
+/** Fetch account IDs with open / lost opportunities (no Contact semi-joins). */
+export async function fetchOpportunityAccountIdSets(token, mapping = defaultMapping, filters = {}) {
+  const { needOpen, needLost } = opportunityAccountSetNeeds(filters);
+  if (!needOpen && !needLost) {
+    return { open: new Set(), lost: new Set() };
+  }
+
+  const [openResult, lostResult] = await Promise.all([
+    needOpen ? fetchOpportunityAccountIds(token, mapping, "open") : Promise.resolve({ ids: new Set() }),
+    needLost ? fetchOpportunityAccountIds(token, mapping, "lost") : Promise.resolve({ ids: new Set() }),
+  ]);
+  if (openResult.error) return openResult;
+  if (lostResult.error) return lostResult;
+
+  return {
+    open: openResult.ids,
+    lost: lostResult.ids,
+  };
+}
+
+/** Mirrors the v2 spec previously encoded in buildTargetQuery SOQL semi-joins. */
+export function filterByOpportunityAccounts(records, filters = {}, mapping = defaultMapping, sets) {
+  if (!sets || !hasOpportunityQueryFilters(filters)) {
+    return Array.isArray(records) ? records : [];
+  }
+
+  const enterprise = filters.entreprise || {};
+  const { open, lost } = sets;
+
+  return (Array.isArray(records) ? records : []).filter((record) => {
+    const accountId = accountIdFromContactRecord(record, mapping);
+    if (!accountId) return false;
+
+    const hasOpen = open.has(accountId);
+    const hasLost = lost.has(accountId);
+
+    if (enterprise.opp_ouverte === true && !hasOpen) return false;
+    if (enterprise.opp_ouverte === false && hasOpen) return false;
+
+    if (enterprise.opp_perdue === true) {
+      if (!hasLost) return false;
+      if (enterprise.opp_ouverte !== true && hasOpen) return false;
+    }
+    if (enterprise.opp_perdue === false && hasLost) return false;
+
+    return true;
+  });
 }
 
 /** Apply predicates that depend on Task child records returned by SOQL. */
@@ -260,6 +364,10 @@ export async function fetchSFToken(options = {}) {
   if (options.client && options.userId) {
     const userToken = await fetchUserSFToken(options);
     if (userToken) return userToken;
+    // Product path is user-OAuth only — do not silently fall back to SF_REFRESH_TOKEN.
+    if (options.allowOrgFallback !== true) {
+      return { error: "sf_auth_error" };
+    }
   }
   if (!options.forceRefresh && sfTokenCache.accessToken && Date.now() - sfTokenCache.fetchedAt < SF_TOKEN_TTL_MS) {
     return { accessToken: sfTokenCache.accessToken };
@@ -434,30 +542,44 @@ export async function fetchContactBasicsByIds(token, contactIds, mapping = defau
   return { byId };
 }
 
-/** Live Task history + open/closed opportunities + NPA for the runner cockpit. */
-export async function fetchContactContext(token, { contactId, accountId }, mapping = defaultMapping) {
+/** Live Task history + open/closed opportunities + NPA for the runner cockpit.
+ *  options.lite = prefetch path (moins de SOQL / pas de peers).
+ */
+export async function fetchContactContext(
+  token,
+  { contactId, accountId },
+  mapping = defaultMapping,
+  options = {},
+) {
+  const lite = options.lite === true;
   const contact = mapping.objects.contact;
   const account = mapping.objects.account;
   const task = mapping.objects.task;
   const opportunity = mapping.objects.opportunity;
   const tf = task.fields;
   const cf = contact.fields;
+  const af = account.fields;
   const of = opportunity.fields;
 
-  const contactSoql = [
+  // Contact + Account en un seul SOQL (évite 2 round-trips).
+  const contactAccountSoql = [
     `SELECT ${cf.doNotCall}, ${cf.email}, ${cf.title}`,
+    accountId
+      ? `, Account.${af.id}, Account.${af.name}, Account.${af.industry}, Account.${af.customerType}, Account.${af.ownerId}`
+      : "",
     `FROM ${contact.name}`,
     `WHERE ${cf.id} = '${escapeSOQL(contactId)}'`,
     `LIMIT 1`,
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 
+  const taskLimit = lite ? 8 : 12;
   const taskSoql = [
     `SELECT ${[tf.id, tf.activityDate, tf.result, tf.subject, tf.description].join(", ")}`,
     `FROM ${task.name}`,
     `WHERE ${tf.whoId} = '${escapeSOQL(contactId)}'`,
     `AND ${tf.subtype} = '${escapeSOQL(task.subtypeValue)}'`,
     `ORDER BY ${tf.activityDate} DESC NULLS LAST`,
-    `LIMIT 15`,
+    `LIMIT ${taskLimit}`,
   ].join(" ");
 
   const oppSoql = accountId
@@ -466,22 +588,90 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
         `FROM ${opportunity.name}`,
         `WHERE ${of.accountId} = '${escapeSOQL(accountId)}'`,
         `ORDER BY ${of.isClosed} ASC, ${of.closeDate} DESC NULLS LAST`,
-        `LIMIT 10`,
+        `LIMIT ${lite ? 6 : 10}`,
       ].join(" ")
     : null;
 
-  const [contactResult, tasksResult, oppResult] = await Promise.all([
-    searchContacts(token, contactSoql),
+  const event = mapping.objects.event;
+  const ef = event.fields;
+  const eventSoql = accountId
+    ? [
+        `SELECT Id, ${ef.subject}, ${ef.startDateTime}, ${ef.whoId}, ${ef.whatId}`,
+        `FROM ${event.name}`,
+        `WHERE ${ef.whatId} = '${escapeSOQL(accountId)}'`,
+        `ORDER BY ${ef.startDateTime} DESC NULLS LAST`,
+        `LIMIT ${lite ? 6 : 10}`,
+      ].join(" ")
+    : [
+        `SELECT Id, ${ef.subject}, ${ef.startDateTime}, ${ef.whoId}, ${ef.whatId}`,
+        `FROM ${event.name}`,
+        `WHERE ${ef.whoId} = '${escapeSOQL(contactId)}'`,
+        `ORDER BY ${ef.startDateTime} DESC NULLS LAST`,
+        `LIMIT ${lite ? 6 : 10}`,
+      ].join(" ");
+
+  const ocrSoql = lite
+    ? null
+    : [
+        `SELECT OpportunityId`,
+        `FROM OpportunityContactRole`,
+        `WHERE ContactId = '${escapeSOQL(contactId)}'`,
+        `LIMIT 50`,
+      ].join(" ");
+
+  const [contactResult, tasksResult, oppResult, ocrResult, eventResult] = await Promise.all([
+    searchContacts(token, contactAccountSoql),
     searchContacts(token, taskSoql),
     oppSoql ? searchContacts(token, oppSoql) : Promise.resolve({ records: [] }),
+    ocrSoql ? searchContacts(token, ocrSoql) : Promise.resolve({ records: [] }),
+    searchContacts(token, eventSoql),
   ]);
 
   if (contactResult.error) return { error: contactResult.error };
   if (tasksResult.error) return { error: tasksResult.error };
   if (oppResult.error) return { error: oppResult.error };
+  // Events best-effort : si inaccessible, on continue sans historique RDV.
+  const events = (eventResult.error ? [] : eventResult.records || []).map((record) => ({
+    id: record.Id,
+    subject: record[ef.subject] || null,
+    start_date_time: record[ef.startDateTime] || null,
+    record_url: buildLightningUrl(event.name, record.Id),
+    linked_to_contact: record[ef.whoId] === contactId,
+  }));
+  // OCR = OpportunityContactRole (association Contact ↔ Opportunity dans Salesforce).
+  const linkedOppIds = new Set(
+    (ocrResult.error ? [] : ocrResult.records || [])
+      .map((row) => row.OpportunityId)
+      .filter(Boolean),
+  );
 
   const contactRow = contactResult.records?.[0];
+  const accountRow = contactRow?.Account || null;
   const npa = Boolean(contactRow?.[cf.doNotCall]);
+  const industry = accountRow?.[af.industry] || null;
+
+  // Peers : uniquement hors lite (prefetch) — 2ᵉ round-trip volontairement évité au warm-up.
+  let peerClients = [];
+  if (!lite && industry) {
+    const peersSoql = [
+      `SELECT ${af.id}, ${af.name}, ${af.industry}`,
+      `FROM ${account.name}`,
+      `WHERE ${af.industry} = '${escapeSOQL(industry)}'`,
+      `AND ${af.customerType} = 'Client'`,
+      accountId ? `AND ${af.id} != '${escapeSOQL(accountId)}'` : null,
+      `ORDER BY ${af.name} ASC`,
+      `LIMIT 3`,
+    ].filter(Boolean).join(" ");
+    const peersResult = await searchContacts(token, peersSoql);
+    if (!peersResult.error) {
+      peerClients = (peersResult.records || []).map((record) => ({
+        id: record[af.id],
+        name: record[af.name] || "",
+        industry: record[af.industry] || null,
+        record_url: buildLightningUrl(account.name, record[af.id]),
+      }));
+    }
+  }
 
   const opportunities = (oppResult.records || []).map((record) => ({
     id: record[of.id],
@@ -492,6 +682,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     amount: typeof record[of.amount] === "number" ? record[of.amount] : null,
     close_date: record[of.closeDate] || null,
     record_url: buildLightningUrl(opportunity.name, record[of.id]),
+    linked_to_contact: linkedOppIds.has(record[of.id]),
   }));
 
   return {
@@ -499,6 +690,10 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     account_record_url: accountId ? buildLightningUrl(account.name, accountId) : null,
     email: contactRow?.[cf.email] ?? null,
     title: contactRow?.[cf.title] ?? null,
+    account_name: accountRow?.[af.name] ?? null,
+    account_owner_sf_user_id: accountRow?.[af.ownerId] || null,
+    industry,
+    peer_clients: peerClients,
     npa,
     tasks: (tasksResult.records || []).map((record) => ({
       id: record[tf.id],
@@ -509,6 +704,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
       record_url: buildLightningUrl(task.name, record[tf.id]),
     })),
     opportunities,
+    events,
   };
 }
 

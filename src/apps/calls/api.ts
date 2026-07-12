@@ -65,6 +65,66 @@ export async function fetchStats(token: string): Promise<CallStats> {
   return data.stats;
 }
 
+export type ComboHubPayload = {
+  sessions: SessionSummary[];
+  stats: CallStats;
+  recall_count: number;
+};
+
+type HubCacheEntry = {
+  token: string;
+  at: number;
+  data?: ComboHubPayload;
+  promise?: Promise<ComboHubPayload>;
+};
+
+let hubCache: HubCacheEntry | null = null;
+const HUB_CACHE_TTL_MS = 45_000;
+
+export function invalidateComboHubCache() {
+  hubCache = null;
+}
+
+/** Prefetch hub Combo (Desktop) — partage le cache avec CallManagerApp. */
+export function prefetchComboHub(token: string): void {
+  if (!token) return;
+  void fetchComboHub(token).catch(() => {
+    /* ignore */
+  });
+}
+
+export async function fetchComboHub(
+  token: string,
+  opts?: { force?: boolean },
+): Promise<ComboHubPayload> {
+  const force = opts?.force === true;
+  const now = Date.now();
+  if (
+    !force
+    && hubCache
+    && hubCache.token === token
+    && hubCache.data
+    && now - hubCache.at < HUB_CACHE_TTL_MS
+  ) {
+    return hubCache.data;
+  }
+  if (!force && hubCache && hubCache.token === token && hubCache.promise) {
+    return hubCache.promise;
+  }
+
+  const promise = apiFetch<ComboHubPayload>(token, "/api/calls?resource=hub").then((data) => {
+    hubCache = { token, at: Date.now(), data };
+    return data;
+  });
+  hubCache = { token, at: now, promise };
+  try {
+    return await promise;
+  } catch (err) {
+    if (hubCache?.promise === promise) hubCache = null;
+    throw err;
+  }
+}
+
 export async function fetchSession(
   token: string,
   sessionId: number,
@@ -76,10 +136,16 @@ export async function fetchContactContext(
   token: string,
   sessionId: number,
   contactId: number,
+  opts?: { lite?: boolean },
 ): Promise<ContactContext> {
+  const params = new URLSearchParams({
+    session_id: String(sessionId),
+    context_contact_id: String(contactId),
+  });
+  if (opts?.lite) params.set("context_lite", "1");
   const data = await apiFetch<{ context: ContactContext }>(
     token,
-    `/api/calls?session_id=${sessionId}&context_contact_id=${contactId}`,
+    `/api/calls?${params}`,
   );
   return data.context;
 }
@@ -132,6 +198,7 @@ export async function createSession(
   contacts: ContactPreview[],
   scheduledFor?: string,
   sessionType?: string,
+  memberUserIds?: string[],
 ): Promise<{ session: SessionDetail; contacts: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -141,6 +208,7 @@ export async function createSession(
       contacts,
       ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
       ...(sessionType ? { session_type: sessionType } : {}),
+      ...(memberUserIds && memberUserIds.length > 0 ? { member_user_ids: memberUserIds } : {}),
     }),
   });
 }
@@ -165,6 +233,37 @@ export async function deleteSession(token: string, sessionId: number): Promise<v
   await apiFetch(token, "/api/calls", {
     method: "POST",
     body: JSON.stringify({ action: "delete_session", session_id: sessionId }),
+  });
+}
+
+export async function setSessionMembers(
+  token: string,
+  sessionId: number,
+  memberUserIds: string[],
+): Promise<TeamMember[]> {
+  const data = await apiFetch<{ members: TeamMember[] }>(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "set_session_members",
+      session_id: sessionId,
+      member_user_ids: memberUserIds,
+    }),
+  });
+  return data.members;
+}
+
+export async function claimContact(
+  token: string,
+  sessionId: number,
+  contactId: number,
+): Promise<{ claimed_by: string; claimed_at: string }> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "claim_contact",
+      session_id: sessionId,
+      contact_id: contactId,
+    }),
   });
 }
 
@@ -202,6 +301,9 @@ export async function logEvent(
   start: string,
   durationMin: number,
   invitees: string[],
+  options: { subject: string; ownerSfUserId?: string | null } = {
+    subject: "Rdv découverte prospect",
+  },
 ): Promise<void> {
   await apiFetch(token, "/api/calls", {
     method: "POST",
@@ -212,6 +314,8 @@ export async function logEvent(
       start,
       duration_min: durationMin,
       invitees,
+      subject: options.subject,
+      ...(options.ownerSfUserId ? { owner_sf_user_id: options.ownerSfUserId } : {}),
     }),
   });
 }
@@ -227,6 +331,24 @@ export async function skipContact(
       action: "skip_contact",
       session_id: sessionId,
       contact_id: contactId,
+    }),
+  });
+}
+
+/** Fire-and-forget team cheer when a commercial hits their RDV goal. */
+export async function celebrateGoal(
+  token: string,
+  sessionId: number,
+  goal: number,
+  rdvCount: number,
+): Promise<void> {
+  await apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "celebrate_goal",
+      session_id: sessionId,
+      goal,
+      rdv_count: rdvCount,
     }),
   });
 }
@@ -248,6 +370,38 @@ export async function deferContacts(
       scheduled_for: scheduledFor,
       ...(typeof targetSessionId === "number" ? { target_session_id: targetSessionId } : {}),
       ...(name ? { name } : {}),
+    }),
+  });
+}
+
+export async function removeContact(
+  token: string,
+  sessionId: number,
+  contactId: number,
+): Promise<void> {
+  await apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "remove_contact",
+      session_id: sessionId,
+      contact_id: contactId,
+    }),
+  });
+}
+
+export async function updateRecall(
+  token: string,
+  sessionId: number,
+  contactId: number,
+  recallAt: string | null,
+): Promise<{ recall_at: string | null }> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "update_recall",
+      session_id: sessionId,
+      contact_id: contactId,
+      recall_at: recallAt,
     }),
   });
 }

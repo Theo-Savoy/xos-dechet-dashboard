@@ -36,8 +36,8 @@ async function saveTargets(client, value) {
   if (error) throw new Error("targets_write_failed");
 }
 
-async function seasonalityFromSalesforce(quarter) {
-  const tokenResult = await fetchSFToken();
+async function seasonalityFromSalesforce(quarter, { client, userId }) {
+  const tokenResult = await fetchSFToken({ client, userId });
   if (tokenResult.error || !tokenResult.accessToken) return null;
   const { opportunity } = mapping.objects;
   const today = dateKey();
@@ -75,7 +75,7 @@ async function managerContext(request) {
   const profile = await getProfile(client, user.id);
   if (profile.error) return { response: respond(500, { error: profile.error }) };
   if (!canManageSettings(profile.role)) return { response: respond(403, { error: "forbidden" }) };
-  return { client, profile };
+  return { client, profile, user };
 }
 
 export async function GET(request) {
@@ -87,7 +87,7 @@ export async function GET(request) {
   const [targets, profiles, seasonality] = await Promise.all([
     loadTargets(context.client),
     context.client.from("profiles").select("id, email, full_name, sf_user_id, role").order("full_name"),
-    seasonalityFromSalesforce(quarter),
+    seasonalityFromSalesforce(quarter, { client: context.client, userId: context.user.id }),
   ]);
   if (profiles.error) return respond(500, { error: "profiles_lookup_failed" });
 

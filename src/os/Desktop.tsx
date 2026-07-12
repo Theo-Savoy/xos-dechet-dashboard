@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import logoXos from "../assets/logo-xos.png";
 import { supabase } from "../lib/supabase";
 import { Dock } from "./Dock";
@@ -9,6 +9,7 @@ import {
   serializeWindowState,
   windowReducer,
 } from "./windowState";
+import { ControlCenter } from "./ControlCenter";
 import { Launcher } from "./Launcher";
 import {
   fetchShortcuts,
@@ -20,15 +21,45 @@ import { startSalesforceLink } from "./salesforceLink";
 // Side-effect import : déclenche les imports dynamiques qui cachent les
 // chunks lazy des apps. Voir preload.ts pour la liste complète.
 import "./preload";
+import { prefetchComboHub } from "../apps/calls/api";
 import "./theme.css";
 import "./desktop.css";
+import "./controlCenter.css";
 
 const STORAGE_KEY = "xos.window-manager.v1";
+
+type SfStatusKind = "checking" | "ok" | "needs_link" | "needs_reconnect";
 
 type DesktopProps = {
   userEmail: string;
   accessToken: string;
 };
+
+function sfStatusLabel(kind: SfStatusKind): string {
+  switch (kind) {
+    case "ok":
+      return "Salesforce connecté";
+    case "needs_reconnect":
+      return "SF à reconnecter";
+    case "needs_link":
+      return "SF non lié";
+    default:
+      return "Salesforce…";
+  }
+}
+
+function sfStatusClass(kind: SfStatusKind): string {
+  switch (kind) {
+    case "ok":
+      return "xos-menubar__sf-status--linked";
+    case "needs_reconnect":
+      return "xos-menubar__sf-status--degraded";
+    case "needs_link":
+      return "xos-menubar__sf-status--unlinked";
+    default:
+      return "xos-menubar__sf-status--checking";
+  }
+}
 
 export function Desktop({ userEmail, accessToken }: DesktopProps) {
   const [state, dispatch] = useReducer(windowReducer, undefined, () =>
@@ -38,11 +69,15 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
     ),
   );
   const [role, setRole] = useState<AppRole>("commercial");
-  const [sfLinked, setSfLinked] = useState(false);
+  const [sfStatus, setSfStatus] = useState<SfStatusKind>("checking");
   const [sfLinking, setSfLinking] = useState(false);
-  const [sfLinkChecked, setSfLinkChecked] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [shortcuts, setShortcuts] = useState<DesktopShortcut[]>([]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    prefetchComboHub(accessToken);
+  }, [accessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +96,6 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
     };
   }, []);
 
-
   useEffect(() => {
     let cancelled = false;
     void supabase
@@ -75,23 +109,48 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
           setRole(value);
         }
       });
-    void supabase
-      .from("profiles")
-      .select("sf_auth_connected_at")
-      .eq("email", userEmail)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) {
-          if (data && "sf_auth_connected_at" in data) {
-            setSfLinked(Boolean(data.sf_auth_connected_at));
-          }
-          setSfLinkChecked(true);
-        }
-      });
     return () => {
       cancelled = true;
     };
   }, [userEmail]);
+
+  const refreshSfStatus = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const res = await fetch("/api/status", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        setSfStatus("needs_reconnect");
+        return;
+      }
+      const body = (await res.json()) as {
+        salesforce?: { connected?: boolean; userLinked?: boolean };
+      };
+      const connected = body.salesforce?.connected === true;
+      const userLinked = body.salesforce?.userLinked === true;
+      if (!userLinked) setSfStatus("needs_link");
+      else if (!connected) setSfStatus("needs_reconnect");
+      else setSfStatus("ok");
+    } catch {
+      setSfStatus("needs_reconnect");
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    void refreshSfStatus();
+  }, [refreshSfStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sf_link") !== "success") return;
+    setDismissed(false);
+    void refreshSfStatus();
+    params.delete("sf_link");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", next);
+  }, [refreshSfStatus]);
 
   const visibleApps = appRegistry.filter((app) => !app.roles || app.roles.includes(role));
 
@@ -108,6 +167,13 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
     });
   };
 
+  const startLink = () => {
+    setSfLinking(true);
+    void startSalesforceLink(accessToken).catch(() => setSfLinking(false));
+  };
+
+  const needsSfAction = sfStatus === "needs_link" || sfStatus === "needs_reconnect";
+  const showSfNotification = needsSfAction && !dismissed;
   const hasMaximizedWindow = state.windows.some((w) => w.maximized && !w.minimized);
 
   return (
@@ -125,16 +191,38 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
           />
         </span>
         <div className="xos-menubar__session-group">
+          <ControlCenter accessToken={accessToken} />
           <span className="xos-menubar__session" title={userEmail}>
             <span className="xos-menubar__status" aria-hidden="true" />
             {userEmail}
           </span>
-          <span className={`xos-menubar__sf-status ${sfLinked ? 'xos-menubar__sf-status--linked' : 'xos-menubar__sf-status--unlinked'}`}>
-            <svg className="xos-menubar__sf-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
-            </svg>
-            <span className="xos-menubar__sf-text">{sfLinked ? "Salesforce connecté" : "Salesforce non lié"}</span>
-          </span>
+          {needsSfAction ? (
+            <button
+              type="button"
+              className={`xos-menubar__sf-status ${sfStatusClass(sfStatus)}`}
+              title={
+                sfStatus === "needs_link"
+                  ? "Lier votre compte Salesforce"
+                  : "Reconnecter Salesforce — l’API plateforme est indisponible"
+              }
+              disabled={sfLinking}
+              onClick={startLink}
+            >
+              <svg className="xos-menubar__sf-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+              </svg>
+              <span className="xos-menubar__sf-text">
+                {sfLinking ? "Connexion…" : sfStatusLabel(sfStatus)}
+              </span>
+            </button>
+          ) : (
+            <span className={`xos-menubar__sf-status ${sfStatusClass(sfStatus)}`}>
+              <svg className="xos-menubar__sf-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+              </svg>
+              <span className="xos-menubar__sf-text">{sfStatusLabel(sfStatus)}</span>
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -181,7 +269,7 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
       <Dock apps={visibleApps} windows={state.windows} onOpen={openApp} />
       <Launcher accessToken={accessToken} onOpenApp={openApp} apps={visibleApps} />
 
-      {!sfLinked && sfLinkChecked && !dismissed && (
+      {showSfNotification && (
         <div className="xos-notification" role="alert">
           <div className="xos-notification__header">
             <div className="xos-notification__icon">
@@ -201,9 +289,13 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
             </button>
           </div>
           <div className="xos-notification__body">
-            <h3 className="xos-notification__title">Liaison requise</h3>
+            <h3 className="xos-notification__title">
+              {sfStatus === "needs_reconnect" ? "Reconnexion requise" : "Liaison requise"}
+            </h3>
             <p className="xos-notification__message">
-              Votre compte Salesforce n'est pas lié. Connectez-le pour synchroniser vos appels.
+              {sfStatus === "needs_reconnect"
+                ? "Votre connexion Salesforce a expiré. Reconnectez votre compte pour continuer à utiliser Combo."
+                : "Votre compte Salesforce n'est pas lié. Connectez-le pour synchroniser vos appels."}
             </p>
           </div>
           <div className="xos-notification__actions">
@@ -211,12 +303,13 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
               type="button"
               className="xos-btn xos-btn--primary"
               disabled={sfLinking}
-              onClick={() => {
-                setSfLinking(true);
-                void startSalesforceLink(accessToken).catch(() => setSfLinking(false));
-              }}
+              onClick={startLink}
             >
-              {sfLinking ? "Connexion…" : "Lier Salesforce"}
+              {sfLinking
+                ? "Connexion…"
+                : sfStatus === "needs_reconnect"
+                  ? "Reconnecter Salesforce"
+                  : "Lier Salesforce"}
             </button>
           </div>
         </div>
