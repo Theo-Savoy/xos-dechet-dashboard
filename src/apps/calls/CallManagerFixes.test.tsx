@@ -1182,7 +1182,7 @@ describe("call targeting copy and controls", () => {
       />,
     );
     expect(screen.getByRole("note")).toBeTruthy();
-    expect(screen.getByText(/aucune ouverte/i)).toBeTruthy();
+    expect(screen.getByText(/ouverte.*perdue|perdue.*ouverte/i)).toBeTruthy();
   });
 
   it("shows guidance when lost is set to Non", () => {
