@@ -2646,89 +2646,116 @@
 
 .calls-picklist {
   display: grid;
-  gap: 0.35rem;
-  max-height: 16.5rem;
+  gap: 0.2rem;
+  max-height: 18rem;
   overflow: auto;
-  padding: 0.4rem;
+  padding: 0.35rem;
 }
 
 .calls-picklist__family {
   display: grid;
-  gap: 0.1rem;
+  gap: 0;
+  border-radius: 0.45rem;
+}
+
+.calls-picklist__family--open {
+  background: color-mix(in srgb, var(--xos-text) 3.5%, transparent);
+  padding-bottom: 0.2rem;
 }
 
 .calls-picklist__family-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 0.35rem 0.4rem;
-  margin: 0 -0.15rem;
+  gap: 0.4rem;
+  padding: 0.4rem 0.45rem;
   border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--xos-surface, #0a0e1c) 92%, transparent);
-  backdrop-filter: blur(6px);
+  min-height: 2rem;
+}
+
+.calls-picklist__family-head:hover {
+  background: color-mix(in srgb, var(--xos-text) 5%, transparent);
+}
+
+.calls-picklist__family-head--partial,
+.calls-picklist__family-head--all {
+  background: color-mix(in srgb, var(--xos-accent) 10%, transparent);
+}
+
+.calls-picklist__family-head--all:hover,
+.calls-picklist__family-head--partial:hover {
+  background: color-mix(in srgb, var(--xos-accent) 14%, transparent);
+}
+
+.calls-picklist__family-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+.calls-picklist__family-check input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--xos-accent);
+  cursor: pointer;
 }
 
 .calls-picklist__family-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
   color: var(--xos-text);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
   padding: 0;
 }
 
+.calls-picklist__family-toggle--static {
+  cursor: default;
+}
+
 .calls-picklist__family-chevron {
   color: var(--xos-text-muted);
   font-size: 0.7rem;
-  width: 0.75rem;
+  width: 0.7rem;
   flex-shrink: 0;
 }
 
 .calls-picklist__family-label {
   min-width: 0;
+  flex: 1;
+  line-height: 1.25;
 }
 
-.calls-picklist__family-count {
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 0.1rem 0.35rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
-  color: var(--xos-text);
-}
-
-.calls-picklist__family-all {
-  border: 0;
-  background: transparent;
-  color: var(--xos-accent);
-  font: inherit;
+.calls-picklist__family-meta {
   font-size: 0.72rem;
-  cursor: pointer;
-  padding: 0.15rem 0.35rem;
+  font-weight: 500;
+  color: var(--xos-text-muted);
   flex-shrink: 0;
 }
 
-.calls-picklist__family-all:hover {
-  text-decoration: underline;
+.calls-picklist__family-body {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0 0.2rem 0.15rem 1.55rem;
+  border-left: 1px solid color-mix(in srgb, var(--xos-border) 70%, transparent);
+  margin-left: 0.85rem;
 }
 
 .calls-picklist__option {
   margin: 0;
-  padding: 0.4rem 0.45rem;
-  border-radius: 0.4rem;
+  padding: 0.38rem 0.45rem;
+  border-radius: 0.35rem;
   white-space: normal;
+  font-size: 0.84rem;
 }
 
 .calls-picklist__option:hover {

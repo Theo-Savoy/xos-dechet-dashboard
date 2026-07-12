@@ -6,7 +6,10 @@ export type SecteurFamily = {
   secteurs: readonly Secteur[];
 };
 
-/** Grandes familles pour naviguer la picklist secteurs (créateur de liste). */
+/**
+ * Familles métier pour la picklist secteurs.
+ * Principe : placer chaque secteur là où un commercial chercherait naturellement.
+ */
 export const SECTEUR_FAMILIES: SecteurFamily[] = [
   {
     id: "public",
@@ -15,7 +18,6 @@ export const SECTEUR_FAMILIES: SecteurFamily[] = [
       "Secteur public",
       "Education - Formation",
       "Entité à but non lucratif",
-      "Services aux entreprises ou aux collectivités",
       "Services à la personne / action sociale",
     ],
   },
@@ -87,8 +89,9 @@ export const SECTEUR_FAMILIES: SecteurFamily[] = [
     id: "services",
     label: "Services & conseil",
     secteurs: [
-      "Relation Client",
+      "Services aux entreprises ou aux collectivités",
       "Services de conseils",
+      "Relation Client",
       "Ingénierie / certifications et inspections techniques",
       "Services environnementaux / facility management",
     ],

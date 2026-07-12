@@ -295,7 +295,6 @@ export function PilotageView({
   const [detailMode, setDetailMode] = useState<DetailMode>("sessions");
   const [data, setData] = useState<ProspectionCockpit | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cockpitCache = useRef<Map<string, ProspectionCockpit>>(new Map());
   const prefetching = useRef<Set<string>>(new Set());
@@ -326,10 +325,8 @@ export function PilotageView({
     if (cached) {
       applyCockpit(cached, period);
       setLoading(false);
-      setRefreshing(true);
     } else {
       setLoading(true);
-      setRefreshing(false);
     }
     setError(null);
 
@@ -348,7 +345,6 @@ export function PilotageView({
       }
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, [token, period, anchor, applyCockpit]);
 
@@ -485,7 +481,7 @@ export function PilotageView({
   };
 
   return (
-    <div className={`calls-view pilotage-app${refreshing ? " pilotage-app--refreshing" : ""}`}>
+    <div className="calls-view pilotage-app">
       <header className="calls-view__header pilotage-header">
         <div>
           <Tag variant="accent">Combo</Tag>
@@ -572,7 +568,7 @@ export function PilotageView({
               Séances
             </button>
           </div>
-          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+          <Button variant="secondary" onClick={() => void load()} disabled={loading && !data}>
             Actualiser
           </Button>
           {onPin && (

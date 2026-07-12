@@ -187,6 +187,70 @@ export function PicklistMultiSelect<T extends string>({
     );
   };
 
+  const renderFamilyHead = (
+    group: PicklistGroup<T>,
+    {
+      isOpen,
+      showChevron,
+      onToggleOpen,
+    }: {
+      isOpen?: boolean;
+      showChevron: boolean;
+      onToggleOpen?: () => void;
+    },
+  ) => {
+    const selectedInFamily = group.values.filter((item) => value.includes(item)).length;
+    const allSelected = selectedInFamily === group.values.length && group.values.length > 0;
+    const someSelected = selectedInFamily > 0 && !allSelected;
+
+    return (
+      <div
+        className={`calls-picklist__family-head${allSelected ? " calls-picklist__family-head--all" : ""}${someSelected ? " calls-picklist__family-head--partial" : ""}`}
+      >
+        <label className="calls-picklist__family-check">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected;
+            }}
+            onChange={() => toggleFamily(group.values)}
+            aria-label={
+              allSelected
+                ? `Désélectionner ${group.label}`
+                : `Sélectionner toute la catégorie ${group.label}`
+            }
+          />
+        </label>
+        {showChevron && onToggleOpen ? (
+          <button
+            type="button"
+            className="calls-picklist__family-toggle"
+            aria-expanded={isOpen}
+            onClick={onToggleOpen}
+          >
+            <span className="calls-picklist__family-chevron" aria-hidden="true">
+              {isOpen ? "▾" : "▸"}
+            </span>
+            <span className="calls-picklist__family-label">{group.label}</span>
+            <span className="calls-picklist__family-meta xos-numeric">
+              {selectedInFamily > 0 ? `${selectedInFamily}/` : ""}
+              {group.values.length}
+            </span>
+          </button>
+        ) : (
+          <div className="calls-picklist__family-toggle calls-picklist__family-toggle--static">
+            <span className="calls-picklist__family-label">{group.label}</span>
+            <span className="calls-picklist__family-meta xos-numeric">
+              {selectedInFamily > 0 ? `${selectedInFamily}/` : ""}
+              {group.values.length}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderGrouped = () => {
     if (!groups?.length) return null;
     return groups.map((group) => {
@@ -201,43 +265,25 @@ export function PicklistMultiSelect<T extends string>({
         );
         if (visible.length === 0) return null;
         return (
-          <div key={group.id} className="calls-picklist__family">
-            <div className="calls-picklist__family-head">
-              <span className="calls-picklist__family-label">{group.label}</span>
-            </div>
-            {visible.map(renderOption)}
+          <div key={group.id} className="calls-picklist__family calls-picklist__family--open">
+            {renderFamilyHead(group, { showChevron: false })}
+            <div className="calls-picklist__family-body">{visible.map(renderOption)}</div>
           </div>
         );
       }
 
       const isOpen = expanded.has(group.id);
-      const selectedInFamily = group.values.filter((item) => value.includes(item)).length;
       return (
-        <div key={group.id} className="calls-picklist__family">
-          <div className="calls-picklist__family-head">
-            <button
-              type="button"
-              className="calls-picklist__family-toggle"
-              aria-expanded={isOpen}
-              onClick={() => toggleExpanded(group.id)}
-            >
-              <span className="calls-picklist__family-chevron" aria-hidden="true">
-                {isOpen ? "▾" : "▸"}
-              </span>
-              <span className="calls-picklist__family-label">{group.label}</span>
-              {selectedInFamily > 0 && (
-                <span className="calls-picklist__family-count xos-numeric">{selectedInFamily}</span>
-              )}
-            </button>
-            <button
-              type="button"
-              className="calls-picklist__family-all"
-              onClick={() => toggleFamily(group.values)}
-            >
-              {group.values.every((item) => value.includes(item)) ? "Aucun" : "Tout"}
-            </button>
-          </div>
-          {isOpen && groupOptions.map(renderOption)}
+        <div
+          key={group.id}
+          className={`calls-picklist__family${isOpen ? " calls-picklist__family--open" : ""}`}
+        >
+          {renderFamilyHead(group, {
+            isOpen,
+            showChevron: true,
+            onToggleOpen: () => toggleExpanded(group.id),
+          })}
+          {isOpen && <div className="calls-picklist__family-body">{groupOptions.map(renderOption)}</div>}
         </div>
       );
     });
