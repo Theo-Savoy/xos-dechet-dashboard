@@ -128,6 +128,8 @@ export type ContactContext = {
   email?: string | null;
   title?: string | null;
   account_name?: string | null;
+  /** Salesforce User Id propriétaire du compte (Account.OwnerId). */
+  account_owner_sf_user_id?: string | null;
   industry?: string | null;
   peer_clients?: PeerClientAccount[];
   npa: boolean;

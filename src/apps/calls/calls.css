@@ -2197,8 +2197,75 @@
   border-color: color-mix(in srgb, #ff9f43 35%, var(--xos-border));
 }
 
+.calls-stat--rdv-heat-2 {
+  border-color: color-mix(in srgb, #f5c542 40%, var(--xos-border));
+}
+
+.calls-stat--rdv-heat-3,
+.calls-stat--rdv-heat-4 {
+  border-color: color-mix(in srgb, #ff9f43 50%, var(--xos-border));
+  background:
+    radial-gradient(ellipse at 70% 0%, color-mix(in srgb, #ff6b35 18%, transparent), transparent 60%),
+    rgba(255, 255, 255, 0.04);
+}
+
+/* Objectif RDV atteint : fond doré permanent. */
 .calls-stat--rdv-goal {
-  border-color: color-mix(in srgb, #f5c542 50%, var(--xos-border));
+  border-color: color-mix(in srgb, #ffe566 75%, var(--xos-border));
+  background:
+    radial-gradient(ellipse at 55% -10%, color-mix(in srgb, #ffe566 42%, transparent), transparent 62%),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, #c9a227 62%, transparent),
+      color-mix(in srgb, #7a5a10 72%, transparent) 55%,
+      color-mix(in srgb, #3d2a08 78%, transparent)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
+    0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
+    inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+}
+
+.calls-stat--rdv-goal span,
+.calls-stat--rdv-goal strong {
+  color: #fff6c8;
+  text-shadow: 0 0 10px color-mix(in srgb, #f5c542 40%, transparent);
+}
+
+.calls-stat--rdv-goal .calls-stat__goal {
+  color: color-mix(in srgb, #fff6c8 72%, transparent);
+}
+
+/* Pulse de célébration (temporaire) au moment où l’objectif est touché. */
+.calls-stat--rdv-goal-hit {
+  animation: calls-rdv-goal-pulse 1.35s ease-out 4;
+}
+
+@keyframes calls-rdv-goal-pulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
+      0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
+      inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+  }
+  35% {
+    transform: scale(1.045);
+    filter: brightness(1.18);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, #ffe566 70%, transparent),
+      0 0 48px color-mix(in srgb, #f5c542 60%, transparent),
+      inset 0 0 28px color-mix(in srgb, #ffe566 28%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
+      0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
+      inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+  }
 }
 
 .calls-rdv-goal {
@@ -3177,10 +3244,10 @@ a.calls-contact-card__peer:hover {
 .calls-rdv-confetti--goal::before {
   content: "";
   position: absolute;
-  inset: 20% 25%;
+  inset: 12% 18%;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, #f5c542 35%, transparent), transparent 70%);
-  animation: calls-rdv-flare 0.9s ease-out forwards;
+  background: radial-gradient(circle, color-mix(in srgb, #f5c542 42%, transparent), transparent 70%);
+  animation: calls-rdv-flare 1.8s ease-out forwards;
 }
 
 .calls-rdv-confetti__flare {
@@ -3192,7 +3259,7 @@ a.calls-contact-card__peer:hover {
   margin: -4rem 0 0 -4rem;
   border-radius: 50%;
   border: 2px solid color-mix(in srgb, #f5c542 55%, transparent);
-  animation: calls-rdv-ring 0.85s ease-out forwards;
+  animation: calls-rdv-ring 1.6s ease-out forwards;
 }
 
 .calls-rdv-confetti__piece {

@@ -9,6 +9,7 @@ import {
   serializeWindowState,
   windowReducer,
 } from "./windowState";
+import { ControlCenter } from "./ControlCenter";
 import { Launcher } from "./Launcher";
 import {
   fetchShortcuts,
@@ -22,6 +23,7 @@ import { startSalesforceLink } from "./salesforceLink";
 import "./preload";
 import "./theme.css";
 import "./desktop.css";
+import "./controlCenter.css";
 
 const STORAGE_KEY = "xos.window-manager.v1";
 
@@ -125,6 +127,7 @@ export function Desktop({ userEmail, accessToken }: DesktopProps) {
           />
         </span>
         <div className="xos-menubar__session-group">
+          <ControlCenter accessToken={accessToken} />
           <span className="xos-menubar__session" title={userEmail}>
             <span className="xos-menubar__status" aria-hidden="true" />
             {userEmail}

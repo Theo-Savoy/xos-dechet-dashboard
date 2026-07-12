@@ -473,7 +473,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
 
   const accountSoql = accountId
     ? [
-        `SELECT ${af.id}, ${af.name}, ${af.industry}, ${af.customerType}`,
+        `SELECT ${af.id}, ${af.name}, ${af.industry}, ${af.customerType}, ${af.ownerId}`,
         `FROM ${account.name}`,
         `WHERE ${af.id} = '${escapeSOQL(accountId)}'`,
         `LIMIT 1`,
@@ -578,6 +578,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     email: contactRow?.[cf.email] ?? null,
     title: contactRow?.[cf.title] ?? null,
     account_name: accountRow?.[af.name] ?? null,
+    account_owner_sf_user_id: accountRow?.[af.ownerId] || null,
     industry,
     peer_clients: peerClients,
     npa,

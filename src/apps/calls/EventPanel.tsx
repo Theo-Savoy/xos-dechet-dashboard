@@ -40,6 +40,8 @@ type EventPanelProps = {
   currentSfUserId?: string | null;
   /** Show ⌘↵ badge on the submit button (inline RDV log). */
   showSubmitShortcut?: boolean;
+  /** Prefill attribution with Account.OwnerId when ≠ caller. */
+  defaultOwnerSfUserId?: string | null;
 };
 
 function defaultStart(): string {
@@ -61,6 +63,7 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
     sessionType = "prospection",
     currentSfUserId = null,
     showSubmitShortcut = false,
+    defaultOwnerSfUserId = null,
   },
   ref,
 ) {
@@ -72,12 +75,21 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
     return others.filter((member) => isRdvAssigneeCandidate(member.sf_user_id));
   }, [team, currentSfUserId, sdr]);
 
+  const accountOwnerAssignable =
+    Boolean(defaultOwnerSfUserId)
+    && defaultOwnerSfUserId !== currentSfUserId
+    && assignees.some((member) => member.sf_user_id === defaultOwnerSfUserId);
+
+  const resolveDefaultOwner = () => {
+    if (accountOwnerAssignable) return defaultOwnerSfUserId as string;
+    if (sdr) return assignees[0]?.sf_user_id ?? "";
+    return "";
+  };
+
   const [subjectId, setSubjectId] = useState<RdvSubjectId>(() => defaultRdvSubjectId(sessionType));
   const [start, setStart] = useState(defaultStart());
   const [durationMin, setDurationMin] = useState(RDV_DURATION_DEFAULT);
-  const [ownerSfUserId, setOwnerSfUserId] = useState<string>(() => (
-    sdr ? (assignees[0]?.sf_user_id ?? "") : ""
-  ));
+  const [ownerSfUserId, setOwnerSfUserId] = useState<string>(() => resolveDefaultOwner());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,15 +97,9 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
   }, [sessionType]);
 
   useEffect(() => {
-    if (!sdr) {
-      setOwnerSfUserId("");
-      return;
-    }
-    setOwnerSfUserId((current) => {
-      if (current && assignees.some((member) => member.sf_user_id === current)) return current;
-      return assignees[0]?.sf_user_id ?? "";
-    });
-  }, [sdr, assignees]);
+    setOwnerSfUserId(resolveDefaultOwner());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sdr, assignees, defaultOwnerSfUserId, currentSfUserId, contactName]);
 
   const handleSubmit = () => {
     const eventStart = new Date(start);
@@ -234,7 +240,12 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
             </button>
           ))}
         </div>
-        {sdr && (
+        {accountOwnerAssignable && ownerSfUserId === defaultOwnerSfUserId && (
+          <p className="calls-muted calls-rdv-subjects__hint">
+            Pré-sélection : propriétaire du compte (modifiable).
+          </p>
+        )}
+        {sdr && !accountOwnerAssignable && (
           <p className="calls-muted calls-rdv-subjects__hint">
             Profil SDR : le RDV est créé par toi, attribué à un commercial.
           </p>

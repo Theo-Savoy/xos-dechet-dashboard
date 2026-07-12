@@ -1,4 +1,5 @@
 import { readSoundsEnabled } from "./comboKeyboard";
+import type { RdvHeat } from "./rdvCelebrate";
 
 type SoundKind = "tick" | "success" | "recall" | "warn" | "whoosh" | "demo" | "rdv" | "goal";
 
@@ -47,6 +48,69 @@ export async function unlockComboAudio(): Promise<void> {
   }
 }
 
+/** Fanfare RDV qui grossit clairement avec la heat (1 soft → 5 objectif). */
+export function playRdvCelebrateSound(heat: RdvHeat, enabled = readSoundsEnabled()): void {
+  if (!enabled) return;
+  void unlockComboAudio();
+  const g = 0.038 + heat * 0.014;
+
+  if (heat <= 1) {
+    // Soft plink — 2 notes
+    tone(587.33, 0.11, "triangle", g);
+    tone(880, 0.16, "sine", g * 0.75, 0.1);
+    return;
+  }
+  if (heat === 2) {
+    // Petite montée majeure
+    tone(523.25, 0.1, "triangle", g);
+    tone(659.25, 0.11, "triangle", g * 0.95, 0.09);
+    tone(783.99, 0.14, "triangle", g * 0.85, 0.2);
+    tone(1046.5, 0.22, "sine", g * 0.65, 0.34);
+    return;
+  }
+  if (heat === 3) {
+    // Arpège + octave — rythme plus affirmé
+    tone(392, 0.09, "triangle", g * 0.8);
+    tone(523.25, 0.1, "triangle", g, 0.08);
+    tone(659.25, 0.1, "triangle", g * 0.95, 0.17);
+    tone(783.99, 0.12, "triangle", g * 0.85, 0.28);
+    tone(1046.5, 0.18, "sine", g * 0.7, 0.42);
+    tone(1318.5, 0.2, "sine", g * 0.5, 0.6);
+    tone(783.99, 0.14, "triangle", g * 0.35, 0.78);
+    return;
+  }
+  if (heat === 4) {
+    // Cascade + double résolution
+    tone(349.23, 0.1, "triangle", g * 0.75);
+    tone(440, 0.1, "triangle", g * 0.85, 0.08);
+    tone(523.25, 0.1, "triangle", g * 0.95, 0.17);
+    tone(659.25, 0.11, "triangle", g, 0.28);
+    tone(783.99, 0.12, "triangle", g * 0.9, 0.4);
+    tone(987.77, 0.14, "sine", g * 0.75, 0.54);
+    tone(1174.7, 0.18, "sine", g * 0.6, 0.7);
+    tone(1568, 0.2, "sine", g * 0.4, 0.9);
+    tone(1174.7, 0.16, "triangle", g * 0.35, 1.12);
+    tone(1568, 0.22, "sine", g * 0.28, 1.28);
+    return;
+  }
+  // heat 5 — objectif : fanfare longue, clinquant, accord final
+  tone(261.63, 0.12, "triangle", g * 0.65);
+  tone(329.63, 0.12, "triangle", g * 0.75, 0.1);
+  tone(392, 0.12, "triangle", g * 0.85, 0.2);
+  tone(523.25, 0.13, "triangle", g, 0.32);
+  tone(659.25, 0.13, "triangle", g * 0.95, 0.46);
+  tone(783.99, 0.14, "triangle", g * 0.9, 0.6);
+  tone(1046.5, 0.18, "sine", g * 0.8, 0.76);
+  tone(1318.5, 0.2, "sine", g * 0.65, 0.96);
+  tone(1568, 0.22, "sine", g * 0.5, 1.18);
+  tone(2093, 0.28, "sine", g * 0.35, 1.4);
+  // Accord final (C majeur)
+  tone(523.25, 0.45, "sine", g * 0.28, 1.55);
+  tone(659.25, 0.45, "sine", g * 0.22, 1.55);
+  tone(783.99, 0.5, "sine", g * 0.2, 1.55);
+  tone(1046.5, 0.55, "sine", g * 0.16, 1.55);
+}
+
 export function playComboSound(kind: SoundKind, enabled = readSoundsEnabled()): void {
   if (!enabled) return;
   void unlockComboAudio();
@@ -75,18 +139,10 @@ export function playComboSound(kind: SoundKind, enabled = readSoundsEnabled()): 
       tone(587, 0.12, "triangle", 0.03, 0.16);
       break;
     case "rdv":
-      // Petite fanfare — C–E–G–C aigu
-      tone(523.25, 0.09, "triangle", 0.055);
-      tone(659.25, 0.1, "triangle", 0.05, 0.07);
-      tone(783.99, 0.11, "triangle", 0.045, 0.14);
-      tone(1046.5, 0.16, "sine", 0.04, 0.22);
+      playRdvCelebrateSound(2, true);
       break;
     case "goal":
-      tone(392, 0.1, "triangle", 0.05);
-      tone(523.25, 0.1, "triangle", 0.05, 0.08);
-      tone(659.25, 0.11, "triangle", 0.05, 0.16);
-      tone(784, 0.12, "triangle", 0.045, 0.24);
-      tone(1046.5, 0.2, "sine", 0.04, 0.34);
+      playRdvCelebrateSound(5, true);
       break;
     default:
       break;

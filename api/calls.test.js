@@ -262,10 +262,13 @@ describe("GET /api/calls", () => {
 
   it("returns sessions with aggregated counts", async () => {
     mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({
-        data: [{ id: 1, name: "Prospection", status: "active", created_at: "2026-01-01" }],
+        data: [{ id: 1, owner: "user-123", name: "Prospection", status: "active", created_at: "2026-01-01" }],
         error: null,
       })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({
         data: [
           { session_id: 1, status: "called" },
@@ -282,7 +285,10 @@ describe("GET /api/calls", () => {
 
   it("returns 500 when contacts aggregation fails", async () => {
     mockDb
-      .mockResolvedValueOnce({ data: [{ id: 1, name: "X", status: "active", created_at: "2026-01-01" }], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 1, owner: "user-123", name: "X", status: "active", created_at: "2026-01-01" }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } });
 
     const res = await GET(makeReq("GET", undefined));
@@ -314,11 +320,13 @@ describe("GET /api/calls", () => {
   it("returns 404 for another owner even when the parallel contacts lookup has completed", async () => {
     mockDb
       .mockResolvedValueOnce({ data: { id: 1, owner: "other-user", name: "Test", status: "active" }, error: null })
-      .mockResolvedValueOnce({ data: [{ id: 101, session_id: 1 }], error: null });
+      .mockResolvedValueOnce({ data: [{ id: 101, session_id: 1 }], error: null })
+      .mockResolvedValueOnce({ data: { id: 1, owner: "other-user", name: "Test", status: "active" }, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(404);
-    expect(mockDb).toHaveBeenCalledTimes(2);
+    expect(mockDb).toHaveBeenCalledTimes(4);
   });
 
   it("returns session detail with contacts", async () => {
@@ -332,7 +340,12 @@ describe("GET /api/calls", () => {
       .mockResolvedValueOnce({
         data: [{ id: 101, position: 0, sf_contact_id: "003000000000001", contact_name: "Marie", status: "pending", email: "marie@acme.fr", title: "DRH" }],
         error: null,
-      });
+      })
+      .mockResolvedValueOnce({
+        data: { id: 1, owner: "user-123", name: "Prospection", status: "active" },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(200);
@@ -364,6 +377,10 @@ describe("GET /api/calls", () => {
         }],
         error: null,
       })
+      .mockResolvedValueOnce({
+        data: { id: 1, owner: "user-123", name: "Prospection", status: "active" },
+        error: null,
+      })
       .mockResolvedValue({ data: null, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
@@ -377,7 +394,8 @@ describe("GET /api/calls", () => {
   it("returns 500 when detail contacts lookup fails", async () => {
     mockDb
       .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "X", status: "active", created_at: "2026-01-01" }, error: null })
-      .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } });
+      .mockResolvedValueOnce({ data: null, error: { message: "contacts failed" } })
+      .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "X", status: "active" }, error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?session_id=1"));
     expect(res.status).toBe(500);
@@ -387,10 +405,15 @@ describe("GET /api/calls", () => {
 
   it("returns stats on success", async () => {
     mockDb
+      .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }], error: null })
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [{ id: 1, status: "active" }, { id: 2, status: "completed" }], error: null })
       .mockResolvedValueOnce({ data: [{ id: 1, status: "active" }, { id: 2, status: "completed" }], error: null })
       .mockResolvedValueOnce({
         data: [
           {
+            session_id: 1,
+            logged_by: "user-123",
             status: "called",
             outcome: "RDV planifié",
             called_at: new Date().toISOString(),
@@ -704,6 +727,10 @@ describe("POST /api/calls", () => {
       mockDb
         .mockResolvedValueOnce({ data: sessionRow, error: null })
         .mockResolvedValueOnce({ data: contactRow, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: { sf_user_id: "005000000000001AAA", full_name: "Jean Dupont" }, error: null })
         .mockResolvedValueOnce({ data: null, error: { message: "update failed" } });
 
@@ -919,7 +946,11 @@ describe("POST /api/calls", () => {
     it("skips contact successfully", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
-        .mockResolvedValueOnce({ data: { id: 101, session_id: 1 }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: null, error: null });
 
       const res = await POST(makeReq("POST", { action: "skip_contact", session_id: 1, contact_id: 101 }));
@@ -930,7 +961,11 @@ describe("POST /api/calls", () => {
     it("returns 500 when skip update fails", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 1, owner: "user-123" }, error: null })
-        .mockResolvedValueOnce({ data: { id: 101, session_id: 1 }, error: null })
+        .mockResolvedValueOnce({ data: { id: 101, session_id: 1, status: "pending" }, error: null })
+        .mockResolvedValueOnce({
+          data: { id: 101, claimed_by: "user-123", claimed_at: "2026-07-12T10:00:00Z", status: "pending" },
+          error: null,
+        })
         .mockResolvedValueOnce({ data: null, error: { message: "update failed" } });
 
       const res = await POST(makeReq("POST", { action: "skip_contact", session_id: 1, contact_id: 101 }));

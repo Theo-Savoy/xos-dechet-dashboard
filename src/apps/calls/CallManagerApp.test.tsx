@@ -319,7 +319,7 @@ describe("CallManagerApp component", () => {
 
     await user.click(screen.getByRole("button", { name: "Logguer appel + RDV & suivant" }));
     await screen.findByText("Terminée");
-    expect(postedActions).toEqual(["log_call", "log_event", "complete_session"]);
+    expect(postedActions).toEqual(["claim_contact", "log_call", "log_event", "complete_session"]);
   });
 
   it("warns about a failed NPA sync without blocking runner progression", async () => {

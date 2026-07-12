@@ -1,6 +1,7 @@
+import { insertUserNotification } from "../notifications.js";
 import { getProfile } from "./profileCache.js";
 import mapping from "../_crm/mapping.js";
-import { createEvent, fetchSFToken, logCall, updateContactDoNotCall } from "../_crm/salesforce.js";
+import { createEvent, fetchSFToken, logCall, updateContactDoNotCall, buildLightningUrl } from "../_crm/salesforce.js";
 import { SF_ID, actorName, assertSessionAccess, assertSessionContact, claimSessionContact, isValidEventStart, journalAction } from "./http.js";
 
 const VALID_RESULTS = mapping.objects.task.results;
@@ -294,6 +295,47 @@ export async function handleLogging({ action, body, user, client, headers }) {
         inviteeError: sfResult.inviteeError,
       },
     });
+
+    // Notifie le commercial propriétaire quand quelqu'un d'autre lui prend un RDV.
+    if (
+      eventId
+      && eventOwnerId
+      && profileResult.sfUserId
+      && eventOwnerId !== profileResult.sfUserId
+    ) {
+      const { data: ownerProfile } = await client
+        .from("profiles")
+        .select("id, full_name")
+        .eq("sf_user_id", eventOwnerId)
+        .maybeSingle();
+      if (ownerProfile?.id) {
+        const actor = actorName(user, profileResult);
+        const when = new Date(start).toLocaleString("fr-FR", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        await insertUserNotification(client, {
+          recipientId: ownerProfile.id,
+          kind: "rdv_attributed",
+          title: "Nouveau RDV attribué",
+          body: `${actor} a planifié « ${subject} » avec ${contact.contact_name}${contact.account_name ? ` (${contact.account_name})` : ""} — ${when}.`,
+          payload: {
+            sf_event_id: eventId,
+            sf_event_url: buildLightningUrl(mapping.objects.event.name, eventId),
+            subject,
+            contact_name: contact.contact_name,
+            account_name: contact.account_name || null,
+            start,
+            actor_label: actor,
+            session_id,
+            session_contact_id: contact_id,
+          },
+        });
+      }
+    }
 
     if (partialInviteeFailure) {
       return new Response(
