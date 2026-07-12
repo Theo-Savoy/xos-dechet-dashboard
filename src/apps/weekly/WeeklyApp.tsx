@@ -1653,6 +1653,7 @@ export default function WeeklyApp() {
   const lastByPeriodRef = useRef<Partial<Record<PeriodMode, PerfCacheEntry>>>({});
   const prefetchingRef = useRef(new Set<string>());
   const quarterPrefetchDone = useRef(false);
+  const teamModeBootstrapped = useRef(false);
   cacheRef.current = cache;
 
   const storeEntry = useCallback((key: string, nextPeriod: PeriodMode, next: PerfCacheEntry) => {
@@ -1720,6 +1721,14 @@ export default function WeeklyApp() {
   const cachedResult = cache[activeKey] || null;
   const fallbackResult = lastByPeriodRef.current[period] || null;
   const result = cachedResult || fallbackResult || null;
+
+  useEffect(() => {
+    if (teamModeBootstrapped.current || !result) return;
+    if (result.payload.view === "team") {
+      setMode("team");
+      teamModeBootstrapped.current = true;
+    }
+  }, [result]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1962,8 +1971,8 @@ export default function WeeklyApp() {
       </div>
     )}
     {!visibleOwners.length && (
-      <div className="weekly-soft-empty" role="status">
-        Aucun commercial à afficher sur cette vue — basculez sur Équipe ou vérifiez le mapping Salesforce.
+      <div className="weekly-warning" role="status">
+        Aucun commercial renvoyé par l’API — rechargement ou mapping Salesforce à vérifier.
       </div>
     )}
       {showTeamRollup && displayMode === "cards" && <TeamRollup owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} weekMode={weekMode} currentIndex={currentIndex} compareLabel={compareLabel} />}

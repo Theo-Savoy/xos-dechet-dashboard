@@ -420,6 +420,91 @@ describe("GET /api/perf", () => {
     expect(body.owners.some((owner) => /waeselynck/i.test(owner.name))).toBe(false);
   });
 
+  it("discovers SF owners when profiles only has an excluded admin", async () => {
+    mockGetProfile.mockResolvedValue({
+      sfUserId: "005T",
+      fullName: "Théo Savoy",
+      email: "theo.savoy@xos-learning.fr",
+      role: "admin",
+    });
+    mockFrom.mockImplementation((table) => {
+      if (table === "profiles") {
+        return {
+          select: () => Promise.resolve({
+            data: [{ id: "user-t", email: "theo.savoy@xos-learning.fr", full_name: "Théo Savoy", sf_user_id: "005T", role: "admin" }],
+            error: null,
+          }),
+        };
+      }
+      if (table === "settings") {
+        return {
+          select: () => ({
+            eq: (_col, key) => ({
+              maybeSingle: () => Promise.resolve({
+                data: key === "weekly_targets" ? { value: {} } : { value: {} },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "perf_forecast_snapshots") {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                order: () => Promise.resolve({ data: [], error: null }),
+              }),
+            }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      if (table === "perf_week_snapshots") {
+        return {
+          select: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: [], error: null }),
+            }),
+            in: () => Promise.resolve({ data: [], error: null }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      if (table === "perf_seasonality_cache") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    queueSalesforce();
+    const soql = [];
+    const original = mockSearchContacts.getMockImplementation();
+    mockSearchContacts.mockImplementation(async (token, queryText) => {
+      soql.push(queryText);
+      if (queryText.includes("FROM User")) {
+        return {
+          records: [
+            { Id: "005A", Name: "Ada", Email: "ada@xos-learning.fr", IsActive: true },
+            { Id: "005T", Name: "Théo Savoy", Email: "theo.savoy@xos-learning.fr", IsActive: true },
+          ],
+        };
+      }
+      return original(token, queryText);
+    });
+    const body = await (await GET(request("?weeks=8"))).json();
+    expect(body.owners.map((owner) => owner.sf_user_id)).toEqual(["005A"]);
+    expect(body.owners.some((owner) => /th[eé]o/i.test(owner.name))).toBe(false);
+    // Sans commercials mappés, les SOQL ne doivent pas filtrer sur le seul admin exclu.
+    expect(soql.some((q) => /OwnerId IN \('005T'\)/.test(q) || /CreatedById IN \('005T'\)/.test(q))).toBe(false);
+  });
+
   it("sets the shared cache policy", async () => {
     const response = await GET(request());
     expect(response.headers.get("Cache-Control")).toBe("private, max-age=30, stale-while-revalidate=120");

@@ -1075,16 +1075,17 @@ export async function GET(request) {
   const scopeOwnerIds = teamView
     ? [...new Set((profilesEarly || []).map((row) => row.sf_user_id).filter(Boolean))]
     : (profile.sfUserId ? [profile.sfUserId] : []);
-  const byOwner = (field) => ownerInClause(field, scopeOwnerIds);
+  // Scoper les SOQL seulement s’il existe des owners « rituel » mappés.
+  // Sinon (ex. seul Théo admin mappé + exclu) → pas de filtre, découverte via SF.
+  const queryScopeIds = scopeOwnerIds.filter((id) => {
+    const mapped = findBySfId(profilesEarly || [], id);
+    return Boolean(mapped) && !isWeeklyOwnerExcluded(null, mapped.full_name || "", mapped.email || "");
+  });
+  const byOwner = (field) => ownerInClause(field, queryScopeIds);
 
   try {
     // Second hit après lite : board + caches, sans rejouer pulse / history / won fenêtre.
     if (enrich) {
-      const owners = new Set(scopeOwnerIds);
-      if (!teamView && profile.sfUserId) {
-        owners.clear();
-        owners.add(profile.sfUserId);
-      }
       const [openOpps, customOpen, seasonality, quarterWon, priorQuarterWon] = await Promise.all([
         crmRecords(tokenResult.accessToken, query(opportunity.name, openOppFields, `${opportunity.fields.isClosed} = false AND ${opportunity.fields.stageName} != '${opportunityHistory.stages.stalledSuspect}'${byOwner(opportunity.fields.ownerId)}`)),
         crmRecords(tokenResult.accessToken, query(opportunity.name, [opportunity.fields.id, opportunity.fields.name, opportunity.fields.ownerId, opportunity.fields.closeDate, opportunity.fields.amount, opportunity.fields.probability, opportunity.fields.expectedRevenue, opportunity.saleTypeField], `${opportunity.fields.isClosed} = false AND ${opportunity.saleTypeField} = '${escapeSOQL(saleTypeValues.sur_mesure[0])}' AND ${opportunity.fields.closeDate} >= ${today} AND ${opportunity.fields.closeDate} < ${customToExclusive}${byOwner(opportunity.fields.ownerId)}`)),
@@ -1101,6 +1102,17 @@ export async function GET(request) {
       ]);
       const profiles = profilesEarly || [];
       const targets = targetsEarly || {};
+      const owners = new Set(teamView ? [] : (profile.sfUserId ? [profile.sfUserId] : []));
+      const addOwners = (records, field) => records.forEach((record) => { if (record[field]) owners.add(record[field]); });
+      addOwners(openOpps, opportunity.fields.ownerId);
+      addOwners(customOpen, opportunity.fields.ownerId);
+      addOwners(quarterWon, opportunity.fields.ownerId);
+      addOwners(priorQuarterWon, opportunity.fields.ownerId);
+      for (const id of scopeOwnerIds) owners.add(id);
+      if (!teamView && profile.sfUserId) {
+        owners.clear();
+        owners.add(profile.sfUserId);
+      }
       const ownerIds = [...owners].filter((id) => {
         const mapped = findBySfId(profiles, id);
         return !isWeeklyOwnerExcluded(null, mapped?.full_name || "", mapped?.email || "");
@@ -1248,7 +1260,21 @@ export async function GET(request) {
       baselineStages = new Map();
     }
 
-    const owners = new Set(scopeOwnerIds);
+    // Roster = activité SF (comme avant) + profils mappés. Pas seulement profiles
+    // (sinon 1 admin exclu → owners[] vide → UI morte).
+    const owners = new Set(teamView ? [] : (profile.sfUserId ? [profile.sfUserId] : []));
+    const addOwners = (records, field) => records.forEach((record) => { if (record[field]) owners.add(record[field]); });
+    addOwners(tasks, task.fields.ownerId);
+    addOwners(events, event.fields.ownerId);
+    addOwners(histories, opportunityHistory.fields.createdById);
+    addOwners(generated, opportunity.fields.ownerId);
+    addOwners(won, opportunity.fields.ownerId);
+    addOwners(openOpps, opportunity.fields.ownerId);
+    addOwners(quarterWon, opportunity.fields.ownerId);
+    addOwners(quarterOpen, opportunity.fields.ownerId);
+    addOwners(customOpen, opportunity.fields.ownerId);
+    addOwners(priorQuarterWon, opportunity.fields.ownerId);
+    for (const id of scopeOwnerIds) owners.add(id);
     if (!teamView && profile.sfUserId) {
       owners.clear();
       owners.add(profile.sfUserId);
@@ -1278,13 +1304,6 @@ export async function GET(request) {
     });
     if (!teamView && profile.sfUserId && !activeOwnerIds.some((id) => sfIdKey(id) === sfIdKey(profile.sfUserId))) {
       activeOwnerIds.push(profile.sfUserId);
-    }
-    // Fail-open : ne jamais renvoyer owners=[] si le roster profil a des SF ids.
-    if (!activeOwnerIds.length && candidateOwnerIds.length) {
-      for (const id of candidateOwnerIds) {
-        const mapped = findBySfId(profiles, id);
-        if (!isWeeklyOwnerExcluded(null, mapped?.full_name || "", mapped?.email || "")) activeOwnerIds.push(id);
-      }
     }
     owners.clear();
     for (const id of activeOwnerIds) owners.add(id);
