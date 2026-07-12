@@ -130,8 +130,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [contactContext, setContactContext] = useState<ContactContext | null>(null);
   const [contextContactId, setContextContactId] = useState<number | null>(null);
+  const [contextTargetContactId, setContextTargetContactId] = useState<number | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
+  const contextTargetRef = useRef<number | null>(null);
   const lastContextKey = useRef<string | null>(null);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
   const contextCacheRef = useRef<Map<string, ContactContext>>(new Map());
@@ -435,6 +437,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       // Cache hit : affichage immédiat, pas de re-fetch (le prefetch a déjà peuplé).
       if (cached) {
         if (!options?.silent) {
+          contextTargetRef.current = contactId;
+          setContextTargetContactId(contactId);
           setContactContext(cached);
           setContextContactId(contactId);
           setContextLoading(false);
@@ -446,8 +450,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       if (!options?.silent) {
         requestId = contextRequest.current + 1;
         contextRequest.current = requestId;
-        setContactContext(null);
-        setContextContactId(null);
+        contextTargetRef.current = contactId;
+        setContextTargetContactId(contactId);
         setContextLoading(true);
       }
 
@@ -471,7 +475,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
 
       try {
         const context = await pending;
-        if (options?.silent) return;
+        if (options?.silent) {
+          if (contextTargetRef.current === contactId) {
+            setContactContext(context);
+            setContextContactId(contactId);
+            setContextLoading(false);
+          }
+          return;
+        }
         if (contextRequest.current !== requestId) return;
         setContactContext(context);
         setContextContactId(contactId);
@@ -1119,6 +1130,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           awaitingEvent={awaitingEvent}
           contactContext={contactContext}
           contextContactId={contextContactId}
+          contextTargetContactId={contextTargetContactId}
           contextLoading={contextLoading}
           team={team}
           currentSfUserId={currentSfUserId}
