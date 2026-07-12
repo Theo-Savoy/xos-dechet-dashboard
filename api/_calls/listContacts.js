@@ -3,8 +3,11 @@ import mapping from "../_crm/mapping.js";
 import {
   buildTargetQuery,
   boundedLimit,
+  fetchOpportunityAccountIdSets,
   fetchSFToken,
+  filterByOpportunityAccounts,
   filterTargetContacts,
+  hasOpportunityQueryFilters,
   hasRelanceQueryFilters,
   parisToday,
   searchContacts,
@@ -123,16 +126,34 @@ export async function listContacts(client, userId, body) {
   const maxPerCompany = parsed.maxPerCompany;
   const requestedLimit = boundedLimit(parsed.filters.limit);
   const countOnly = parsed.countOnly;
-  const wideFetch = countOnly || hasRelanceQueryFilters(parsed.filters) || maxPerCompany !== null;
+  const opportunityFilters = hasOpportunityQueryFilters(parsed.filters);
+  const wideFetch = countOnly || hasRelanceQueryFilters(parsed.filters) || opportunityFilters || maxPerCompany !== null;
   const queryFilters = wideFetch ? { ...parsed.filters, limit: SOQL_FETCH_CAP } : parsed.filters;
+  const includeTasks = !countOnly || hasRelanceQueryFilters(parsed.filters);
 
-  const soql = buildTargetQuery(queryFilters, mapping, profile.sfUserId);
-  const search = await searchContacts(tokenResult.accessToken, soql);
+  const soql = buildTargetQuery(queryFilters, mapping, profile.sfUserId, { includeTasks });
+  const [search, opportunitySetsResult] = await Promise.all([
+    searchContacts(tokenResult.accessToken, soql),
+    opportunityFilters
+      ? fetchOpportunityAccountIdSets(tokenResult.accessToken, mapping, parsed.filters)
+      : Promise.resolve(null),
+  ]);
   if (search.error) {
     return { error: search.error, message: search.message, status: 502 };
   }
 
-  const filtered = filterTargetContacts(search.records, parsed.filters, mapping);
+  let opportunitySets = null;
+  if (opportunitySetsResult) {
+    if (opportunitySetsResult.error) {
+      return { error: opportunitySetsResult.error, message: opportunitySetsResult.message, status: 502 };
+    }
+    opportunitySets = opportunitySetsResult;
+  }
+
+  let filtered = filterTargetContacts(search.records, parsed.filters, mapping);
+  if (opportunitySets) {
+    filtered = filterByOpportunityAccounts(filtered, parsed.filters, mapping, opportunitySets);
+  }
   if (countOnly) {
     return {
       count: filtered.length,

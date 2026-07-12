@@ -5,7 +5,7 @@ export const SF_MAX_OPPORTUNITY_SEMI_JOINS = 2;
 
 type EntrepriseOpp = Pick<FilterTree["entreprise"], "opp_ouverte" | "opp_perdue">;
 
-/** Mirrors `buildTargetQuery` in api/_crm/salesforce.js — keep in sync. */
+/** Mirrors `filterByOpportunityAccounts` in api/_crm/salesforce.js — keep in sync. */
 export function countOpportunitySemiJoins(entreprise: EntrepriseOpp): number {
   let count = 0;
   if (entreprise.opp_ouverte === true) count += 1;
@@ -51,25 +51,16 @@ export function getOpportunityFilterGuidance(entreprise: EntrepriseOpp): Opportu
 
   if (opp_perdue === true && opp_ouverte === true) {
     hint = "Comptes avec au moins une opportunité ouverte et au moins une opportunité perdue.";
-    note =
-      "Limite Salesforce (2 filtres avancés sur les opps) : on ne peut pas ajouter en plus « aucune ouverte ». "
-      + "Pour « perdue sans ouverte », mettez Opportunité ouverte sur Non.";
   } else if (opp_perdue === true && opp_ouverte === false) {
     hint = "Comptes avec une opportunité perdue et aucune opportunité ouverte.";
   } else if (opp_perdue === true) {
     hint = "Comptes avec une opportunité perdue et aucune opportunité ouverte.";
-    if (atLimit) {
-      note = "Limite Salesforce atteinte pour ces filtres opportunité.";
-    }
   } else if (opp_perdue === false && opp_ouverte === true) {
     hint = "Comptes avec au moins une opportunité ouverte et sans opportunité perdue.";
   } else if (opp_perdue === false && opp_ouverte === false) {
     hint = "Comptes sans opportunité ouverte ni opportunité perdue.";
   } else if (opp_perdue === false) {
     hint = "Comptes sans opportunité au stade perdu.";
-    if (atLimit) {
-      note = "Limite Salesforce atteinte pour ces filtres opportunité.";
-    }
   } else if (opp_ouverte === true) {
     hint = "Comptes avec au moins une opportunité ouverte.";
   } else if (opp_ouverte === false) {

@@ -3,10 +3,14 @@ import {
   boundedLimit,
   buildTargetQuery,
   escapeSOQL,
+  filterByOpportunityAccounts,
   filterTargetContacts,
+  hasOpportunityQueryFilters,
   hasRelanceQueryFilters,
+  opportunityAccountSetNeeds,
   SOQL_FETCH_CAP,
   __resetSFTokenCache,
+  __resetOpportunityAccountCache,
 } from "./_crm/salesforce.js";
 import mapping from "./_crm/mapping.js";
 import { FONCTION_PRESETS } from "../src/crm/index.ts";
@@ -173,79 +177,89 @@ describe("adapter exports", () => {
     expect(soql).not.toContain("preset_inexistant");
   });
 
-  it("buildTargetQuery opp_ouverte=true adds open opportunity IN clause", () => {
+  it("buildTargetQuery does not embed opportunity semi-joins in Contact SOQL", () => {
     const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true } },
+      {
+        ...baseFilters,
+        entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: true },
+      },
       mapping,
       null,
     );
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
-    expect(soql).not.toContain("NOT IN");
+    expect(soql).not.toMatch(/FROM Opportunity/);
+    expect(hasOpportunityQueryFilters({
+      entreprise: { opp_ouverte: true, opp_perdue: true },
+    })).toBe(true);
   });
 
-  it("buildTargetQuery opp_ouverte=false adds NOT IN open opportunity", () => {
-    const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: false } },
-      mapping,
-      null,
-    );
-    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
+  it("filterByOpportunityAccounts applies open / lost account predicates", () => {
+    const records = [
+      { Id: "003open", AccountId: "001open", Account: { Id: "001open" } },
+      { Id: "003lost", AccountId: "001lost", Account: { Id: "001lost" } },
+      { Id: "003both", AccountId: "001both", Account: { Id: "001both" } },
+      { Id: "003none", AccountId: "001none", Account: { Id: "001none" } },
+    ];
+    const sets = {
+      open: new Set(["001open", "001both"]),
+      lost: new Set(["001lost", "001both"]),
+    };
+
+    expect(
+      filterByOpportunityAccounts(records, { entreprise: { opp_ouverte: true } }, mapping, sets).map((r) => r.Id),
+    ).toEqual(["003open", "003both"]);
+    expect(
+      filterByOpportunityAccounts(records, { entreprise: { opp_ouverte: false } }, mapping, sets).map((r) => r.Id),
+    ).toEqual(["003lost", "003none"]);
+    expect(
+      filterByOpportunityAccounts(records, { entreprise: { opp_perdue: true } }, mapping, sets).map((r) => r.Id),
+    ).toEqual(["003lost"]);
+    expect(
+      filterByOpportunityAccounts(records, { entreprise: { opp_perdue: false } }, mapping, sets).map((r) => r.Id).sort(),
+    ).toEqual(["003none", "003open"]);
+    expect(
+      filterByOpportunityAccounts(
+        records,
+        { entreprise: { opp_ouverte: true, opp_perdue: true } },
+        mapping,
+        sets,
+      ).map((r) => r.Id),
+    ).toEqual(["003both"]);
+    expect(
+      filterByOpportunityAccounts(
+        records,
+        { entreprise: { opp_ouverte: false, opp_perdue: true } },
+        mapping,
+        sets,
+      ).map((r) => r.Id),
+    ).toEqual(["003lost"]);
   });
 
-  it("buildTargetQuery opp_perdue=true adds lost stage IN + NOT IN open", () => {
-    const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_perdue: true } },
-      mapping,
-      null,
-    );
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
+  it("opportunityAccountSetNeeds fetches only the required account-id sets", () => {
+    expect(opportunityAccountSetNeeds({ entreprise: { opp_ouverte: true } })).toEqual({
+      needOpen: true,
+      needLost: false,
+    });
+    expect(opportunityAccountSetNeeds({ entreprise: { opp_perdue: false } })).toEqual({
+      needOpen: false,
+      needLost: true,
+    });
+    expect(opportunityAccountSetNeeds({ entreprise: { opp_ouverte: true, opp_perdue: true } })).toEqual({
+      needOpen: true,
+      needLost: true,
+    });
+    expect(opportunityAccountSetNeeds({ entreprise: { opp_perdue: true } })).toEqual({
+      needOpen: true,
+      needLost: true,
+    });
   });
 
-  it("buildTargetQuery opp_perdue=false excludes lost stage accounts", () => {
+  it("buildTargetQuery opp filters use wide fetch cap", () => {
     const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_perdue: false } },
+      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true }, limit: 20 },
       mapping,
       null,
     );
-    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    expect(soql).not.toMatch(/AccountId IN \(SELECT AccountId FROM Opportunity WHERE StageName/);
-  });
-
-  it("buildTargetQuery opp_ouverte=true + opp_perdue=false stays within semi-join limit", () => {
-    const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: false } },
-      mapping,
-      null,
-    );
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
-    expect(soql).toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    const semiJoins = soql.match(/AccountId (?:NOT )?IN \(SELECT/g) || [];
-    expect(semiJoins.length).toBeLessThanOrEqual(2);
-  });
-
-  it("buildTargetQuery opp_ouverte=true + opp_perdue=true keeps ≤2 semi-joins (open AND lost)", () => {
-    const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: true, opp_perdue: true } },
-      mapping,
-      null,
-    );
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    expect(soql).not.toContain(`AccountId NOT IN (SELECT AccountId FROM Opportunity WHERE IsClosed = false)`);
-    const semiJoins = soql.match(/AccountId (?:NOT )?IN \(SELECT/g) || [];
-    expect(semiJoins.length).toBeLessThanOrEqual(2);
-  });
-
-  it("buildTargetQuery opp_ouverte=false + opp_perdue=true has no duplicate NOT IN subquery", () => {
-    const soql = buildTargetQuery(
-      { ...baseFilters, entreprise: { ...baseFilters.entreprise, opp_ouverte: false, opp_perdue: true } },
-      mapping,
-      null,
-    );
-    expect(soql).toContain(`AccountId IN (SELECT AccountId FROM Opportunity WHERE StageName = 'Fermée / Perdue')`);
-    const notInMatches = soql.match(/AccountId NOT IN \(SELECT AccountId FROM Opportunity WHERE IsClosed = false\)/g);
-    expect(notInMatches).toHaveLength(1);
+    expect(soql).toContain(`LIMIT ${SOQL_FETCH_CAP}`);
   });
 
   it("filterTargetContacts applies relance predicates from Tasks child records", () => {
@@ -323,6 +337,7 @@ describe("POST /api/calls action=list_contacts", () => {
     __resetProfileCache();
     vi.restoreAllMocks();
     __resetSFTokenCache();
+    __resetOpportunityAccountCache();
     mockMaybeSingle.mockReset();
     mockFrom.mockClear();
 
@@ -440,6 +455,28 @@ describe("POST /api/calls action=list_contacts", () => {
     const body = await res.json();
     expect(body).toEqual({ count: 1, capped: false });
     expect(body.contacts).toBeUndefined();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns count_only with opportunity filters via separate Opportunity queries", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: SF_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        records: [{ AccountId: "001000000000001AAA" }],
+      }), { status: 200 }));
+
+    const res = await POST(makeReq({
+      filters: {
+        ...baseFilters,
+        entreprise: { ...baseFilters.entreprise, opp_ouverte: true },
+      },
+      count_only: true,
+    }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).count).toBe(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it("returns 500 when profile lookup fails", async () => {
