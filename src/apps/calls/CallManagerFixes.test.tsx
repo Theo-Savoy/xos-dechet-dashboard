@@ -338,7 +338,7 @@ describe("RunnerView", () => {
 
     const historyPanel = screen.getByRole("heading", { name: "Historique d'appels" }).closest(".calls-context-panel");
     expect(historyPanel).toBeTruthy();
-    expect(within(historyPanel!).queryByText("Appel décroché")).toBeNull();
+    expect(within(historyPanel as HTMLElement).queryByText("Appel décroché")).toBeNull();
   });
 
   it("bulk-logs the same outcome for selected contacts", async () => {
