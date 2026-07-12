@@ -27,12 +27,11 @@ import { RdvConfetti } from "./RdvConfetti";
 import {
   countSessionRdvs,
   readRdvGoal,
-  RDV_GOAL_PRESETS,
   rdvHeatLevel,
   writeRdvGoal,
   type RdvHeat,
 } from "./rdvCelebrate";
-import { DatePicker, formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls";
+import { DatePicker, formatActivityDateFr, formatIsoDateFr, RdvGoalPicker, todayParisIso } from "./formControls";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
 import {
@@ -96,6 +95,7 @@ type RunnerViewProps = {
   awaitingEvent: SessionContact | null;
   contactContext: ContactContext | null;
   contextContactId: number | null;
+  contextTargetContactId?: number | null;
   contextLoading: boolean;
   onBack: () => void;
   onPin?: () => Promise<void>;
@@ -302,6 +302,21 @@ function RecallFields({
   );
 }
 
+function ContextSideSkeleton() {
+  return (
+    <>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>Historique d&apos;appels</h3>
+        <p className="calls-muted">Chargement…</p>
+      </GlassCard>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>Opportunités du compte</h3>
+        <p className="calls-muted">Chargement…</p>
+      </GlassCard>
+    </>
+  );
+}
+
 export function RunnerView({
   session,
   contacts,
@@ -314,6 +329,7 @@ export function RunnerView({
   awaitingEvent,
   contactContext,
   contextContactId,
+  contextTargetContactId = null,
   contextLoading,
   onBack,
   onPin,
@@ -523,7 +539,13 @@ export function RunnerView({
     focusedContact?.title
     ?? (contextContactId === focusedContact?.id ? contactContext?.title : null)
     ?? null;
-  const contextApplies = contextContactId != null && contextContactId === focusedContact?.id;
+  const contextReady = Boolean(
+    contactContext && contextContactId != null && contextContactId === focusedContact?.id,
+  );
+  const contextBusy = Boolean(
+    contextLoading && contextTargetContactId === focusedContact?.id,
+  );
+  const contextApplies = contextReady;
   const sortedOpportunities = useMemo(
     () => sortOpportunities(contactContext?.opportunities ?? []),
     [contactContext?.opportunities],
@@ -661,10 +683,8 @@ export function RunnerView({
     });
   }, [rdvGoal, soundsEnabled]);
 
-  const handleRdvGoalChange = (value: string) => {
+  const handleRdvGoalChange = (goal: number | null) => {
     if (isRecallQueue) return;
-    const next = value === "" ? null : Number(value);
-    const goal = next != null && Number.isInteger(next) && next > 0 ? next : null;
     setRdvGoal(goal);
     writeRdvGoal(session.id, goal);
   };
@@ -1206,22 +1226,12 @@ export function RunnerView({
                 ) : null}
               </strong>
               {!isRecallQueue && (
-                <label className="calls-rdv-goal">
-                  <span className="calls-rdv-goal__label">Objectif</span>
-                  <select
-                    className="calls-rdv-goal__select"
-                    aria-label="Objectif de RDV pour la séance"
-                    value={rdvGoal ?? ""}
-                    onChange={(e) => handleRdvGoalChange(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {RDV_GOAL_PRESETS.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <RdvGoalPicker
+                  label="Objectif"
+                  value={rdvGoal}
+                  onChange={handleRdvGoalChange}
+                  compact
+                />
               )}
             </GlassCard>
           </div>
@@ -1712,7 +1722,7 @@ export function RunnerView({
                       {listStatusDisplay(focusedContact).label}
                     </Tag>
                   )}
-                  {!contextLoading && contextApplies && contactContext?.npa && (
+                  {!contextBusy && contextApplies && contactContext?.npa && (
                     <Tag variant="alert">Ne pas rappeler (NPA)</Tag>
                   )}
                 </div>
@@ -1720,11 +1730,41 @@ export function RunnerView({
                 <p className="calls-contact-card__role">
                   {[displayTitle, focusedContact.account_name || "Compte inconnu"].filter(Boolean).join(" · ")}
                 </p>
+                <div
+                  className={`calls-contact-card__context-meta${contextBusy ? " calls-contact-card__context-meta--loading" : ""}`}
+                >
                 {contextApplies && contactContext?.industry && (
                   <p className="calls-contact-card__industry">
                     Secteur · {contactContext.industry}
                   </p>
                 )}
+                {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
+                  <div className="calls-contact-card__peers" aria-label="Références clients">
+                    <span className="calls-contact-card__peers-label">Refs</span>
+                    <ul className="calls-contact-card__peers-list">
+                      {contactContext.peer_clients.map((peer) => (
+                        <li key={peer.id}>
+                          {peer.record_url ? (
+                            <a
+                              className="calls-contact-card__peer"
+                              href={peer.record_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={peer.name}
+                            >
+                              {peer.name}
+                            </a>
+                          ) : (
+                            <span className="calls-contact-card__peer calls-contact-card__peer--static" title={peer.name}>
+                              {peer.name}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                </div>
                 {(isRecallQueue || focusedContact.status !== "pending") && focusedContact.recall_at && (
                   <div className="calls-contact-card__recall-meta">
                     <span>Rappel</span>
@@ -1773,11 +1813,9 @@ export function RunnerView({
             </div>
           </GlassCard>
 
-          <div className={`calls-cockpit-side${contextLoading ? " calls-cockpit-side--loading" : ""}`}>
-            {contextLoading ? (
-              <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
-                <p className="calls-muted">Chargement historique & opportunités…</p>
-              </GlassCard>
+          <div className="calls-cockpit-side">
+            {contextBusy ? (
+              <ContextSideSkeleton />
             ) : (
               <>
             <GlassCard className="calls-context-panel">
@@ -1831,21 +1869,6 @@ export function RunnerView({
                 </ul>
               )}
             </GlassCard>
-
-            {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
-              <GlassCard className="calls-context-panel">
-                <h3>Références clients · {contactContext.industry}</h3>
-                <ul className="calls-context-list calls-context-list--peers">
-                  {contactContext.peer_clients.map((peer) => (
-                    <li key={peer.id}>
-                      <strong>{peer.name}</strong>
-                      <span className="calls-muted">Client</span>
-                      {peer.record_url ? <SalesforceRecordLink href={peer.record_url} /> : <span />}
-                    </li>
-                  ))}
-                </ul>
-              </GlassCard>
-            )}
               </>
             )}
           </div>

@@ -27,7 +27,10 @@ import {
   CallsApiError,
 } from "./api";
 import { addShortcut } from "../../os/shortcuts";
-import { resolveContextContactId } from "./runnerContext";
+import { pendingContactsAhead, resolveContextContactId } from "./runnerContext";
+
+const CONTEXT_PREFETCH_AHEAD = 5;
+const CONTEXT_CACHE_MAX = 24;
 import { createDialerLogQueue } from "./dialerLogQueue";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
@@ -127,11 +130,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [contactContext, setContactContext] = useState<ContactContext | null>(null);
   const [contextContactId, setContextContactId] = useState<number | null>(null);
+  const [contextTargetContactId, setContextTargetContactId] = useState<number | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
+  const contextTargetRef = useRef<number | null>(null);
   const lastContextKey = useRef<string | null>(null);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
   const contextCacheRef = useRef<Map<string, ContactContext>>(new Map());
+  const contextInflightRef = useRef<Map<string, Promise<ContactContext>>>(new Map());
   const contactsRef = useRef<SessionContact[]>([]);
   const pendingLogsRef = useRef(0);
   const logQueueRef = useRef(
@@ -427,31 +433,56 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       if (!token) return;
       const cacheKey = `${sessionId}:${contactId}`;
       const cached = contextCacheRef.current.get(cacheKey);
-      if (cached && !options?.silent) {
-        setContactContext(cached);
-        setContextContactId(contactId);
-        setContextLoading(false);
+
+      // Cache hit : affichage immédiat, pas de re-fetch (le prefetch a déjà peuplé).
+      if (cached) {
+        if (!options?.silent) {
+          contextTargetRef.current = contactId;
+          setContextTargetContactId(contactId);
+          setContactContext(cached);
+          setContextContactId(contactId);
+          setContextLoading(false);
+        }
+        return;
       }
 
       let requestId = contextRequest.current;
       if (!options?.silent) {
         requestId = contextRequest.current + 1;
         contextRequest.current = requestId;
-        if (!cached) {
-          setContactContext(null);
-          setContextContactId(null);
-          setContextLoading(true);
-        }
+        contextTargetRef.current = contactId;
+        setContextTargetContactId(contactId);
+        setContextLoading(true);
+      }
+
+      let pending = contextInflightRef.current.get(cacheKey);
+      if (!pending) {
+        pending = fetchContactContext(token, sessionId, contactId)
+          .then((context) => {
+            contextCacheRef.current.set(cacheKey, context);
+            while (contextCacheRef.current.size > CONTEXT_CACHE_MAX) {
+              const first = contextCacheRef.current.keys().next().value;
+              if (!first) break;
+              contextCacheRef.current.delete(first);
+            }
+            return context;
+          })
+          .finally(() => {
+            contextInflightRef.current.delete(cacheKey);
+          });
+        contextInflightRef.current.set(cacheKey, pending);
       }
 
       try {
-        const context = await fetchContactContext(token, sessionId, contactId);
-        contextCacheRef.current.set(cacheKey, context);
-        if (contextCacheRef.current.size > 12) {
-          const first = contextCacheRef.current.keys().next().value;
-          if (first) contextCacheRef.current.delete(first);
+        const context = await pending;
+        if (options?.silent) {
+          if (contextTargetRef.current === contactId) {
+            setContactContext(context);
+            setContextContactId(contactId);
+            setContextLoading(false);
+          }
+          return;
         }
-        if (options?.silent) return;
         if (contextRequest.current !== requestId) return;
         setContactContext(context);
         setContextContactId(contactId);
@@ -465,6 +496,17 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       }
     },
     [token],
+  );
+
+  const prefetchContactContexts = useCallback(
+    (sessionId: number, contactIds: number[]) => {
+      for (const contactId of contactIds) {
+        const key = `${sessionId}:${contactId}`;
+        if (contextCacheRef.current.has(key) || contextInflightRef.current.has(key)) continue;
+        void loadContactContext(sessionId, contactId, { silent: true });
+      }
+    },
+    [loadContactContext],
   );
 
   useEffect(() => {
@@ -485,9 +527,21 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         return;
       }
       const contextKey = `${focused.origin_session_id}:${focused.id}`;
-      if (lastContextKey.current === contextKey) return;
-      lastContextKey.current = contextKey;
-      void loadContactContext(focused.origin_session_id, focused.id);
+      if (lastContextKey.current !== contextKey) {
+        lastContextKey.current = contextKey;
+        void loadContactContext(focused.origin_session_id, focused.id);
+      }
+      // Prefetch des rappels suivants dans la file affichée.
+      const focusedIndex = contacts.findIndex((c) => c.id === focused.id);
+      const ahead = (focusedIndex >= 0 ? contacts.slice(focusedIndex + 1) : contacts)
+        .slice(0, CONTEXT_PREFETCH_AHEAD)
+        .filter((c) => c.origin_session_id)
+        .map((c) => ({ sessionId: c.origin_session_id as number, contactId: c.id }));
+      for (const row of ahead) {
+        const key = `${row.sessionId}:${row.contactId}`;
+        if (contextCacheRef.current.has(key) || contextInflightRef.current.has(key)) continue;
+        void loadContactContext(row.sessionId, row.contactId, { silent: true });
+      }
       return;
     }
 
@@ -500,20 +554,23 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       return;
     }
     const contextKey = `${activeSession.id}:${targetId}`;
-    if (lastContextKey.current === contextKey) return;
-    lastContextKey.current = contextKey;
-    void loadContactContext(activeSession.id, targetId);
-
-    // Précharge les 2 prochains pending (hors contact courant) pour fluidifier le switch.
-    const pendingAhead = contacts
-      .filter((c) => c.status === "pending" && c.id !== targetId)
-      .slice(0, 2);
-    for (const contact of pendingAhead) {
-      const key = `${activeSession.id}:${contact.id}`;
-      if (contextCacheRef.current.has(key)) continue;
-      void loadContactContext(activeSession.id, contact.id, { silent: true });
+    if (lastContextKey.current !== contextKey) {
+      lastContextKey.current = contextKey;
+      void loadContactContext(activeSession.id, targetId);
     }
-  }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
+
+    // Précharge les N prochains pending dans l’ordre de file (même logique que « Ensuite »).
+    const aheadIds = pendingContactsAhead(contacts, targetId, CONTEXT_PREFETCH_AHEAD).map((c) => c.id);
+    prefetchContactContexts(activeSession.id, aheadIds);
+  }, [
+    view,
+    activeSession?.id,
+    awaitingEvent?.id,
+    focusedContactId,
+    contacts,
+    loadContactContext,
+    prefetchContactContexts,
+  ]);
 
   const openRecalls = useCallback(async () => {
     if (!token) return;
@@ -1073,6 +1130,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           awaitingEvent={awaitingEvent}
           contactContext={contactContext}
           contextContactId={contextContactId}
+          contextTargetContactId={contextTargetContactId}
           contextLoading={contextLoading}
           team={team}
           currentSfUserId={currentSfUserId}
