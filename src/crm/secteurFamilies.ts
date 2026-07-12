@@ -24,7 +24,7 @@ export const SECTEUR_FAMILIES: SecteurFamily[] = [
   {
     id: "finance",
     label: "Finance & assurance",
-    secteurs: ["Finance", "Banque / finance", "Assurance / Réassurance / caisses de retraite"],
+    secteurs: ["Banque / finance", "Assurance / Réassurance / caisses de retraite"],
   },
   {
     id: "industrie",

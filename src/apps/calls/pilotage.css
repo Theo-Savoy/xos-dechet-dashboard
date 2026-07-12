@@ -127,46 +127,131 @@
   padding: 0 0.25rem;
 }
 
-.pilotage-heatmap {
-  --heatmap-cell: 1.7rem;
-  --heatmap-gap: 0.16rem;
-  display: grid;
-  justify-items: center;
-  gap: 0.55rem;
+.pilotage-compact-row {
+  --heatmap-cell: 1.42rem;
+  --heatmap-gap: 0.12rem;
+  --heatmap-track: calc(7 * var(--heatmap-cell) + 6 * var(--heatmap-gap));
+  --pilotage-compact-width: calc(var(--heatmap-track) + 1.6rem);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 0.75rem;
   width: 100%;
-  padding: 0.9rem 1rem;
+}
+
+.pilotage-compact-card {
+  width: var(--pilotage-compact-width);
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.7rem 0.8rem 0.75rem;
   border: 1px solid var(--xos-border);
   border-radius: 0.85rem;
   background: rgba(255, 255, 255, 0.025);
 }
 
+.pilotage-compact-card__head {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 0.35rem;
+}
+
+.pilotage-compact-card__head h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.pilotage-compact-card__hint {
+  margin: 0.1rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--xos-text-muted);
+}
+
+.pilotage-sessions-compact__actions .calls-seg__btn {
+  padding: 0.22rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.pilotage-sessions-compact__list {
+  overflow-y: auto;
+  max-height: 13.5rem;
+  padding-right: 0.1rem;
+}
+
+.pilotage-sessions-compact .pilotage-session-chip {
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+}
+
+.pilotage-sessions-compact .pilotage-session-chip__title strong {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pilotage-sessions-compact .pilotage-session-chip__meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  font-size: 0.68rem;
+}
+
+.pilotage-heatmap {
+  --heatmap-cell: 1.42rem;
+  --heatmap-gap: 0.12rem;
+  --heatmap-track: calc(7 * var(--heatmap-cell) + 6 * var(--heatmap-gap));
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  width: var(--pilotage-compact-width, fit-content);
+  max-width: 100%;
+  justify-self: center;
+  margin-inline: auto;
+  padding: 0.7rem 0.8rem 0.75rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.pilotage-compact-row .pilotage-heatmap {
+  margin-inline: 0;
+  justify-self: auto;
+}
+
 .pilotage-heatmap__inner {
   display: grid;
-  gap: 0.45rem;
-  width: fit-content;
+  gap: 0.38rem;
+  width: var(--heatmap-track);
   max-width: 100%;
-  justify-items: stretch;
+  justify-items: center;
 }
 
 .pilotage-heatmap__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem 1rem;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 0.35rem;
   width: 100%;
-  min-width: calc(7 * var(--heatmap-cell) + 6 * var(--heatmap-gap));
 }
 
 .pilotage-heatmap__head h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.88rem;
   font-weight: 600;
 }
 
 .pilotage-heatmap__hint {
-  margin: 0.15rem 0 0;
-  font-size: 0.75rem;
+  margin: 0.1rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
   color: var(--xos-text-muted);
 }
 
@@ -180,7 +265,7 @@
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   width: 100%;
 }
 
@@ -219,21 +304,19 @@
   display: grid;
   grid-template-columns: repeat(7, var(--heatmap-cell));
   gap: var(--heatmap-gap);
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   color: var(--xos-text-muted);
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   justify-content: center;
-  width: fit-content;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .pilotage-heatmap__grid {
   display: grid;
   gap: var(--heatmap-gap);
-  width: fit-content;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .pilotage-heatmap__week {
@@ -295,7 +378,7 @@
 }
 
 .pilotage-heatmap__day {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   opacity: 0.95;
@@ -729,6 +812,11 @@
   .pilotage-kpis,
   .pilotage-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pilotage-compact-row {
+    flex-direction: column;
+    align-items: center;
   }
 
   .pilotage-table--sessions {

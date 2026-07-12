@@ -678,89 +678,81 @@ export function PilotageView({
 
       <FunnelStrip kpis={kpis} />
 
-      <PilotageHeatmap
-        days={heatmapDays}
-        selectedDate={period === "day" ? effectiveAnchor : null}
-        onSelectDay={selectHeatmapDay}
-        onPrefetchDay={prefetchDay}
-      />
+      <div className="pilotage-compact-row">
+        <PilotageHeatmap
+          days={heatmapDays}
+          selectedDate={period === "day" ? effectiveAnchor : null}
+          onSelectDay={selectHeatmapDay}
+          onPrefetchDay={prefetchDay}
+        />
 
-      {detailMode === "sessions" && (
-        <GlassCard className="pilotage-panel pilotage-sessions-panel">
-          <div className="pilotage-panel__toolbar">
-            <div>
-              <h3>Séances</h3>
-              <p className="pilotage-panel__hint">Cochez pour filtrer l’équipe et le funnel.</p>
+        {detailMode === "sessions" && (
+          <section className="pilotage-compact-card pilotage-sessions-compact" aria-label="Séances">
+            <div className="pilotage-compact-card__head">
+              <div>
+                <h3>Séances</h3>
+                <p className="pilotage-compact-card__hint">Cochez pour filtrer.</p>
+              </div>
+              <div className="calls-seg pilotage-sessions-compact__actions" role="group" aria-label="Sélection séances">
+                <button
+                  type="button"
+                  className="calls-seg__btn"
+                  onClick={selectAllSessions}
+                  disabled={sessions.length === 0 || selectedSessionIds.size === sessions.length}
+                >
+                  Tout
+                </button>
+                <button
+                  type="button"
+                  className="calls-seg__btn"
+                  onClick={selectNoSessions}
+                  disabled={sessions.length === 0 || selectedSessionIds.size === 0}
+                >
+                  Aucun
+                </button>
+              </div>
             </div>
-            <div className="calls-seg" role="group" aria-label="Sélection séances">
-              <button
-                type="button"
-                className="calls-seg__btn"
-                onClick={selectAllSessions}
-                disabled={sessions.length === 0 || selectedSessionIds.size === sessions.length}
-              >
-                Tout
-              </button>
-              <button
-                type="button"
-                className="calls-seg__btn"
-                onClick={selectNoSessions}
-                disabled={sessions.length === 0 || selectedSessionIds.size === 0}
-              >
-                Aucun
-              </button>
-            </div>
-          </div>
 
-          {sessions.length === 0 ? (
-            <p className="pilotage-empty">Aucune séance sur la période.</p>
-          ) : (
-            <ul className="pilotage-session-list">
-              {sessions.map((session) => {
-                const checked = selectedSessionIds.has(session.id);
-                return (
-                  <li key={session.id}>
-                    <label
-                      className={`pilotage-session-chip${checked ? " pilotage-session-chip--checked" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSession(session.id)}
-                      />
-                      <span className="pilotage-session-chip__body">
-                        <span className="pilotage-session-chip__title">
-                          <strong>{session.name}</strong>
-                          {session.shared && <Tag variant="accent">Partagée</Tag>}
-                          <span className="pilotage-muted">
-                            {session.status === "active" ? " · en cours" : " · terminée"}
-                            {typeof session.member_count === "number" && session.member_count > 1
-                              ? ` · ${session.member_count} membres`
-                              : ""}
+            {sessions.length === 0 ? (
+              <p className="pilotage-empty">Aucune séance sur la période.</p>
+            ) : (
+              <ul className="pilotage-session-list pilotage-sessions-compact__list">
+                {sessions.map((session) => {
+                  const checked = selectedSessionIds.has(session.id);
+                  return (
+                    <li key={session.id}>
+                      <label
+                        className={`pilotage-session-chip${checked ? " pilotage-session-chip--checked" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSession(session.id)}
+                        />
+                        <span className="pilotage-session-chip__body">
+                          <span className="pilotage-session-chip__title">
+                            <strong>{session.name}</strong>
+                            {session.shared && <Tag variant="accent">Partagée</Tag>}
+                          </span>
+                          <span className="pilotage-session-chip__meta">
+                            <span>{session.owner.label}</span>
+                            <span className="pilotage-muted">
+                              {SESSION_TYPE_LABEL[session.session_type] || session.session_type}
+                            </span>
+                            <span className="xos-numeric">
+                              {session.kpis.calls} · {pct(session.kpis.rate_decroche)} · {session.kpis.rdv} RDV
+                            </span>
                           </span>
                         </span>
-                        <span className="pilotage-session-chip__meta">
-                          <span>{session.owner.label}</span>
-                          <span className="pilotage-muted">
-                            {SESSION_TYPE_LABEL[session.session_type] || session.session_type}
-                          </span>
-                          <span className="xos-numeric">
-                            {session.kpis.calls} appels · {pct(session.kpis.rate_decroche)} décroché ·{" "}
-                            {session.kpis.rdv} RDV
-                          </span>
-                          <span className="pilotage-muted xos-numeric">
-                            {session.counts.called}/{session.counts.total}
-                          </span>
-                        </span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </GlassCard>
-      )}
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+      </div>
 
       {detailMode === "days" && (
         <GlassCard className="pilotage-panel">

@@ -10,7 +10,6 @@ export const SECTEUR_VALUES = [
   "Education - Formation",
   "Entité à but non lucratif",
   "Environnement",
-  "Finance",
   "Grande distribution alimentaire",
   "Industrie de l'emballage",
   "Matériaux de construction et extraction d'autres matériaux (hors énergie)",
