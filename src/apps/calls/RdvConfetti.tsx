@@ -37,11 +37,11 @@ function prefersReducedMotion(): boolean {
 }
 
 function particleCount(heat: RdvHeat): number {
-  if (heat >= 5) return 48;
-  if (heat === 4) return 40;
-  if (heat === 3) return 32;
-  if (heat === 2) return 24;
-  return 16;
+  if (heat >= 5) return 64;
+  if (heat === 4) return 48;
+  if (heat === 3) return 36;
+  if (heat === 2) return 28;
+  return 18;
 }
 
 export function RdvConfetti({ burstKey, heat, goalHit = false }: RdvConfettiProps) {
@@ -58,7 +58,7 @@ export function RdvConfetti({ burstKey, heat, goalHit = false }: RdvConfettiProp
         id: i,
         left: `${4 + ((i * 19) % 92)}%`,
         delay: `${(i % 10) * 0.025}s`,
-        duration: `${0.75 + (i % 6) * 0.1 + (heat >= 4 ? 0.15 : 0)}s`,
+        duration: `${1.1 + (i % 6) * 0.18 + (heat >= 4 ? 0.35 : 0) + (goalHit ? 0.4 : 0)}s`,
         drift: `${((i % 9) - 4) * (12 + heat * 3)}px`,
         color: colors[i % colors.length],
         size: kind === "spark" ? "3px" : kind === "ember" ? `${8 + (i % 3) * 2}px` : `${5 + (i % 4) * 2}px`,
@@ -66,14 +66,17 @@ export function RdvConfetti({ burstKey, heat, goalHit = false }: RdvConfettiProp
         kind,
       };
     });
-  }, [burstKey, heat]);
+  }, [burstKey, heat, goalHit]);
 
   useEffect(() => {
     if (!burstKey || prefersReducedMotion()) return;
     setVisible(true);
-    const timer = window.setTimeout(() => setVisible(false), heat >= 4 ? 2000 : 1500);
+    const timer = window.setTimeout(
+      () => setVisible(false),
+      goalHit ? 5200 : heat >= 4 ? 3800 : heat >= 3 ? 3000 : 2200,
+    );
     return () => window.clearTimeout(timer);
-  }, [burstKey, heat]);
+  }, [burstKey, heat, goalHit]);
 
   if (!visible || particles.length === 0) return null;
 

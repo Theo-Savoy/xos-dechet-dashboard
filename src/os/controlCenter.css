@@ -1,0 +1,219 @@
+.xos-cc {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.xos-cc__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--xos-text);
+  cursor: pointer;
+}
+
+.xos-cc__trigger:hover,
+.xos-cc__trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--xos-border) 80%, transparent);
+}
+
+.xos-cc__badge {
+  position: absolute;
+  top: 0.05rem;
+  right: 0.05rem;
+  min-width: 0.95rem;
+  height: 0.95rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background: #ff5f57;
+  color: white;
+  font-size: 0.62rem;
+  line-height: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.xos-cc__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  border: 0;
+  background: transparent;
+}
+
+.xos-cc__panel {
+  position: fixed;
+  top: 2.6rem;
+  right: 0.75rem;
+  z-index: 12001;
+  width: min(22.5rem, calc(100vw - 1.5rem));
+  max-height: min(70vh, 34rem);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 85%, transparent);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), transparent 40%),
+    rgba(10, 14, 28, 0.92);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.4);
+  animation: xos-cc-in 0.2s ease-out;
+}
+
+@keyframes xos-cc-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.xos-cc__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.xos-cc__eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xos-text-muted);
+}
+
+.xos-cc__head h2 {
+  margin: 0.1rem 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.xos-cc__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.xos-cc__linkbtn {
+  border: 0;
+  background: transparent;
+  color: var(--xos-accent);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+}
+
+.xos-cc__close {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--xos-text);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.xos-cc__list {
+  overflow: auto;
+  display: grid;
+  gap: 0.55rem;
+  padding-right: 0.15rem;
+}
+
+.xos-cc__empty {
+  margin: 0.75rem 0;
+  color: var(--xos-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.xos-cc__item {
+  padding: 0.7rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 80%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.xos-cc__item--unread {
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--xos-accent) 18%, transparent), transparent 55%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.xos-cc__item-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.xos-cc__item-logo {
+  height: 0.55rem;
+  width: auto;
+  opacity: 0.85;
+}
+
+.xos-cc__item-app {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--xos-text-muted);
+}
+
+.xos-cc__item-time {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--xos-text-muted);
+}
+
+.xos-cc__item-title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.xos-cc__item-body {
+  margin: 0.25rem 0 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--xos-text-muted);
+}
+
+.xos-cc__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.xos-cc__sf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid color-mix(in srgb, #00a1e0 45%, var(--xos-border));
+  background: color-mix(in srgb, #00a1e0 14%, transparent);
+  color: #9ad8f5;
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+
+.xos-cc__sf:hover {
+  background: color-mix(in srgb, #00a1e0 24%, transparent);
+}

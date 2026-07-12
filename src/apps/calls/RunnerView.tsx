@@ -23,7 +23,7 @@ import {
   type ComboActionId,
   writeSoundsEnabled,
 } from "./comboKeyboard";
-import { playComboSound } from "./comboSounds";
+import { playComboSound, playRdvCelebrateSound } from "./comboSounds";
 import { RdvConfetti } from "./RdvConfetti";
 import {
   countSessionRdvs,
@@ -411,6 +411,7 @@ export function RunnerView({
   const [confettiBurst, setConfettiBurst] = useState(0);
   const [confettiHeat, setConfettiHeat] = useState<RdvHeat>(1);
   const [goalBurst, setGoalBurst] = useState(false);
+  const [kpiGoalPulse, setKpiGoalPulse] = useState(false);
   const sessionRdvRef = useRef(sessionRdvCount);
   const bootstrappedDetail = useRef(false);
   const eventPanelRef = useRef<EventPanelHandle>(null);
@@ -442,10 +443,25 @@ export function RunnerView({
 
   useEffect(() => {
     if (!toast) return;
-    const ms = toast.kind === "rdv" ? (toast.goalJustHit ? 2800 : 2200) : 1500;
+    const ms =
+      toast.kind === "rdv"
+        ? toast.goalJustHit
+          ? 5200
+          : toast.heat >= 4
+            ? 3800
+            : toast.heat >= 3
+              ? 3200
+              : 2600
+        : 1500;
     const timeout = window.setTimeout(() => setToast(null), ms);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    if (!kpiGoalPulse) return;
+    const timeout = window.setTimeout(() => setKpiGoalPulse(false), 7200);
+    return () => window.clearTimeout(timeout);
+  }, [kpiGoalPulse]);
 
   const kpis = useMemo(() => computeKpis(contacts), [contacts]);
   const canRecall = RECALL_ELIGIBLE_RESULTATS.includes(resultat) && !doNotCall;
@@ -720,7 +736,8 @@ export function RunnerView({
     setConfettiHeat(heat);
     setGoalBurst(goalJustHit);
     setConfettiBurst((key) => key + 1);
-    playComboSound(goalJustHit ? "goal" : "rdv", soundsEnabled);
+    if (goalJustHit) setKpiGoalPulse(true);
+    playRdvCelebrateSound(heat, soundsEnabled);
     setToast({
       kind: "rdv",
       count: next,
@@ -1296,7 +1313,15 @@ export function RunnerView({
               <strong className="xos-numeric">{kpis.argumentes}</strong>
             </GlassCard>
             <GlassCard
-              className={`calls-stat calls-stat--rdv${rdvGoal != null && sessionRdvCount >= rdvGoal ? " calls-stat--rdv-goal" : ""}${sessionRdvCount >= 3 ? " calls-stat--rdv-heat" : ""}`}
+              className={[
+                "calls-stat",
+                "calls-stat--rdv",
+                rdvGoal != null && sessionRdvCount >= rdvGoal ? "calls-stat--rdv-goal" : "",
+                kpiGoalPulse ? "calls-stat--rdv-goal-hit" : "",
+                sessionRdvCount >= 2 ? `calls-stat--rdv-heat-${rdvHeatLevel(sessionRdvCount, false)}` : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <span>RDV</span>
               <strong className="xos-numeric">
@@ -1460,6 +1485,11 @@ export function RunnerView({
                   team={team}
                   sessionType={session.session_type}
                   currentSfUserId={currentSfUserId}
+                  defaultOwnerSfUserId={
+                    contextApplies && contextContactId === singleSelectedContact.id
+                      ? contactContext?.account_owner_sf_user_id ?? null
+                      : null
+                  }
                 />
               ) : (
                 <div className="calls-runner-actions">
@@ -1995,6 +2025,11 @@ export function RunnerView({
               team={team}
               sessionType={session.session_type}
               currentSfUserId={currentSfUserId}
+              defaultOwnerSfUserId={
+                contextApplies && contextContactId === awaitingEvent.id
+                  ? contactContext?.account_owner_sf_user_id ?? null
+                  : null
+              }
             />
           ) : focusedContact.status === "pending" ? (
             <GlassCard className="calls-log-form">
@@ -2057,6 +2092,9 @@ export function RunnerView({
                   sessionType={session.session_type}
                   currentSfUserId={currentSfUserId}
                   showSubmitShortcut
+                  defaultOwnerSfUserId={
+                    contextApplies ? contactContext?.account_owner_sf_user_id ?? null : null
+                  }
                 />
               ) : (
                 <div className="calls-runner-actions calls-runner-actions--sticky">
