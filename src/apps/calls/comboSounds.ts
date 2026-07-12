@@ -1,6 +1,6 @@
 import { readSoundsEnabled } from "./comboKeyboard";
 
-type SoundKind = "tick" | "success" | "recall" | "warn" | "whoosh" | "demo";
+type SoundKind = "tick" | "success" | "recall" | "warn" | "whoosh" | "demo" | "rdv" | "goal";
 
 let audioCtx: AudioContext | null = null;
 
@@ -73,6 +73,20 @@ export function playComboSound(kind: SoundKind, enabled = readSoundsEnabled()): 
       tone(392, 0.09, "triangle", 0.04);
       tone(494, 0.09, "triangle", 0.035, 0.08);
       tone(587, 0.12, "triangle", 0.03, 0.16);
+      break;
+    case "rdv":
+      // Petite fanfare — C–E–G–C aigu
+      tone(523.25, 0.09, "triangle", 0.055);
+      tone(659.25, 0.1, "triangle", 0.05, 0.07);
+      tone(783.99, 0.11, "triangle", 0.045, 0.14);
+      tone(1046.5, 0.16, "sine", 0.04, 0.22);
+      break;
+    case "goal":
+      tone(392, 0.1, "triangle", 0.05);
+      tone(523.25, 0.1, "triangle", 0.05, 0.08);
+      tone(659.25, 0.11, "triangle", 0.05, 0.16);
+      tone(784, 0.12, "triangle", 0.045, 0.24);
+      tone(1046.5, 0.2, "sine", 0.04, 0.34);
       break;
     default:
       break;

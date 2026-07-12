@@ -632,11 +632,34 @@ describe("RunnerView", () => {
       />,
     );
 
-    fireEvent.keyDown(document, { key: "F" });
-    fireEvent.keyDown(document, { key: "3" });
+    fireEvent.keyDown(document, { key: "F", code: "KeyF" });
+    // QWERTY "3" ou AZERTY """ — on lit Digit3
+    fireEvent.keyDown(document, { key: '"', code: "Digit3" });
     expect(screen.getByRole("button", { name: /Appel décroché/i }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("opens Combo command bar with ⌘K even if the OS launcher also listens", () => {
+    const launcher = vi.fn((event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+      }
+    });
+    window.addEventListener("keydown", launcher);
+    const current = { ...bob, status: "pending" as const, outcome: null };
+    render(
+      <RunnerView
+        {...runnerProps}
+        contacts={[current]}
+        currentContact={current}
+        awaitingEvent={null}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: "k", code: "KeyK", metaKey: true, bubbles: true });
+    expect(screen.getByRole("dialog", { name: "Command bar Combo" })).toBeTruthy();
+    expect(screen.queryByText(/pour ouvrir/i)).toBeNull();
+    window.removeEventListener("keydown", launcher);
+  });
   it("sets recall delay with Shift+digit via keyboard code (AZERTY-safe)", () => {
     const current = { ...bob, status: "pending" as const, outcome: null };
     render(

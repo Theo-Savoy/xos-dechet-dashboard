@@ -28,6 +28,7 @@ import {
 } from "./api";
 import { addShortcut } from "../../os/shortcuts";
 import { resolveContextContactId } from "./runnerContext";
+import { createDialerLogQueue } from "./dialerLogQueue";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
 import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
@@ -130,6 +131,27 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const contextRequest = useRef(0);
   const lastContextKey = useRef<string | null>(null);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
+  const contactsRef = useRef<SessionContact[]>([]);
+  const pendingLogsRef = useRef(0);
+  const logQueueRef = useRef(
+    createDialerLogQueue((pending) => {
+      pendingLogsRef.current = pending;
+    }),
+  );
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (pendingLogsRef.current <= 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   useEffect(() => {
     lastContextKey.current = null;
@@ -499,48 +521,116 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     return { sessionId: activeSession.id, contactId };
   };
 
-  const handleLogAndNext = async (contactId: number, payload: LogPayload) => {
+  const finishSessionIfDone = async (sessionId: number) => {
     if (!token) return;
-    const target = resolveLogTarget(contactId);
-    if (!target) return;
-
+    if (contactsRef.current.some((c) => c.status === "pending")) return;
+    // Pendant l'exécution d'une tâche, pending >= 1 (la tâche courante).
+    if (pendingLogsRef.current > 1) return;
     setRunnerLoading(true);
-    setRunnerError(null);
     try {
-      const result = await logCall(token, target.sessionId, target.contactId, payload.resultat, {
-        comments: payload.comments,
-        recallAt: payload.recallAt,
-        doNotCall: payload.doNotCall,
-      });
-      const syncWarnings = [
-        ...(result.recall_failed ? ["Appel consigné, mais la création du rappel a échoué dans Salesforce — vérifie la fiche."] : []),
-        ...(result.npa_failed ? ["Appel consigné, mais le marquage NPA a échoué dans Salesforce — vérifie la fiche."] : []),
-      ];
-      if (syncWarnings.length) {
-        setRunnerError(syncWarnings.join(" "));
-      }
-      if (view === "recalls") {
-        setFocusedContactId(null);
-        await refreshRecallsQueue();
-        return;
-      }
-      if (result.needs_event) {
-        const refreshed = await fetchSession(token, target.sessionId);
-        const updatedCurrent = refreshed.contacts.find((c) => c.id === contactId);
-        setContacts(refreshed.contacts);
-        setAwaitingEvent(updatedCurrent ?? null);
-      } else {
-        setFocusedContactId(null);
-        await advanceOrComplete(target.sessionId);
-      }
-    } catch (err) {
-      setRunnerError(errorMessage(err));
+      await completeSession(token, sessionId);
+      const finalData = await refreshRunner(sessionId);
+      setActiveSession(finalData.session);
+      setContacts(finalData.contacts);
+      setView("recap");
     } finally {
       setRunnerLoading(false);
     }
   };
 
-  const handleLogRdvAndNext = async (
+  const rollbackContact = (contactId: number, snapshot: SessionContact) => {
+    setContacts((current) => current.map((c) => (c.id === contactId ? snapshot : c)));
+    setFocusedContactId(contactId);
+  };
+
+  const handleLogAndNext = (contactId: number, payload: LogPayload) => {
+    if (!token) return;
+    const target = resolveLogTarget(contactId);
+    if (!target) return;
+
+    let snapshot: SessionContact | undefined;
+    let remainingPending = false;
+
+    setContacts((current) => {
+      snapshot = current.find((c) => c.id === contactId);
+      if (!snapshot || snapshot.status !== "pending") return current;
+      const optimistic: SessionContact = {
+        ...snapshot,
+        status: "called",
+        outcome: payload.resultat,
+        comments: payload.comments || null,
+        recall_at: payload.recallAt,
+        marked_npa: payload.doNotCall ? true : snapshot.marked_npa,
+        called_at: new Date().toISOString(),
+      };
+      const nextContacts = current.map((c) => (c.id === contactId ? optimistic : c));
+      remainingPending = nextContacts.some((c) => c.status === "pending");
+      return nextContacts;
+    });
+
+    if (!snapshot) return;
+
+    setFocusedContactId(null);
+    setRunnerError(null);
+    const rollback = snapshot;
+    const wasLast = !remainingPending;
+    const viewAtEnqueue = view;
+
+    logQueueRef.current.enqueue(async () => {
+      try {
+        const result = await logCall(token, target.sessionId, target.contactId, payload.resultat, {
+          comments: payload.comments,
+          recallAt: payload.recallAt,
+          doNotCall: payload.doNotCall,
+        });
+        const syncWarnings = [
+          ...(result.recall_failed
+            ? ["Appel consigné, mais la création du rappel a échoué dans Salesforce — vérifie la fiche."]
+            : []),
+          ...(result.npa_failed
+            ? ["Appel consigné, mais le marquage NPA a échoué dans Salesforce — vérifie la fiche."]
+            : []),
+        ];
+        if (syncWarnings.length) {
+          setRunnerError(syncWarnings.join(" "));
+        }
+
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+          return;
+        }
+
+        if (result.needs_event) {
+          const refreshed = await fetchSession(token, target.sessionId);
+          setContacts(refreshed.contacts);
+          setAwaitingEvent(refreshed.contacts.find((c) => c.id === contactId) ?? null);
+          setFocusedContactId(contactId);
+          return;
+        }
+
+        if (wasLast) {
+          await finishSessionIfDone(target.sessionId);
+        }
+      } catch (err) {
+        if (
+          err instanceof CallsApiError
+          && err.status === 409
+          && err.code === "contact_already_processed"
+        ) {
+          if (wasLast) await finishSessionIfDone(target.sessionId);
+          else if (viewAtEnqueue === "recalls") await refreshRecallsQueue();
+          return;
+        }
+        rollbackContact(contactId, rollback);
+        setRunnerError(errorMessage(err));
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+        }
+      }
+    });
+  };
+
+  const handleLogRdvAndNext = (
     contactId: number,
     payload: LogPayload,
     event: { start: string; durationMin: number; invitees: string[] },
@@ -549,62 +639,107 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     const target = resolveLogTarget(contactId);
     if (!target) return;
 
-    setRunnerLoading(true);
+    let snapshot: SessionContact | undefined;
+    let remainingPending = false;
+
+    setContacts((current) => {
+      snapshot = current.find((c) => c.id === contactId);
+      if (!snapshot || snapshot.status !== "pending") return current;
+      const optimistic: SessionContact = {
+        ...snapshot,
+        status: "called",
+        outcome: "RDV planifié",
+        comments: payload.comments || null,
+        recall_at: null,
+        marked_npa: payload.doNotCall ? true : snapshot.marked_npa,
+        called_at: new Date().toISOString(),
+      };
+      const nextContacts = current.map((c) => (c.id === contactId ? optimistic : c));
+      remainingPending = nextContacts.some((c) => c.status === "pending");
+      return nextContacts;
+    });
+
+    if (!snapshot) return;
+
+    setAwaitingEvent(null);
+    setFocusedContactId(null);
     setRunnerError(null);
-    try {
-      const result = await logCall(token, target.sessionId, target.contactId, "RDV planifié", {
-        comments: payload.comments,
-        doNotCall: payload.doNotCall,
-      });
-      if (result.needs_event) {
-        await logEvent(
-          token,
-          target.sessionId,
-          target.contactId,
-          event.start,
-          event.durationMin,
-          event.invitees,
-        );
-      }
-      setAwaitingEvent(null);
-      setFocusedContactId(null);
-      if (view === "recalls") {
-        await refreshRecallsQueue();
-        return;
-      }
-      await advanceOrComplete(target.sessionId);
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-      if (view === "recalls") return;
+    const rollback = snapshot;
+    const wasLast = !remainingPending;
+    const viewAtEnqueue = view;
+
+    logQueueRef.current.enqueue(async () => {
       try {
-        const refreshed = await fetchSession(token, target.sessionId);
-        setContacts(refreshed.contacts);
-        const updated = refreshed.contacts.find((c) => c.id === contactId);
-        if (updated?.outcome === "RDV planifié" && !updated.sf_event_id) {
-          setAwaitingEvent(updated);
+        const result = await logCall(token, target.sessionId, target.contactId, "RDV planifié", {
+          comments: payload.comments,
+          doNotCall: payload.doNotCall,
+        });
+        if (result.needs_event) {
+          await logEvent(
+            token,
+            target.sessionId,
+            target.contactId,
+            event.start,
+            event.durationMin,
+            event.invitees,
+          );
         }
-      } catch {
-        /* keep current */
+        if (viewAtEnqueue === "recalls") {
+          await refreshRecallsQueue();
+          return;
+        }
+        if (wasLast) {
+          await finishSessionIfDone(target.sessionId);
+        }
+      } catch (err) {
+        rollbackContact(contactId, rollback);
+        setRunnerError(errorMessage(err));
+        if (viewAtEnqueue === "recalls") return;
+        try {
+          const refreshed = await fetchSession(token, target.sessionId);
+          setContacts(refreshed.contacts);
+          const updated = refreshed.contacts.find((c) => c.id === contactId);
+          if (updated?.outcome === "RDV planifié" && !updated.sf_event_id) {
+            setAwaitingEvent(updated);
+            setFocusedContactId(contactId);
+          }
+        } catch {
+          /* keep rollback UI */
+        }
       }
-    } finally {
-      setRunnerLoading(false);
-    }
+    });
   };
 
-  const handleLogEvent = async (start: string, durationMin: number, invitees: string[]) => {
+  const handleLogEvent = (
+    start: string,
+    durationMin: number,
+    invitees: string[],
+  ) => {
     if (!token || !activeSession || !awaitingEvent) return;
-    setRunnerLoading(true);
+    const sessionId = activeSession.id;
+    const contactId = awaitingEvent.id;
+    const snapshot = awaitingEvent;
+
+    setAwaitingEvent(null);
+    setFocusedContactId(null);
     setRunnerError(null);
-    try {
-      await logEvent(token, activeSession.id, awaitingEvent.id, start, durationMin, invitees);
-      setAwaitingEvent(null);
-      setFocusedContactId(null);
-      await advanceOrComplete(activeSession.id);
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
-    }
+
+    const remainingPending = contactsRef.current.some(
+      (c) => c.id !== contactId && c.status === "pending",
+    );
+
+    logQueueRef.current.enqueue(async () => {
+      try {
+        await logEvent(token, sessionId, contactId, start, durationMin, invitees);
+        if (!remainingPending) {
+          await finishSessionIfDone(sessionId);
+        }
+      } catch (err) {
+        setAwaitingEvent(snapshot);
+        setFocusedContactId(contactId);
+        setRunnerError(errorMessage(err));
+      }
+    });
   };
 
   const handleDeferContacts = async (

@@ -12,6 +12,7 @@ import { EmptyState } from "./EmptyState";
 import { CommandBar, ShortcutHelp } from "./CommandBar";
 import { ComboOnboardingDemo } from "./ComboOnboardingDemo";
 import {
+  digitFromKeyboardCode,
   hasSeenComboDemo,
   isModKey,
   isTypingTarget,
@@ -22,6 +23,15 @@ import {
   writeSoundsEnabled,
 } from "./comboKeyboard";
 import { playComboSound } from "./comboSounds";
+import { RdvConfetti } from "./RdvConfetti";
+import {
+  countSessionRdvs,
+  readRdvGoal,
+  RDV_GOAL_PRESETS,
+  rdvHeatLevel,
+  writeRdvGoal,
+  type RdvHeat,
+} from "./rdvCelebrate";
 import { DatePicker, formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
@@ -47,6 +57,16 @@ import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 const RECALL_DAYS_KEY = "xos-calls-default-recall-days";
 
 type RunnerMode = "list" | "detail";
+
+type RunnerToast =
+  | { kind: "plain"; message: string }
+  | {
+      kind: "rdv";
+      count: number;
+      goal: number | null;
+      goalJustHit: boolean;
+      heat: RdvHeat;
+    };
 
 type LogPayload = {
   resultat: ResultatCall;
@@ -318,16 +338,36 @@ export function RunnerView({
   const [deferTargetId, setDeferTargetId] = useState<number | null>(null);
   const [bulkRecallPicker, setBulkRecallPicker] = useState<{ ids: number[]; seed: string } | null>(null);
   const [pinned, setPinned] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<RunnerToast | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !hasSeenComboDemo());
   const [soundsEnabled, setSoundsEnabled] = useState(readSoundsEnabled);
+  const [sessionRdvCount, setSessionRdvCount] = useState(() => countSessionRdvs(contacts));
+  const [rdvGoal, setRdvGoal] = useState<number | null>(() =>
+    isRecallQueue ? null : readRdvGoal(session.id),
+  );
+  const [confettiBurst, setConfettiBurst] = useState(0);
+  const [confettiHeat, setConfettiHeat] = useState<RdvHeat>(1);
+  const [goalBurst, setGoalBurst] = useState(false);
+  const sessionRdvRef = useRef(sessionRdvCount);
   const bootstrappedDetail = useRef(false);
 
   useEffect(() => {
     setPinned(false);
-  }, [session.id]);
+    const n = countSessionRdvs(contacts);
+    sessionRdvRef.current = n;
+    setSessionRdvCount(n);
+    setRdvGoal(isRecallQueue ? null : readRdvGoal(session.id));
+  }, [session.id, isRecallQueue]);
+
+  useEffect(() => {
+    const n = countSessionRdvs(contacts);
+    if (n >= sessionRdvRef.current) {
+      sessionRdvRef.current = n;
+      setSessionRdvCount(n);
+    }
+  }, [contacts]);
 
   useEffect(() => {
     if (bootstrappedDetail.current || !currentContact) return;
@@ -340,7 +380,8 @@ export function RunnerView({
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 1500);
+    const ms = toast.kind === "rdv" ? (toast.goalJustHit ? 2800 : 2200) : 1500;
+    const timeout = window.setTimeout(() => setToast(null), ms);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
@@ -586,6 +627,33 @@ export function RunnerView({
     }
   };
 
+  const celebrateRdv = useCallback(() => {
+    const next = sessionRdvRef.current + 1;
+    sessionRdvRef.current = next;
+    setSessionRdvCount(next);
+    const goalJustHit = rdvGoal != null && next === rdvGoal;
+    const heat = rdvHeatLevel(next, goalJustHit);
+    setConfettiHeat(heat);
+    setGoalBurst(goalJustHit);
+    setConfettiBurst((key) => key + 1);
+    playComboSound(goalJustHit ? "goal" : "rdv", soundsEnabled);
+    setToast({
+      kind: "rdv",
+      count: next,
+      goal: rdvGoal,
+      goalJustHit,
+      heat,
+    });
+  }, [rdvGoal, soundsEnabled]);
+
+  const handleRdvGoalChange = (value: string) => {
+    if (isRecallQueue) return;
+    const next = value === "" ? null : Number(value);
+    const goal = next != null && Number.isInteger(next) && next > 0 ? next : null;
+    setRdvGoal(goal);
+    writeRdvGoal(session.id, goal);
+  };
+
   const handleSubmit = useCallback(() => {
     if (!focusedContact || focusedContact.status !== "pending") return;
     if (resultat === "RDV planifié") return;
@@ -596,13 +664,14 @@ export function RunnerView({
       doNotCall,
     });
     playComboSound(willSendRecall ? "recall" : "success", soundsEnabled);
-    setToast(
-      willSendRecall
+    setToast({
+      kind: "plain",
+      message: willSendRecall
         ? `Loggué · rappel ${formatIsoDateFr(recallAt)}`
         : canRecall && !scheduleRecall
           ? "Loggué · sans rappel"
           : "Loggué",
-    );
+    });
   }, [canRecall, comments, doNotCall, focusedContact, onLogAndNext, recallAt, resultat, scheduleRecall, soundsEnabled, willSendRecall]);
 
   const handleRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
@@ -617,8 +686,16 @@ export function RunnerView({
       },
       { start, durationMin, invitees },
     );
-    setToast("Loggué · RDV planifié");
+    celebrateRdv();
   };
+
+  const handleFinalizeEvent = useCallback(
+    (start: string, durationMin: number, invitees: string[]) => {
+      onLogEvent(start, durationMin, invitees);
+      celebrateRdv();
+    },
+    [celebrateRdv, onLogEvent],
+  );
 
   const handleBulkLog = () => {
     if (pendingSelected.length === 0) return;
@@ -632,7 +709,10 @@ export function RunnerView({
     setBulkComments("");
     setBulkDoNotCall(false);
     setBulkRecallAt(addDaysIso(defaultRecallDays));
-    setToast(bulkWillSendRecall ? `Loggué · rappel ${formatIsoDateFr(bulkRecallAt)}` : "Loggué");
+    setToast({
+      kind: "plain",
+      message: bulkWillSendRecall ? `Loggué · rappel ${formatIsoDateFr(bulkRecallAt)}` : "Loggué",
+    });
   };
 
   const openDefer = (ids: number[]) => {
@@ -834,15 +914,18 @@ export function RunnerView({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // Démo / overlays gèrent Esc + focus trap eux-mêmes.
-      if (demoOpen || commandBarOpen || helpOpen) return;
-
+      // Capture + stopPropagation : ⌘K ne doit pas ouvrir le launcher OS.
       if (isModKey(event) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        event.stopPropagation();
+        if (demoOpen || helpOpen) return;
         setCommandBarOpen(true);
         playComboSound("whoosh", soundsEnabled);
         return;
       }
+
+      // Démo / overlays gèrent Esc + focus trap eux-mêmes.
+      if (demoOpen || commandBarOpen || helpOpen) return;
 
       if (isTypingTarget(event.target)) return;
 
@@ -882,10 +965,14 @@ export function RunnerView({
         return;
       }
 
-      if (!event.shiftKey && !isModKey(event) && /^[1-5]$/.test(event.key)) {
-        event.preventDefault();
-        runComboAction(`result-${event.key}` as ComboActionId);
-        return;
+      // AZERTY : sans Shift, Digit1–5 émettent &é"'( — on lit event.code.
+      if (!event.shiftKey && !isModKey(event) && !event.altKey) {
+        const digit = digitFromKeyboardCode(event.code);
+        if (digit) {
+          event.preventDefault();
+          runComboAction(`result-${digit}` as ComboActionId);
+          return;
+        }
       }
 
       if (isModKey(event) || event.altKey) return;
@@ -921,8 +1008,8 @@ export function RunnerView({
         runComboAction("mode-fiche");
       }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [
     commandBarOpen,
     demoOpen,
@@ -953,14 +1040,43 @@ export function RunnerView({
     setSelectedIds(new Set());
     setBulkComments("");
     setBulkDoNotCall(false);
-    setToast("Loggué · RDV planifié");
+    celebrateRdv();
   };
 
   const called = contacts.filter((c) => c.status === "called").length;
 
   return (
     <div className={`calls-view calls-view--runner${isRecallQueue ? " calls-view--recalls" : ""}${mode === "detail" ? " calls-view--detail" : ""}`}>
-      {toast && <div className="calls-runner-toast" role="status">{toast}</div>}
+      {toast?.kind === "plain" && (
+        <div className="calls-runner-toast" role="status">
+          {toast.message}
+        </div>
+      )}
+      {toast?.kind === "rdv" && (
+        <div
+          className={`calls-runner-toast calls-runner-toast--rdv calls-runner-toast--heat-${toast.heat}${toast.goalJustHit ? " calls-runner-toast--goal" : ""}`}
+          role="status"
+        >
+          <p className="calls-runner-toast__eyebrow">
+            {toast.goalJustHit ? "Objectif atteint" : "RDV planifié"}
+          </p>
+          <p className="calls-runner-toast__title">
+            {toast.goalJustHit
+              ? `${toast.count} RDV — bravo`
+              : toast.count === 1
+                ? "Premier RDV de la séance"
+                : `${toast.count} RDV dans la séance`}
+          </p>
+          <p className="calls-runner-toast__meta">
+            {toast.goal
+              ? `Objectif ${toast.count}/${toast.goal}`
+              : toast.heat >= 3
+                ? "La séance chauffe"
+                : "Continue comme ça"}
+          </p>
+        </div>
+      )}
+      <RdvConfetti burstKey={confettiBurst} heat={confettiHeat} goalHit={goalBurst} />
       <header className="calls-view__header calls-view__header--runner">
         <div className="calls-view__nav">
           <Button variant="secondary" className="calls-view__back" onClick={onBack}>
@@ -1052,9 +1168,34 @@ export function RunnerView({
               <span>Argumentés</span>
               <strong className="xos-numeric">{kpis.argumentes}</strong>
             </GlassCard>
-            <GlassCard className="calls-stat">
+            <GlassCard
+              className={`calls-stat calls-stat--rdv${rdvGoal != null && sessionRdvCount >= rdvGoal ? " calls-stat--rdv-goal" : ""}${sessionRdvCount >= 3 ? " calls-stat--rdv-heat" : ""}`}
+            >
               <span>RDV</span>
-              <strong className="xos-numeric">{kpis.rdv}</strong>
+              <strong className="xos-numeric">
+                {sessionRdvCount}
+                {rdvGoal != null ? (
+                  <span className="calls-stat__goal">/{rdvGoal}</span>
+                ) : null}
+              </strong>
+              {!isRecallQueue && (
+                <label className="calls-rdv-goal">
+                  <span className="calls-rdv-goal__label">Objectif</span>
+                  <select
+                    className="calls-rdv-goal__select"
+                    aria-label="Objectif de RDV pour la séance"
+                    value={rdvGoal ?? ""}
+                    onChange={(e) => handleRdvGoalChange(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {RDV_GOAL_PRESETS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </GlassCard>
           </div>
         </>
@@ -1651,7 +1792,7 @@ export function RunnerView({
             <EventPanel
               contactName={awaitingEvent.contact_name}
               loading={loading}
-              onSubmit={onLogEvent}
+              onSubmit={handleFinalizeEvent}
               heading={`Finaliser le RDV — ${awaitingEvent.contact_name}`}
               team={team}
             />

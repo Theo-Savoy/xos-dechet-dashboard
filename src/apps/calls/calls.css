@@ -2080,6 +2080,134 @@
   backdrop-filter: blur(14px);
 }
 
+.calls-runner-toast--rdv {
+  display: grid;
+  gap: 0.15rem;
+  min-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, var(--xos-border));
+  animation: calls-toast-pop 0.35s ease-out;
+}
+
+.calls-runner-toast__eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--xos-accent);
+}
+
+.calls-runner-toast__title {
+  margin: 0;
+  font-family: var(--xos-font-display, inherit);
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.calls-runner-toast__meta {
+  margin: 0.1rem 0 0;
+  font-size: 0.75rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-runner-toast--heat-2 {
+  border-color: color-mix(in srgb, #f5c542 45%, var(--xos-border));
+}
+
+.calls-runner-toast--heat-2 .calls-runner-toast__eyebrow {
+  color: #f5c542;
+}
+
+.calls-runner-toast--heat-3,
+.calls-runner-toast--heat-4 {
+  border-color: color-mix(in srgb, #ff9f43 55%, var(--xos-border));
+  background:
+    radial-gradient(ellipse at 80% 0%, color-mix(in srgb, #ff6b35 28%, transparent), transparent 55%),
+    rgba(8, 15, 36, 0.95);
+}
+
+.calls-runner-toast--heat-3 .calls-runner-toast__eyebrow,
+.calls-runner-toast--heat-4 .calls-runner-toast__eyebrow {
+  color: #ff9f43;
+}
+
+.calls-runner-toast--heat-4 {
+  box-shadow:
+    0 0.75rem 2rem rgba(0, 0, 0, 0.35),
+    0 0 24px color-mix(in srgb, #ff6b35 25%, transparent);
+}
+
+.calls-runner-toast--goal,
+.calls-runner-toast--heat-5 {
+  border-color: color-mix(in srgb, #f5c542 70%, var(--xos-border));
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, #f5c542 35%, transparent), transparent 60%),
+    rgba(8, 15, 36, 0.96);
+  box-shadow:
+    0 0.85rem 2.2rem rgba(0, 0, 0, 0.4),
+    0 0 32px color-mix(in srgb, #f5c542 30%, transparent);
+}
+
+.calls-runner-toast--goal .calls-runner-toast__eyebrow,
+.calls-runner-toast--heat-5 .calls-runner-toast__eyebrow {
+  color: #f5c542;
+}
+
+@keyframes calls-toast-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.calls-stat--rdv {
+  position: relative;
+  gap: 0.2rem;
+}
+
+.calls-stat__goal {
+  margin-left: 0.1rem;
+  font-size: 0.72em;
+  font-weight: 500;
+  color: var(--xos-text-muted);
+}
+
+.calls-stat--rdv-heat {
+  border-color: color-mix(in srgb, #ff9f43 35%, var(--xos-border));
+}
+
+.calls-stat--rdv-goal {
+  border-color: color-mix(in srgb, #f5c542 50%, var(--xos-border));
+}
+
+.calls-rdv-goal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.calls-rdv-goal__label {
+  font-size: 0.65rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-rdv-goal__select {
+  max-width: 3.4rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--xos-text);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.2rem;
+}
+
 .calls-view--detail .calls-log-form {
   gap: 0.7rem;
   padding: 0.85rem;
@@ -2888,4 +3016,132 @@
     grid-template-columns: 1fr;
   }
 }
+
+.calls-rdv-confetti {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow: hidden;
+}
+
+.calls-rdv-confetti--goal::before {
+  content: "";
+  position: absolute;
+  inset: 20% 25%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, #f5c542 35%, transparent), transparent 70%);
+  animation: calls-rdv-flare 0.9s ease-out forwards;
+}
+
+.calls-rdv-confetti__flare {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 8rem;
+  height: 8rem;
+  margin: -4rem 0 0 -4rem;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, #f5c542 55%, transparent);
+  animation: calls-rdv-ring 0.85s ease-out forwards;
+}
+
+.calls-rdv-confetti__piece {
+  position: absolute;
+  top: -12px;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation-name: calls-rdv-confetti-fall;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-fill-mode: forwards;
+}
+
+.calls-rdv-confetti__piece--ember {
+  border-radius: 50% 50% 40% 40%;
+  filter: blur(0.2px);
+}
+
+.calls-rdv-confetti__piece--spark {
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.calls-rdv-confetti--heat-3 .calls-rdv-confetti__piece,
+.calls-rdv-confetti--heat-4 .calls-rdv-confetti__piece,
+.calls-rdv-confetti--heat-5 .calls-rdv-confetti__piece {
+  top: auto;
+  bottom: 6%;
+  animation-name: calls-rdv-confetti-heat;
+}
+
+@keyframes calls-rdv-confetti-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--drift, 0), 105vh, 0) rotate(var(--spin, 180deg));
+    opacity: 0;
+  }
+}
+
+@keyframes calls-rdv-confetti-heat {
+  0% {
+    transform: translate3d(0, 10vh, 0) scale(0.7) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--drift, 0), -15vh, 0) scale(1.1) rotate(var(--spin, 180deg));
+    opacity: 0;
+  }
+}
+
+@keyframes calls-rdv-flare {
+  from {
+    opacity: 0.8;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes calls-rdv-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+.calls-toast--rdv {
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--xos-accent) 20%, transparent);
+}
+
+.calls-toast__streak {
+  margin-left: 0.35rem;
+  color: var(--xos-accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calls-rdv-confetti,
+  .calls-runner-toast--rdv {
+    animation: none;
+  }
+
+  .calls-rdv-confetti {
+    display: none;
+  }
+}
+
 

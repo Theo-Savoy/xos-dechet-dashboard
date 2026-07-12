@@ -220,6 +220,12 @@ export function resultatFromDigit(digit: string): ResultatCall | null {
   return RESULTAT_CALL_VALUES[index];
 }
 
+/** Physique Digit1–5 (AZERTY : &é"'( sans Shift) — l’étiquette UI reste 1–5. */
+export function digitFromKeyboardCode(code: string): string | null {
+  const match = /^Digit([1-5])$/.exec(code);
+  return match?.[1] ?? null;
+}
+
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;

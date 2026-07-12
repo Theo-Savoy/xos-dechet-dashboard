@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  digitFromKeyboardCode,
   filterComboActions,
   isTypingTarget,
   resultatFromDigit,
@@ -14,6 +15,12 @@ describe("comboKeyboard", () => {
     expect(resultatFromDigit("9")).toBeNull();
   });
 
+  it("maps physical Digit1–5 codes (AZERTY-safe)", () => {
+    expect(digitFromKeyboardCode("Digit1")).toBe("1");
+    expect(digitFromKeyboardCode("Digit3")).toBe("3");
+    expect(digitFromKeyboardCode("Digit9")).toBeNull();
+    expect(digitFromKeyboardCode("KeyA")).toBeNull();
+  });
   it("filters command bar actions by query", () => {
     const hits = filterComboActions("npa");
     expect(hits.some((action) => action.id === "toggle-npa")).toBe(true);
