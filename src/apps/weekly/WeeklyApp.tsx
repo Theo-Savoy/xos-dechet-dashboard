@@ -51,17 +51,157 @@ const CALL_FUNNEL_STAGES = [
   { key: "meeting", label: "RDV planifié", hint: null, sources: ["RDV planifié"], color: "var(--xos-alert)" },
 ] as const;
 
-const HINTS = {
-  forme: "Repères de la semaine : RDV, taux de détection, signatures et rythme trimestre.",
-  cap: "Où vous en êtes sur l’objectif du trimestre, comparé à l’an dernier à la même date.",
-  capMonthly: "Répartition indicative du trimestre selon la saisonnalité — arrondie à l’ordre de grandeur (~).",
-  capProjection: "Si le rythme actuel se maintient, voici où vous finirez le trimestre.",
-  flux: "Du RDV à l’opportunité détectée, puis au volume engagé — avant les signatures.",
-  decisions: "Les opps à closer ce trimestre : taille = montant (échelle log pour lire petits et gros deals).",
-  forecast: "Pipeline engagé vs signé cumulé. La ligne pointillée = objectif trimestre.",
-  conversionDetect: "Part des RDV qui deviennent une opportunité détectée.",
-  conversionClose: "Part des opps détectées qui se signent sur le trimestre.",
+/** Identité texte Weekly Perf — kickers courts, titres concrets, aides en langage métier. */
+const COPY = {
+  point: {
+    kicker: "Point",
+    hint: "Le snapshot de la période : RDV, détections, signatures, et si le rythme tient.",
+  },
+  detail: {
+    kicker: "Détail",
+    hint: "Les mêmes repères, semaine par semaine — pour comparer et cumuler.",
+  },
+  chaine: {
+    kicker: "Chaîne",
+    title: "RDV → détection → volume",
+    hint: "Avant la signature : combien de RDV, combien deviennent une opp, quel volume créé.",
+  },
+  rythme: {
+    kicker: "Rythme",
+    titleWeek: "Objectif du trimestre",
+    titleQuarter: "Où en est le trimestre",
+    hint: "Signé vs objectif, vs N−1 à date, et projection si le rythme se maintient.",
+    monthly: "Part indicative de chaque mois dans l’objectif — ordre de grandeur (~).",
+    runRate: "Si le rythme actuel se poursuit jusqu’à la fin du trimestre.",
+    seasonal: "Attendu calé sur l’historique des 3 dernières années.",
+  },
+  focus: {
+    kicker: "Focus",
+    title: "À closer ce trimestre",
+    hint: "Les deals qui comptent. Taille = montant (échelle log). Bleu = à pousser, rouge = stagnant.",
+  },
+  volume: {
+    kicker: "Volume",
+    title: "Semaine après semaine",
+    hint: "L’activité qui alimente le trimestre : RDV, détections, et appels si utile.",
+  },
+  courbe: {
+    kicker: "Courbe",
+    title: "Projeté vs signé",
+    hint: "Projeté = pipeline pondéré. Signé = cumul. Ligne pointillée = objectif.",
+  },
+  appels: {
+    kicker: "Appels",
+    titleWeek: "Cette semaine",
+    titleQuarter: "Cumul du trimestre",
+    hint: "Répartition des résultats d’appel — du non décroché au RDV planifié.",
+  },
+  sm: {
+    kicker: "Sur-mesure",
+    title: "6 prochains mois",
+    hint: "Pipe sur-mesure ouvert, ventilé par mois de close prévu.",
+  },
+  equipe: {
+    kicker: "Équipe",
+  },
+  detect: "Part des RDV qui deviennent une opp détectée.",
+  close: "Part des opps détectées qui se signent sur le trimestre.",
 } as const;
+
+function Tip({
+  text,
+  children,
+  side = "top",
+  className,
+  style,
+}: {
+  text: string;
+  children?: React.ReactNode;
+  side?: "top" | "bottom";
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onPointer);
+    };
+  }, [open]);
+
+  return (
+    <span
+      ref={rootRef}
+      className={["weekly-tip", `weekly-tip--${side}`, children ? "weekly-tip--anchor" : "weekly-tip--help", className].filter(Boolean).join(" ")}
+      style={style}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      {children ? (
+        <span
+          className="weekly-tip__target"
+          tabIndex={0}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {children}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="weekly-tip__btn"
+          aria-label={text}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+        >
+          <span aria-hidden="true">i</span>
+        </button>
+      )}
+      {open && (
+        <span className="weekly-tip__panel" role="tooltip">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SectionHeading({
+  kicker, title, hint, action,
+}: {
+  kicker: string;
+  title: string;
+  hint?: string;
+  action?: React.ReactNode;
+}) {
+  const inner = (
+    <>
+      <p>{kicker}{hint ? <Tip text={hint} /> : null}</p>
+      <h3>{title}</h3>
+    </>
+  );
+  if (!action) return <div className="weekly-section-heading">{inner}</div>;
+  return (
+    <div className="weekly-section-heading weekly-section-heading--row">
+      <div>{inner}</div>
+      {action}
+    </div>
+  );
+}
 
 const EMPTY_PULSE = (ownerId: string, start: string): Pulse => ({
   sf_user_id: ownerId, week: "", week_start: start, calls: 0, meetings: 0, proposals: 0, call_results: {},
@@ -79,41 +219,9 @@ function seriesIndex<T extends { sf_user_id: string; week_start: string }>(rows:
   return map;
 }
 
-function Hint({ text }: { text: string }) {
-  return (
-    <button type="button" className="weekly-hint" aria-label={text} title={text}>
-      ?
-    </button>
-  );
-}
-
-function SectionHeading({
-  kicker, title, hint, action,
-}: {
-  kicker: string;
-  title: string;
-  hint?: string;
-  action?: React.ReactNode;
-}) {
-  const inner = (
-    <>
-      <p>{kicker}{hint ? <Hint text={hint} /> : null}</p>
-      <h3>{title}</h3>
-    </>
-  );
-  if (!action) return <div className="weekly-section-heading">{inner}</div>;
-  return (
-    <div className="weekly-section-heading weekly-section-heading--row">
-      <div>{inner}</div>
-      {action}
-    </div>
-  );
-}
-
 const chartBarCursor = { fill: "color-mix(in srgb, var(--xos-accent) 12%, transparent)" };
 
-const SCATTER_MAX_POINTS = 22;
-const SCATTER_MIN_EXPECTED = 5_000;
+const SCATTER_MAX_POINTS = 20;
 
 function logBubbleSize(amount: number, minAmount: number, maxAmount: number) {
   const floor = Math.max(minAmount, 1);
@@ -139,6 +247,16 @@ type CustomPipe = {
   by_owner: Array<{ sf_user_id: string; amount: number; expected: number; count: number }>;
   opps: CustomPipeOpp[];
 };
+type PerfContext = {
+  iso_week: string;
+  quarter_label: string;
+  week_of_quarter: number;
+  weeks_in_quarter: number;
+  compare_week: string | null;
+  prior_quarter_label: string;
+  anchor_week_start: string;
+};
+type PeriodHistory = { weeks: Array<{ week_start: string; iso_week: string; quarter: string }>; quarters: string[] };
 type PerfResponse = {
   weeks: number;
   period?: "week" | "quarter" | "weeks";
@@ -147,6 +265,8 @@ type PerfResponse = {
   owners: Owner[];
   pulse: Pulse[];
   pipeline: Pipeline[];
+  prior_pulse?: Pulse[];
+  prior_pipeline?: Pipeline[];
   effort: Effort[];
   quarter: Quarter[];
   forecast_history?: ForecastPoint[];
@@ -155,9 +275,12 @@ type PerfResponse = {
   stagnant_opps?: RitualOpp[];
   pace?: Pace | null;
   quarter_bounds?: { from: string; to: string; label: string };
+  context?: PerfContext | null;
+  period_history?: PeriodHistory;
+  week_meta?: Array<{ week_start: string; iso_week: string }>;
   warning?: "sf_user_unmapped";
 };
-type Week = { start: string; label: string };
+type Week = { start: string; label: string; isoWeek: string };
 type PeriodMode = "week" | "quarter";
 type Health = { label: string; tone: "ok" | "warn" | "crit" | "super"; reco: string };
 
@@ -168,7 +291,6 @@ const weekLabel = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "sho
 const emptyWonByType = (): WonByType => ({ catalogue: 0, sur_mesure: 0, conseil: 0 });
 const TYPE_LABELS: Record<keyof WonByType, string> = { catalogue: "Catalogue", sur_mesure: "Sur-mesure", conseil: "Conseil" };
 const emptyCustomPipe = (): CustomPipe => ({ horizon_days: 180, total_amount: 0, total_expected: 0, count: 0, months: [], by_owner: [], opps: [] });
-const chartTooltipStyle = { background: "var(--xos-window-content-bg)", border: "1px solid var(--xos-border)", borderRadius: 8, color: "var(--xos-text)" };
 
 /** Cibles cadence — volume RDV = levier semaine ; détection lisible dès qu’il y a assez de RDV ; closing = mois/TQ. */
 const CADENCE = {
@@ -187,10 +309,47 @@ function addDays(value: string, amount: number) {
 }
 
 function makeWeeks(response: PerfResponse): Week[] {
+  const meta = new Map((response.week_meta || []).map((entry) => [entry.week_start, entry.iso_week]));
   return Array.from({ length: response.weeks }, (_, index) => {
     const start = addDays(response.range.from, index * 7);
-    return { start, label: weekLabel.format(new Date(`${start}T12:00:00.000Z`)) };
+    const iso = meta.get(start) || response.pulse.find((row) => row.week_start === start)?.week || "";
+    return { start, label: weekLabel.format(new Date(`${start}T12:00:00.000Z`)), isoWeek: iso };
   });
+}
+
+/** 2026-W27 → S27 */
+function shortWeekLabel(isoWeek: string | null | undefined) {
+  if (!isoWeek) return "";
+  const weekMatch = isoWeek.match(/W0*(\d{1,2})$/i);
+  if (weekMatch) return `S${weekMatch[1]}`;
+  if (/^S\d+$/i.test(isoWeek)) return `S${isoWeek.slice(1)}`;
+  return isoWeek;
+}
+
+function shortPeriodLabel(label: string | null | undefined) {
+  if (!label) return "";
+  return shortWeekLabel(label) || label;
+}
+
+function pctChange(current: number, previous: number | undefined) {
+  if (previous === undefined) return null;
+  if (previous === 0) return current === 0 ? 0 : null;
+  return (current - previous) / Math.abs(previous);
+}
+
+function formatPctChange(value: number | null, compareLabel: string, compact = false) {
+  if (value === null) return null;
+  if (value === 0) return compact ? "=" : `= ${compareLabel}`;
+  const signed = `${value > 0 ? "+" : "−"}${percent.format(Math.abs(value))}`;
+  return compact ? signed : `${signed} vs ${compareLabel}`;
+}
+
+function wowDelta(current: number, previous: number | undefined) {
+  return pctChange(current, previous);
+}
+
+function formatDelta(value: number | null, compareLabel: string, compact = false) {
+  return formatPctChange(value, compareLabel, compact);
 }
 
 function trackingOf(owner: Owner): Tracking {
@@ -203,19 +362,6 @@ function trackingBadge(tracking: Tracking, role: Owner["role"]) {
   if (role === "manager") return "Manager";
   if (role === "admin") return "Admin";
   return null;
-}
-
-function wowDelta(current: number, previous: number | undefined) {
-  if (previous === undefined) return null;
-  return current - previous;
-}
-
-function formatDelta(value: number | null, format: "count" | "money" = "count", compact = false) {
-  if (value === null) return null;
-  const absolute = format === "money" ? money.format(Math.abs(value)) : countFmt.format(Math.abs(value));
-  if (value === 0) return compact ? "=" : "= S−1";
-  const signed = `${value > 0 ? "+" : "−"}${absolute}`;
-  return compact ? signed : `${signed} vs S−1`;
 }
 
 /**
@@ -357,12 +503,12 @@ function ConversionRates({
   return (
     <GlassCard className="weekly-conversion">
       <div className="weekly-conversion__item">
-        <small>RDV → opp<Hint text={HINTS.conversionDetect} /></small>
+        <small>RDV → opp<Tip text={COPY.detect} /></small>
         <strong className={`xos-numeric ${detectTone}`}>{detect === null ? "—" : percent.format(detect)}</strong>
         <span>{opps} opp · {rdv} RDV</span>
       </div>
       <div className="weekly-conversion__item">
-        <small>Opp → signées<Hint text={HINTS.conversionClose} /></small>
+        <small>Opp → signées<Tip text={COPY.close} /></small>
         <strong className={`xos-numeric ${closeTone}`}>{close === null ? "—" : percent.format(close)}</strong>
         <span>{won} gagnées · {opps} détectées</span>
       </div>
@@ -370,10 +516,12 @@ function ConversionRates({
   );
 }
 
-async function perfRequest(period: PeriodMode, signal?: AbortSignal) {
+async function perfRequest(period: PeriodMode, anchorWeekStart?: string | null, signal?: AbortSignal) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("missing_session");
-  const response = await fetch(`/api/perf?period=${period}`, {
+  const params = new URLSearchParams({ period });
+  if (anchorWeekStart) params.set("week_start", anchorWeekStart);
+  const response = await fetch(`/api/perf?${params}`, {
     headers: { Authorization: `Bearer ${session.access_token}` },
     signal,
   });
@@ -418,13 +566,11 @@ function MonthlyIndicativePills({ months, compact = false }: { months: MonthlyIn
   return (
     <div className={`weekly-monthly-targets${compact ? " weekly-monthly-targets--compact" : ""}`} aria-label="Objectifs mensuels indicatifs">
       {months.map((month) => (
-        <span
-          key={month.month}
-          className={`weekly-monthly-target${month.month === currentMonth ? " weekly-monthly-target--current" : ""}`}
-          title={`${Math.round(month.weight * 100)} % · brut ${money.format(month.raw)}`}
-        >
-          {month.label} ~{money.format(month.indicative)}
-        </span>
+        <Tip key={month.month} text={`${Math.round(month.weight * 100)} % du trimestre · brut ${money.format(month.raw)}`}>
+          <span className={`weekly-monthly-target${month.month === currentMonth ? " weekly-monthly-target--current" : ""}`}>
+            {month.label} ~{money.format(month.indicative)}
+          </span>
+        </Tip>
       ))}
     </div>
   );
@@ -444,7 +590,7 @@ function QuarterGauge({ data }: { data: Quarter | undefined }) {
     </div>
     <div className="weekly-quarter-stats">
       <span aria-label={`Signé ${money.format(signed)}`}><small>Signé</small><strong>{money.format(signed)}</strong></span>
-      <span aria-label={`Engagement ${money.format(forecast)}`}><small>Engagement</small><strong>{money.format(forecast)}</strong></span>
+      <span aria-label={`Projeté ${money.format(forecast)}`}><small>Projeté</small><strong>{money.format(forecast)}</strong></span>
       <span aria-label={`Objectif ${targetText}`}><small>Objectif</small><strong>{targetText}</strong></span>
     </div>
   </div>;
@@ -454,7 +600,9 @@ function Breakdown({ wonByType, wonAmount }: { wonByType: WonByType; wonAmount: 
   return <>
     <div className="weekly-breakdown" aria-label="Répartition du CA signé">
       {(Object.entries(wonByType) as Array<[keyof WonByType, number]>).map(([type, value]) => (
-        <span className={`weekly-breakdown-${type}`} key={type} style={{ width: wonAmount ? `${value / wonAmount * 100}%` : "0%" }} title={`${TYPE_LABELS[type]}: ${money.format(value)}`} />
+        <Tip key={type} text={`${TYPE_LABELS[type]} · ${money.format(value)}`}>
+          <span className={`weekly-breakdown-${type}`} style={{ width: wonAmount ? `${value / wonAmount * 100}%` : "0%" }} />
+        </Tip>
       ))}
     </div>
     <div className="weekly-breakdown-labels">
@@ -465,32 +613,51 @@ function Breakdown({ wonByType, wonAmount }: { wonByType: WonByType; wonAmount: 
   </>;
 }
 
-type TableMetric = { label: string; format: "count" | "money"; values: Array<number | null> };
+type TableMetric = { label: string; format: "count" | "money"; values: Array<number | null>; priorTotal?: number | null };
 
-function MetricTable({ owner, weeks, pulse, pipeline, quarter, currentIndex }: { owner: Owner; weeks: Week[]; pulse: Pulse[]; pipeline: Pipeline[]; quarter: Quarter | undefined; currentIndex: number }) {
+function tableFooter(metric: TableMetric, weekMode: boolean, currentIndex: number) {
+  const elapsed = metric.values.slice(0, currentIndex + 1).filter((value): value is number => value !== null);
+  const total = elapsed.length ? elapsed.reduce((sum, value) => sum + value, 0) : null;
+  if (weekMode) {
+    const delta = currentIndex > 0 ? wowDelta(metric.values[currentIndex] ?? 0, metric.values[currentIndex - 1] ?? undefined) : null;
+    return { summary: total, summaryLabel: "Total", delta, deltaClass: delta };
+  }
+  const weeksElapsed = currentIndex + 1;
+  const average = total !== null && weeksElapsed > 0 ? total / weeksElapsed : null;
+  const prior = metric.priorTotal ?? null;
+  const delta = average !== null && prior !== null ? pctChange(average * weeksElapsed, prior) : null;
+  return { summary: average, summaryLabel: "Moyenne", delta, deltaClass: delta };
+}
+
+function MetricTable({ owner, weeks, pulse, pipeline, priorPulse, priorPipeline, quarter, currentIndex, weekMode, compareLabel, priorQuarterLabel }: {
+  owner: Owner; weeks: Week[]; pulse: Pulse[]; pipeline: Pipeline[]; priorPulse?: Pulse[]; priorPipeline?: Pipeline[];
+  quarter: Quarter | undefined; currentIndex: number; weekMode: boolean; compareLabel: string; priorQuarterLabel: string;
+}) {
   const tracking = trackingOf(owner);
+  const priorPulseTotal = (pick: (row: Pulse) => number) => (priorPulse || []).reduce((sum, row) => sum + pick(row), 0);
+  const priorPipelineTotal = (pick: (row: Pipeline) => number) => (priorPipeline || []).reduce((sum, row) => sum + pick(row), 0);
   const rows: TableMetric[] = tracking === "sdr"
     ? [
-      { label: "Appels", format: "count", values: pulse.map((point) => point.calls) },
-      { label: "RDV pris", format: "count", values: pulse.map((point) => point.meetings) },
-      { label: "Opps détectées", format: "count", values: pipeline.map((point) => point.generated_count) },
+      { label: "Appels", format: "count", values: pulse.map((point) => point.calls), priorTotal: weekMode ? null : priorPulseTotal((row) => row.calls) },
+      { label: "RDV pris", format: "count", values: pulse.map((point) => point.meetings), priorTotal: weekMode ? null : priorPulseTotal((row) => row.meetings) },
+      { label: "Opps détectées", format: "count", values: pipeline.map((point) => point.generated_count), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.generated_count) },
     ]
     : tracking === "dg"
       ? [
-        { label: "CA signé", format: "money", values: pipeline.map((point) => point.won_amount) },
-        { label: "Sur-mesure", format: "money", values: pipeline.map((point) => point.won_by_type.sur_mesure) },
-        { label: "Catalogue", format: "money", values: pipeline.map((point) => point.won_by_type.catalogue) },
-        { label: "Conseil", format: "money", values: pipeline.map((point) => point.won_by_type.conseil) },
-        { label: "Dont ARR", format: "money", values: pipeline.map((point) => point.won_arr_amount) },
+        { label: "CA signé", format: "money", values: pipeline.map((point) => point.won_amount), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_amount) },
+        { label: "Sur-mesure", format: "money", values: pipeline.map((point) => point.won_by_type.sur_mesure), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.sur_mesure) },
+        { label: "Catalogue", format: "money", values: pipeline.map((point) => point.won_by_type.catalogue), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.catalogue) },
+        { label: "Conseil", format: "money", values: pipeline.map((point) => point.won_by_type.conseil), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.conseil) },
+        { label: "Dont ARR", format: "money", values: pipeline.map((point) => point.won_arr_amount), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_arr_amount) },
       ]
       : [
-        { label: "RDV effectués", format: "count", values: pulse.map((point) => point.meetings) },
-        { label: "Opps détectées", format: "count", values: pipeline.map((point) => point.generated_count) },
-        { label: "CA signé", format: "money", values: pipeline.map((point) => point.won_amount) },
-        { label: "Sur-mesure", format: "money", values: pipeline.map((point) => point.won_by_type.sur_mesure) },
-        { label: "Catalogue", format: "money", values: pipeline.map((point) => point.won_by_type.catalogue) },
-        { label: "Conseil", format: "money", values: pipeline.map((point) => point.won_by_type.conseil) },
-        { label: "Dont ARR", format: "money", values: pipeline.map((point) => point.won_arr_amount) },
+        { label: "RDV effectués", format: "count", values: pulse.map((point) => point.meetings), priorTotal: weekMode ? null : priorPulseTotal((row) => row.meetings) },
+        { label: "Opps détectées", format: "count", values: pipeline.map((point) => point.generated_count), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.generated_count) },
+        { label: "CA signé", format: "money", values: pipeline.map((point) => point.won_amount), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_amount) },
+        { label: "Sur-mesure", format: "money", values: pipeline.map((point) => point.won_by_type.sur_mesure), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.sur_mesure) },
+        { label: "Catalogue", format: "money", values: pipeline.map((point) => point.won_by_type.catalogue), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.catalogue) },
+        { label: "Conseil", format: "money", values: pipeline.map((point) => point.won_by_type.conseil), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_by_type.conseil) },
+        { label: "Dont ARR", format: "money", values: pipeline.map((point) => point.won_arr_amount), priorTotal: weekMode ? null : priorPipelineTotal((row) => row.won_arr_amount) },
       ];
   const formatValue = (value: number | null, format: TableMetric["format"]) => value === null ? "—" : format === "money" ? money.format(value) : countFmt.format(value);
   const badge = trackingBadge(tracking, owner.role);
@@ -498,12 +665,10 @@ function MetricTable({ owner, weeks, pulse, pipeline, quarter, currentIndex }: {
     <div className="weekly-person"><h4>{owner.name}</h4>{badge && <Tag variant="muted">{badge}</Tag>}</div>
     <div className="weekly-table-scroll">
       <table className="weekly-table" aria-label={`Suivi hebdomadaire de ${owner.name}`}>
-        <thead><tr><th scope="col">Métrique</th>{weeks.map((week) => <th scope="col" key={week.start}>{week.label}</th>)}<th scope="col">Total</th><th scope="col">Δ S−1</th></tr></thead>
+        <thead><tr><th scope="col">Métrique</th>{weeks.map((week) => <th scope="col" key={week.start}>{weekMode ? (shortWeekLabel(week.isoWeek) || week.label) : week.label}</th>)}<th scope="col">{weekMode ? "Total" : "Moyenne"}</th><th scope="col">{weekMode ? `Écart vs ${compareLabel}` : `Écart vs ${priorQuarterLabel}`}</th></tr></thead>
         <tbody>{rows.map((metric) => {
-          const elapsed = metric.values.slice(0, currentIndex + 1).filter((value): value is number => value !== null);
-          const total = elapsed.length ? elapsed.reduce((sum, value) => sum + value, 0) : null;
-          const delta = currentIndex > 0 ? wowDelta(metric.values[currentIndex] ?? 0, metric.values[currentIndex - 1] ?? undefined) : null;
-          return <tr key={metric.label}><th scope="row">{metric.label}</th>{metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}<td className="weekly-table-total">{formatValue(total, metric.format)}</td><td className={delta && delta < 0 ? "weekly-delta--down" : delta && delta > 0 ? "weekly-delta--up" : undefined}>{formatDelta(delta, metric.format) || "—"}</td></tr>;
+          const footer = tableFooter(metric, weekMode, currentIndex);
+          return <tr key={metric.label}><th scope="row">{metric.label}</th>{metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}<td className="weekly-table-total">{formatValue(footer.summary, metric.format)}</td><td className={footer.deltaClass && footer.deltaClass < 0 ? "weekly-delta--down" : footer.deltaClass && footer.deltaClass > 0 ? "weekly-delta--up" : undefined}>{formatDelta(footer.deltaClass, weekMode ? compareLabel : priorQuarterLabel) || "—"}</td></tr>;
         })}</tbody>
       </table>
     </div>
@@ -511,9 +676,9 @@ function MetricTable({ owner, weeks, pulse, pipeline, quarter, currentIndex }: {
   </GlassCard>;
 }
 
-function MetricCell({ label, value, previous, moneyValue = false }: { label: string; value: number; previous?: number; moneyValue?: boolean }) {
+function MetricCell({ label, value, previous, moneyValue = false, compareLabel }: { label: string; value: number; previous?: number; moneyValue?: boolean; compareLabel: string }) {
   const delta = wowDelta(value, previous);
-  const deltaText = formatDelta(delta, moneyValue ? "money" : "count", true);
+  const deltaText = formatDelta(delta, compareLabel, true);
   return <div>
     <span>{label}</span>
     <strong className="xos-numeric">{moneyValue ? money.format(value) : value}</strong>
@@ -522,7 +687,7 @@ function MetricCell({ label, value, previous, moneyValue = false }: { label: str
 }
 
 const PersonCard = memo(function PersonCard({
-  owner, pulseSeries, pipelineSeries, quarter, delay, currentIndex, interactive = false, focused = false, onOpen,
+  owner, pulseSeries, pipelineSeries, quarter, delay, currentIndex, compareLabel, interactive = false, focused = false, onOpen,
 }: {
   owner: Owner;
   pulseSeries: Pulse[];
@@ -530,6 +695,7 @@ const PersonCard = memo(function PersonCard({
   quarter: Quarter | undefined;
   delay: number;
   currentIndex: number;
+  compareLabel: string;
   interactive?: boolean;
   focused?: boolean;
   onOpen?: () => void;
@@ -573,16 +739,16 @@ const PersonCard = memo(function PersonCard({
     </div>
     <div className={`weekly-metrics weekly-metrics--${tracking === "sdr" ? 3 : tracking === "dg" ? 2 : 3}`}>
       {tracking === "sdr" ? <>
-        <MetricCell label="Appels" value={current.calls} previous={previous?.calls} />
-        <MetricCell label="RDV pris" value={current.meetings} previous={previous?.meetings} />
-        <MetricCell label="Opps détectées" value={currentPipeline.generated_count} previous={previousPipeline?.generated_count} />
+        <MetricCell label="Appels" value={current.calls} previous={previous?.calls} compareLabel={compareLabel} />
+        <MetricCell label="RDV pris" value={current.meetings} previous={previous?.meetings} compareLabel={compareLabel} />
+        <MetricCell label="Opps détectées" value={currentPipeline.generated_count} previous={previousPipeline?.generated_count} compareLabel={compareLabel} />
       </> : tracking === "dg" ? <>
-        <MetricCell label="CA signé" value={currentPipeline.won_amount} previous={previousPipeline?.won_amount} moneyValue />
-        <MetricCell label="Dont ARR" value={currentPipeline.won_arr_amount} previous={previousPipeline?.won_arr_amount} moneyValue />
+        <MetricCell label="CA signé" value={currentPipeline.won_amount} previous={previousPipeline?.won_amount} moneyValue compareLabel={compareLabel} />
+        <MetricCell label="Dont ARR" value={currentPipeline.won_arr_amount} previous={previousPipeline?.won_arr_amount} moneyValue compareLabel={compareLabel} />
       </> : <>
-        <MetricCell label="RDV" value={current.meetings} previous={previous?.meetings} />
-        <MetricCell label="Opps détectées" value={currentPipeline.generated_count} previous={previousPipeline?.generated_count} />
-        <MetricCell label="CA signé" value={currentPipeline.won_amount} previous={previousPipeline?.won_amount} moneyValue />
+        <MetricCell label="RDV" value={current.meetings} previous={previous?.meetings} compareLabel={compareLabel} />
+        <MetricCell label="Opps détectées" value={currentPipeline.generated_count} previous={previousPipeline?.generated_count} compareLabel={compareLabel} />
+        <MetricCell label="CA signé" value={currentPipeline.won_amount} previous={previousPipeline?.won_amount} moneyValue compareLabel={compareLabel} />
       </>}
     </div>
     {tracking !== "sdr" && currentPipeline.won_amount > 0 && (
@@ -620,7 +786,7 @@ function teamQuarter(owners: Owner[], quarterFor: (owner: Owner) => Quarter | un
 }
 
 function TeamRollup({
-  owners, pulseFor, pipelineFor, quarterFor, weekMode, currentIndex,
+  owners, pulseFor, pipelineFor, quarterFor, weekMode, currentIndex, compareLabel,
 }: {
   owners: Owner[];
   pulseFor: (owner: Owner) => Pulse[];
@@ -628,6 +794,7 @@ function TeamRollup({
   quarterFor: (owner: Owner) => Quarter | undefined;
   weekMode: boolean;
   currentIndex: number;
+  compareLabel: string;
 }) {
   const sellers = owners.filter((owner) => trackingOf(owner) !== "sdr");
   const hasSdr = owners.some((owner) => trackingOf(owner) === "sdr");
@@ -664,14 +831,14 @@ function TeamRollup({
     : pipelineFor(owner).slice(0, currentIndex + 1).reduce((sum, row) => sum + row.won_amount, 0));
 
   return <section className="weekly-section">
-    <SectionHeading kicker="Équipe" title={weekMode ? "Consolidé vs S−1" : "Consolidé trimestre"} />
+    <SectionHeading kicker={COPY.equipe.kicker} title={weekMode ? `Consolidé · ${compareLabel}` : "Consolidé trimestre"} />
     <GlassCard className="weekly-team-rollup">
       <div className={`weekly-metrics weekly-metrics--${hasSdr ? 5 : 4}`}>
-        {hasSdr && <MetricCell label="Appels" value={calls.value} previous={calls.previous} />}
-        <MetricCell label="RDV" value={meetings.value} previous={meetings.previous} />
-        <MetricCell label="Opps détectées" value={opps.value} previous={opps.previous} />
-        <MetricCell label="CA signé" value={won.value} previous={won.previous} moneyValue />
-        <MetricCell label="Dont ARR" value={arr.value} previous={arr.previous} moneyValue />
+        {hasSdr && <MetricCell label="Appels" value={calls.value} previous={calls.previous} compareLabel={compareLabel} />}
+        <MetricCell label="RDV" value={meetings.value} previous={meetings.previous} compareLabel={compareLabel} />
+        <MetricCell label="Opps détectées" value={opps.value} previous={opps.previous} compareLabel={compareLabel} />
+        <MetricCell label="CA signé" value={won.value} previous={won.previous} moneyValue compareLabel={compareLabel} />
+        <MetricCell label="Dont ARR" value={arr.value} previous={arr.previous} moneyValue compareLabel={compareLabel} />
       </div>
       {won.value > 0 && <div className="weekly-revenue"><Breakdown wonByType={wonTypes} wonAmount={won.value} /></div>}
       {sellers.length > 0 && <QuarterGauge data={quarter} />}
@@ -684,40 +851,46 @@ function TeamRollup({
 }
 
 function TeamMetricTable({
-  owners, weeks, pulseFor, pipelineFor, quarterFor, currentIndex,
+  owners, weeks, pulseFor, pipelineFor, priorPulseFor, priorPipelineFor, quarterFor, currentIndex, weekMode, compareLabel, priorQuarterLabel,
 }: {
   owners: Owner[];
   weeks: Week[];
   pulseFor: (owner: Owner) => Pulse[];
   pipelineFor: (owner: Owner) => Pipeline[];
+  priorPulseFor: (owner: Owner) => Pulse[];
+  priorPipelineFor: (owner: Owner) => Pipeline[];
   quarterFor: (owner: Owner) => Quarter | undefined;
   currentIndex: number;
+  weekMode: boolean;
+  compareLabel: string;
+  priorQuarterLabel: string;
 }) {
   const sellers = owners.filter((owner) => trackingOf(owner) !== "sdr");
   const hasSdr = owners.some((owner) => trackingOf(owner) === "sdr");
   const series = <T,>(seriesFor: (owner: Owner) => T[], pool: Owner[], pick: (row: T) => number) => weeks.map((_, index) => sumAt(pool, seriesFor, index, pick));
+  const priorTotal = <T,>(seriesFor: (owner: Owner) => T[], pool: Owner[], pick: (row: T) => number) => {
+    return pool.flatMap((owner) => seriesFor(owner)).reduce((sum, row) => sum + pick(row), 0);
+  };
   const quarter = teamQuarter(sellers, quarterFor);
   const rows: TableMetric[] = [
-    ...(hasSdr ? [{ label: "Appels", format: "count" as const, values: series(pulseFor, owners, (row) => row.calls) }] : []),
-    { label: "RDV effectués", format: "count", values: series(pulseFor, owners, (row) => row.meetings) },
-    { label: "Opps détectées", format: "count", values: series(pipelineFor, owners, (row) => row.generated_count) },
-    { label: "CA signé", format: "money", values: series(pipelineFor, sellers, (row) => row.won_amount) },
-    { label: "Sur-mesure", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.sur_mesure) },
-    { label: "Catalogue", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.catalogue) },
-    { label: "Conseil", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.conseil) },
-    { label: "Dont ARR", format: "money", values: series(pipelineFor, sellers, (row) => row.won_arr_amount) },
+    ...(hasSdr ? [{ label: "Appels", format: "count" as const, values: series(pulseFor, owners, (row) => row.calls), priorTotal: weekMode ? null : priorTotal(priorPulseFor, owners, (row) => row.calls) }] : []),
+    { label: "RDV effectués", format: "count", values: series(pulseFor, owners, (row) => row.meetings), priorTotal: weekMode ? null : priorTotal(priorPulseFor, owners, (row) => row.meetings) },
+    { label: "Opps détectées", format: "count", values: series(pipelineFor, owners, (row) => row.generated_count), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, owners, (row) => row.generated_count) },
+    { label: "CA signé", format: "money", values: series(pipelineFor, sellers, (row) => row.won_amount), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, sellers, (row) => row.won_amount) },
+    { label: "Sur-mesure", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.sur_mesure), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, sellers, (row) => row.won_by_type.sur_mesure) },
+    { label: "Catalogue", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.catalogue), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, sellers, (row) => row.won_by_type.catalogue) },
+    { label: "Conseil", format: "money", values: series(pipelineFor, sellers, (row) => row.won_by_type.conseil), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, sellers, (row) => row.won_by_type.conseil) },
+    { label: "Dont ARR", format: "money", values: series(pipelineFor, sellers, (row) => row.won_arr_amount), priorTotal: weekMode ? null : priorTotal(priorPipelineFor, sellers, (row) => row.won_arr_amount) },
   ];
   const formatValue = (value: number | null, format: TableMetric["format"]) => value === null ? "—" : format === "money" ? money.format(value) : countFmt.format(value);
   return <GlassCard className="weekly-table-card weekly-table-card--team">
     <div className="weekly-person"><h4>Équipe</h4><Tag variant="accent">Consolidé</Tag></div>
     <div className="weekly-table-scroll">
       <table className="weekly-table" aria-label="Suivi hebdomadaire consolidé de l’équipe">
-        <thead><tr><th scope="col">Métrique</th>{weeks.map((week) => <th scope="col" key={week.start}>{week.label}</th>)}<th scope="col">Total</th><th scope="col">Δ S−1</th></tr></thead>
+        <thead><tr><th scope="col">Métrique</th>{weeks.map((week) => <th scope="col" key={week.start}>{weekMode ? (shortWeekLabel(week.isoWeek) || week.label) : week.label}</th>)}<th scope="col">{weekMode ? "Total" : "Moyenne"}</th><th scope="col">{weekMode ? `Écart vs ${compareLabel}` : `Écart vs ${priorQuarterLabel}`}</th></tr></thead>
         <tbody>{rows.map((metric) => {
-          const elapsed = metric.values.slice(0, currentIndex + 1).filter((value): value is number => value !== null);
-          const total = elapsed.length ? elapsed.reduce((sum, value) => sum + value, 0) : null;
-          const delta = currentIndex > 0 ? wowDelta(metric.values[currentIndex] ?? 0, metric.values[currentIndex - 1] ?? undefined) : null;
-          return <tr key={metric.label}><th scope="row">{metric.label}</th>{metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}<td className="weekly-table-total">{formatValue(total, metric.format)}</td><td className={delta && delta < 0 ? "weekly-delta--down" : delta && delta > 0 ? "weekly-delta--up" : undefined}>{formatDelta(delta, metric.format) || "—"}</td></tr>;
+          const footer = tableFooter(metric, weekMode, currentIndex);
+          return <tr key={metric.label}><th scope="row">{metric.label}</th>{metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}<td className="weekly-table-total">{formatValue(footer.summary, metric.format)}</td><td className={footer.deltaClass && footer.deltaClass < 0 ? "weekly-delta--down" : footer.deltaClass && footer.deltaClass > 0 ? "weekly-delta--up" : undefined}>{formatDelta(footer.deltaClass, weekMode ? compareLabel : priorQuarterLabel) || "—"}</td></tr>;
         })}</tbody>
       </table>
     </div>
@@ -731,7 +904,7 @@ function CustomPipeSection({ pipe, owners, sellerIds }: { pipe: CustomPipe; owne
   const months = pipe.months.map((entry) => ({ ...entry, label: entry.label.replace(".", "") }));
   const opps = pipe.opps.filter((opp) => sellerIds.has(opp.sf_user_id));
   return <section className="weekly-section">
-    <SectionHeading kicker="Pipe sur-mesure" title="6 prochains mois" />
+    <SectionHeading kicker={COPY.sm.kicker} title={COPY.sm.title} hint={COPY.sm.hint} />
     <GlassCard className="weekly-custom-pipe">
       <div className="weekly-custom-kpis">
         <div><small>Montant brut</small><strong className="xos-numeric">{money.format(pipe.total_amount)}</strong></div>
@@ -743,7 +916,7 @@ function CustomPipeSection({ pipe, owners, sellerIds }: { pipe: CustomPipe; owne
           <BarChart data={months}>
             <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
             <YAxis hide />
-            <Tooltip cursor={chartBarCursor} formatter={(value) => money.format(Number(value))} contentStyle={chartTooltipStyle} />
+            <Tooltip content={<MoneyChartTooltip />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
             <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
             <Bar dataKey="expected" name="CA attendu" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} />
           </BarChart>
@@ -820,7 +993,7 @@ function CallFunnelChart({
   const isIndividualView = owners.length === 1;
   if (!max && !isIndividualView && !callActivity) return null;
   return <section className="weekly-section">
-    <SectionHeading kicker="Funnel appels" title={weekMode ? "Cette semaine" : "Cumul trimestre"} />
+    <SectionHeading kicker={COPY.appels.kicker} title={weekMode ? COPY.appels.titleWeek : COPY.appels.titleQuarter} hint={COPY.appels.hint} />
     <GlassCard className="weekly-call-funnel-card">
       <div className="weekly-call-funnel" role="img" aria-label="Entonnoir des résultats d’appel">
         {totals.map((stage, index) => {
@@ -883,7 +1056,7 @@ function LeadingFunnel({
   const detectRate = rdv > 0 ? opps / rdv : null;
   const avgCreated = opps > 0 ? created / opps : null;
   return <section className="weekly-section">
-    <SectionHeading kicker="Flux menant" title={weekMode ? "Cette semaine" : "Cumul trimestre"} hint={HINTS.flux} />
+    <SectionHeading kicker={COPY.chaine.kicker} title={COPY.chaine.title} hint={COPY.chaine.hint} />
     <GlassCard className="weekly-leading-funnel">
       <div className="weekly-leading-step">
         <small>RDV</small>
@@ -930,26 +1103,36 @@ function PaceStrip({ pace }: { pace: Pace }) {
           <span>{pace.won_count ?? 0} signature{(pace.won_count || 0) > 1 ? "s" : ""}</span>
         </div>
       </div>
-      <div className="weekly-pace-track" aria-label="Progression vers le target trimestre">
+      <div className="weekly-pace-track" aria-label="Progression vers l’objectif trimestre">
         <span className="weekly-pace-fill" style={{ width: `${signedPct}%` }} />
-        {expectedPct !== null && <span className="weekly-pace-marker weekly-pace-marker--expected" style={{ left: `${expectedPct}%` }} title={`Attendu à date ${money.format(pace.expected_to_date || 0)}`} />}
-        <span className="weekly-pace-marker weekly-pace-marker--n1" style={{ left: `${n1Pct}%` }} title={`N−1 ${money.format(pace.signed_n1)}`} />
+        {expectedPct !== null && (
+          <Tip text={`Attendu à date · ${money.format(pace.expected_to_date || 0)}`} side="bottom" className="weekly-pace-marker-tip" style={{ left: `${expectedPct}%` }}>
+            <span className="weekly-pace-marker weekly-pace-marker--expected" />
+          </Tip>
+        )}
+        <Tip text={`N−1 à date · ${money.format(pace.signed_n1)}`} side="bottom" className="weekly-pace-marker-tip" style={{ left: `${n1Pct}%` }}>
+          <span className="weekly-pace-marker weekly-pace-marker--n1" />
+        </Tip>
       </div>
       <div className="weekly-pace-legend">
         <span className="weekly-pace-legend--signed">Signé</span>
         <span className="weekly-pace-legend--expected">Attendu{pace.expected_to_date !== null ? ` · ${money.format(pace.expected_to_date)}` : ""}</span>
         <span className="weekly-pace-legend--n1">N−1 · {money.format(pace.signed_n1)}</span>
       </div>
-      {pace.expected_mode === "seasonal" && <p className="weekly-pace-note" title="Attendu basé sur l’historique des 3 dernières années">Saisonnalité</p>}
+      {pace.expected_mode === "seasonal" && (
+        <Tip text={COPY.rythme.seasonal}>
+          <span className="weekly-pace-note">Saisonnalité</span>
+        </Tip>
+      )}
       {pace.monthly_indicative?.length ? (
         <div className="weekly-pace-monthly">
-          <small>Mois indicatifs<Hint text={HINTS.capMonthly} /></small>
+          <small>Mois indicatifs<Tip text={COPY.rythme.monthly} /></small>
           <MonthlyIndicativePills months={pace.monthly_indicative} />
         </div>
       ) : null}
     </div>
     <div className="weekly-pace-aside">
-      <small>Projection fin de trimestre<Hint text={HINTS.capProjection} /></small>
+      <small>Projeté fin de trimestre<Tip text={COPY.rythme.runRate} /></small>
       <strong className="xos-numeric">{money.format(pace.run_rate)}</strong>
       <span>{paceText}</span>
     </div>
@@ -960,7 +1143,10 @@ function OppTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
   if (!active || !payload?.[0]?.payload) return null;
   const opp = payload[0].payload;
   return <div className="weekly-opp-tooltip">
-    <strong>{opp.account || opp.name}</strong>
+    <div className="weekly-opp-tooltip__head">
+      <span className={`weekly-decision-kind weekly-decision-kind--${opp.kind === "both" ? "stagnant" : opp.kind}`} aria-hidden="true" />
+      <strong>{opp.account || opp.name}</strong>
+    </div>
     {opp.account ? <span>{opp.name}</span> : null}
     <span>Clôture · {opp.close_date ? weekLabel.format(new Date(`${opp.close_date}T12:00:00.000Z`)) : "—"}</span>
     <span>Probabilité · {countFmt.format(opp.probability)} %</span>
@@ -1007,9 +1193,7 @@ function DecisionBoard({
       merged.set(key, { ...opp, kind, close_ts: Date.parse(`${opp.close_date}T12:00:00.000Z`), key });
     }
     const points = [...merged.values()].sort((a, b) => b.expected - a.expected);
-    const aboveThreshold = points.filter((opp) => opp.expected >= SCATTER_MIN_EXPECTED);
-    const chartPool = aboveThreshold.length >= 8 ? aboveThreshold : points;
-    const chartPoints = chartPool.slice(0, SCATTER_MAX_POINTS);
+    const chartPoints = points.slice(0, SCATTER_MAX_POINTS);
     const minChartAmount = chartPoints.length ? Math.min(...chartPoints.map((opp) => opp.amount)) : 1;
     const maxChartAmount = chartPoints.length ? Math.max(...chartPoints.map((opp) => opp.amount), minChartAmount) : 1;
     const scatter = chartPoints.map((opp) => ({
@@ -1044,7 +1228,7 @@ function DecisionBoard({
   };
 
   return <section className="weekly-section">
-    <SectionHeading kicker="Décisions" title="Opportunités essentielles du trimestre" hint={HINTS.decisions} />
+    <SectionHeading kicker={COPY.focus.kicker} title={COPY.focus.title} hint={COPY.focus.hint} />
     <GlassCard className="weekly-decision-board">
       {scatterData.length > 0 && <div className="weekly-chart weekly-chart--scatter" aria-label="Carte des opportunités : date de clôture × probabilité">
         <ResponsiveContainer width="100%" height="100%">
@@ -1097,9 +1281,12 @@ function DecisionBoard({
               }
             }}
           >
-            <div>
+            <div className="weekly-decision-list__lead">
+              <span className={`weekly-decision-kind weekly-decision-kind--${opp.listKind}`} aria-hidden="true" />
+              <div>
               {opp.url ? <a className="weekly-opp-link" href={opp.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{opp.account || opp.name}</a> : <strong>{opp.account || opp.name}</strong>}
-              <small>{nameOf(opp.sf_user_id)} · {opp.stage}{opp.close_date ? ` · ${opp.close_date.slice(5)}` : ""}{opp.listKind === "stagnant" ? ` · ${reasonLabel(opp.reasons)}` : ""}{opp.account ? ` · ${opp.name}` : ""}</small>
+              <small>{nameOf(opp.sf_user_id)} · {opp.stage}{opp.close_date ? ` · ${opp.close_date.slice(5)}` : ""}{opp.listKind === "stagnant" ? ` · ${reasonLabel(opp.reasons)}` : opp.listKind === "push" ? " · À pousser" : ""}{opp.account ? ` · ${opp.name}` : ""}</small>
+              </div>
             </div>
             <div className="weekly-decision-value">
               <strong className="xos-numeric">{money.format(opp.expected || opp.amount)}</strong>
@@ -1119,13 +1306,91 @@ function DecisionBoard({
   </section>;
 }
 
+function MoneyChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number | null; color?: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="weekly-chart-tooltip">
+      {label ? <small>{label}</small> : null}
+      {payload.map((entry) => (
+        <div className="weekly-chart-tooltip__row" key={entry.name}>
+          <span className="weekly-chart-tooltip__dot" style={{ background: entry.color }} />
+          <span>{entry.name}</span>
+          <strong className="xos-numeric">{entry.value === null || entry.value === undefined ? "—" : money.format(Number(entry.value))}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CountChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number | null; color?: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="weekly-chart-tooltip">
+      {label ? <small>{label}</small> : null}
+      {payload.map((entry) => (
+        <div className="weekly-chart-tooltip__row" key={entry.name}>
+          <span className="weekly-chart-tooltip__dot" style={{ background: entry.color }} />
+          <span>{entry.name}</span>
+          <strong className="xos-numeric">{entry.value === null || entry.value === undefined ? "—" : countFmt.format(Number(entry.value))}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActivityTrendChart({
+  weeks, owners, pulseFor, pipelineFor, currentIndex, showCalls,
+}: {
+  weeks: Week[];
+  owners: Owner[];
+  pulseFor: (owner: Owner) => Pulse[];
+  pipelineFor: (owner: Owner) => Pipeline[];
+  currentIndex: number;
+  showCalls: boolean;
+}) {
+  const data = weeks.map((week, index) => {
+    const future = index > currentIndex;
+    const label = shortWeekLabel(week.isoWeek) || week.label;
+    if (future) return { label, rdv: null as number | null, detections: null as number | null, calls: null as number | null };
+    return {
+      label,
+      rdv: sumAt(owners, pulseFor, index, (row) => row.meetings),
+      detections: sumAt(owners, pipelineFor, index, (row) => row.generated_count),
+      calls: showCalls ? sumAt(owners, pulseFor, index, (row) => row.calls) : null,
+    };
+  });
+  const hasData = data.some((point) => (point.rdv || 0) > 0 || (point.detections || 0) > 0 || (point.calls || 0) > 0);
+  if (!hasData) return null;
+  return (
+    <section className="weekly-section">
+      <SectionHeading kicker={COPY.volume.kicker} title={COPY.volume.title} hint={COPY.volume.hint} />
+      <GlassCard className="weekly-chart-card weekly-activity-card">
+        <div className="weekly-chart weekly-chart--activity">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 10, right: 8, bottom: 4, left: 0 }}>
+              <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
+              <YAxis hide allowDecimals={false} />
+              <Tooltip content={<CountChartTooltip />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
+              <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
+              <Bar dataKey="rdv" name="RDV" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="detections" name="Détections" fill="color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+              {showCalls && <Bar dataKey="calls" name="Appels" fill="#7d8aa3" radius={[4, 4, 0, 0]} maxBarSize={28} />}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </GlassCard>
+    </section>
+  );
+}
+
 function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { weeks: Week[]; history: ForecastPoint[]; ownerIds: Set<string>; target: number | null; currentIndex: number }) {
   const data = weeks.map((week, index) => {
     const points = history.filter((point) => point.week_start === week.start && ownerIds.has(point.sf_user_id));
     const forecastValues = points.map((point) => point.forecast).filter((value): value is number => value !== null);
     const future = index > currentIndex;
     return {
-      label: week.label,
+      label: shortWeekLabel(week.isoWeek) || week.label,
       forecast: future ? null : (forecastValues.length ? forecastValues.reduce((sum, value) => sum + value, 0) : null),
       signed: future ? null : points.reduce((sum, point) => sum + (point.signed_to_date || 0), 0),
     };
@@ -1136,6 +1401,7 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
     ...data.map((point) => Math.max(point.forecast || 0, point.signed || 0)),
     1,
   );
+  const targetLabel = target !== null && target > 0 ? `Objectif ${money.format(target)}` : "Objectif";
   return <GlassCard className="weekly-chart-card weekly-forecast-card">
     <div className="weekly-chart weekly-chart--forecast">
       <ResponsiveContainer width="100%" height="100%">
@@ -1143,7 +1409,7 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
           <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
           <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
           <YAxis hide domain={[0, yMax * 1.08]} />
-          <Tooltip formatter={(value) => (value === null || value === undefined ? "—" : money.format(Number(value)))} contentStyle={chartTooltipStyle} />
+          <Tooltip content={<MoneyChartTooltip />} wrapperStyle={{ outline: "none", zIndex: 20 }} />
           <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
           {target !== null && target > 0 && (
             <ReferenceLine
@@ -1152,11 +1418,11 @@ function ForecastChart({ weeks, history, ownerIds, target, currentIndex }: { wee
               strokeDasharray="5 5"
               strokeWidth={1.6}
               ifOverflow="extendDomain"
-              label={{ value: "Objectif", position: "insideTopRight", fill: "var(--xos-text-muted)", fontSize: 11 }}
+              label={{ value: targetLabel, position: "insideTopRight", fill: "var(--xos-text-muted)", fontSize: 11 }}
             />
           )}
-          {hasForecast && <Line type="monotone" dataKey="forecast" name="Engagement" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
-          <Line type="monotone" dataKey="signed" name="Signé cumulé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />
+          {hasForecast && <Line type="monotone" dataKey="forecast" name="Projeté" stroke="var(--xos-accent)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />}
+          <Line type="monotone" dataKey="signed" name="Signé" stroke="var(--xos-alert)" strokeWidth={2.4} dot={{ r: 3 }} connectNulls={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -1175,15 +1441,16 @@ export default function WeeklyApp() {
   const [mode, setMode] = useState<"self" | "team">("self");
   const [displayMode, setDisplayMode] = useState<"cards" | "table">("cards");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("all");
+  const [anchorWeekStart, setAnchorWeekStart] = useState<string | null>(null);
   const prefetchDone = useRef(false);
   const requestSeq = useRef(0);
 
-  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false, signal }: { background?: boolean; signal?: AbortSignal } = {}) => {
+  const loadPeriod = useCallback(async (nextPeriod: PeriodMode, { background = false, signal, weekStart = anchorWeekStart }: { background?: boolean; signal?: AbortSignal; weekStart?: string | null } = {}) => {
     const seq = ++requestSeq.current;
     if (!background) setLoading(true);
     setError(false);
     try {
-      const next = await perfRequest(nextPeriod, signal);
+      const next = await perfRequest(nextPeriod, weekStart, signal);
       if (seq !== requestSeq.current) return;
       setCache((current) => ({ ...current, [nextPeriod]: next }));
     } catch (err) {
@@ -1193,16 +1460,16 @@ export default function WeeklyApp() {
     } finally {
       if (seq === requestSeq.current && !background) setLoading(false);
     }
-  }, []);
+  }, [anchorWeekStart]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadPeriod(period, { signal: controller.signal });
+    void loadPeriod(period, { signal: controller.signal, weekStart: anchorWeekStart });
     return () => {
       controller.abort();
       requestSeq.current += 1;
     };
-  }, [loadPeriod, period]);
+  }, [loadPeriod, period, anchorWeekStart]);
 
   useEffect(() => {
     if (prefetchDone.current || !cache.week) return;
@@ -1231,6 +1498,13 @@ export default function WeeklyApp() {
       : roster;
     const pulseIndex = seriesIndex(payload.pulse);
     const pipelineIndex = seriesIndex(payload.pipeline);
+    const priorPulseIndex = seriesIndex(payload.prior_pulse || []);
+    const priorPipelineIndex = seriesIndex(payload.prior_pipeline || []);
+    const priorPulseFor = (owner: Owner) => weeks.map(({ start }) => priorPulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start));
+    const priorPipelineFor = (owner: Owner) => weeks.map(({ start }) => priorPipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start));
+    const context = payload.context;
+    const compareLabel = shortPeriodLabel(context?.compare_week || weeks[Math.max(0, currentIndex - 1)]?.isoWeek) || "S−1";
+    const priorQuarterLabel = context?.prior_quarter_label || "N−1";
     const pulseFor = (owner: Owner) => weeks.map(({ start }) => pulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start));
     const pipelineFor = (owner: Owner) => weeks.map(({ start }) => pipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start));
     const sellers = visibleOwners.filter((owner) => trackingOf(owner) !== "sdr");
@@ -1263,18 +1537,29 @@ export default function WeeklyApp() {
     const followUps = (payload.follow_up_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
     const stagnant = (payload.stagnant_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
     return {
-      payload, weeks, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, sellerIds,
+      payload, weeks, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, priorPulseFor, priorPipelineFor, quarterFor, sellerIds,
       forecastHistory: payload.forecast_history || [], customPipe: scopedPipe, pace, target, followUps, stagnant,
-      quarterBounds: payload.quarter_bounds || null,
+      quarterBounds: payload.quarter_bounds || null, compareLabel, priorQuarterLabel, context,
+      periodHistory: payload.period_history || { weeks: [], quarters: [] },
     };
   }, [mode, result, selectedOwnerId]);
 
   if (error && !model) return <main className="weekly-app weekly-app__state"><GlassCard className="weekly-error"><h2>Performance indisponible</h2><p>La récupération des données n’a pas abouti.</p><Button onClick={() => void loadPeriod(period)}>Réessayer</Button></GlassCard></main>;
   if (!model) return <Skeleton />;
-  const { payload, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, quarterFor, sellerIds, forecastHistory, customPipe, pace, target, followUps, stagnant, quarterBounds } = model;
+  const { payload, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, priorPulseFor, priorPipelineFor, quarterFor, sellerIds, forecastHistory, customPipe, pace, target, followUps, stagnant, quarterBounds, compareLabel, priorQuarterLabel, context, periodHistory } = model;
   const weekMode = period === "week";
+  const currentWeekShort = shortWeekLabel(context?.iso_week);
+  const periodBadge = weekMode
+    ? (currentWeekShort ? `Semaine ${currentWeekShort}` : "Semaine en cours")
+    : (context?.quarter_label ? `${context.quarter_label} · S${context.week_of_quarter}/${context.weeks_in_quarter}` : "Trimestre en cours");
+  const historyOptions = (periodHistory.weeks || []).map((entry) => ({
+    value: entry.week_start,
+    label: shortWeekLabel(entry.iso_week) || entry.iso_week,
+  }));
   const hasActivity = payload.pulse.some((point) => point.calls || point.meetings || point.proposals) || payload.pipeline.some((point) => point.generated_amount || point.won_amount) || payload.effort.some((point) => point.progressions) || customPipe.count > 0 || followUps.length > 0 || stagnant.length > 0 || (pace?.signed_to_date || 0) > 0;
   const showForecast = !weekMode && visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
+  const showActivityTrend = !weekMode;
+  const includeCalls = visibleOwners.some((owner) => trackingOf(owner) === "sdr" || pulseFor(owner).some((row) => row.calls > 0));
   const showCustomPipe = visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
   const showTeamRollup = mode === "team" && selectedOwnerId === "all" && visibleOwners.length > 1;
   const showPace = Boolean(pace) && visibleOwners.some((owner) => trackingOf(owner) !== "sdr");
@@ -1285,7 +1570,7 @@ export default function WeeklyApp() {
       <div className="weekly-header__brand">
         <Tag variant="accent">Performance</Tag>
         <h2>Weekly Perf</h2>
-        <p className="weekly-period-hint">{weekMode ? "Semaine vs S−1" : "Trimestre en cours"}</p>
+        <p className="weekly-period-hint">{periodBadge}{weekMode && compareLabel ? ` · vs ${compareLabel}` : !weekMode && priorQuarterLabel ? ` · vs ${priorQuarterLabel}` : ""}</p>
       </div>
       <div className="weekly-period weekly-seg" aria-label="Période">
         <Button variant={period === "week" ? "primary" : "secondary"} onClick={() => switchPeriod("week")}>Semaine</Button>
@@ -1301,18 +1586,27 @@ export default function WeeklyApp() {
       {payload.view === "team" && mode === "team" && (
         <Select label="Commercial" aria-label="Filtrer un commercial" value={selectedOwnerId} options={ownerOptions} onChange={setSelectedOwnerId} />
       )}
+      {historyOptions.length > 1 && weekMode && (
+        <Select
+          label="Semaine"
+          aria-label="Choisir une semaine"
+          value={anchorWeekStart || context?.anchor_week_start || historyOptions[0]?.value || ""}
+          options={historyOptions}
+          onChange={(value) => setAnchorWeekStart(value)}
+        />
+      )}
       <div className="weekly-toggle weekly-seg weekly-display-toggle" aria-label="Affichage">
         <Button variant={displayMode === "cards" ? "primary" : "secondary"} onClick={() => setDisplayMode("cards")}>Cards</Button>
         <Button variant={displayMode === "table" ? "primary" : "secondary"} onClick={() => setDisplayMode("table")}>Tableau</Button>
       </div>
     </div>
     {!hasActivity ? <GlassCard className="weekly-empty"><h3>Rien à signaler cette semaine</h3><p>Dès que les activités remontent de Salesforce, elles apparaîtront ici.</p><span>Pensez à loguer vos appels dans Call Manager.</span></GlassCard> : <>
-      {showTeamRollup && displayMode === "cards" && <TeamRollup owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} weekMode={weekMode} currentIndex={currentIndex} />}
+      {showTeamRollup && displayMode === "cards" && <TeamRollup owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} weekMode={weekMode} currentIndex={currentIndex} compareLabel={compareLabel} />}
       {displayMode === "cards" && <section className="weekly-section">
         <SectionHeading
-          kicker="Pulse"
-          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Qui a bougé ?"}
-          hint={HINTS.forme}
+          kicker={COPY.point.kicker}
+          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? `Cette semaine · ${currentWeekShort}` : "Qui a bougé ?"}
+          hint={COPY.point.hint}
           action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
@@ -1327,6 +1621,7 @@ export default function WeeklyApp() {
               quarter={quarterFor(owner)}
               delay={ownerIndex * 55}
               currentIndex={currentIndex}
+              compareLabel={compareLabel}
               interactive={mode === "team" && selectedOwnerId === "all" && payload.view === "team"}
               focused={selectedOwnerId === owner.sf_user_id}
               onOpen={() => setSelectedOwnerId(owner.sf_user_id)}
@@ -1336,28 +1631,38 @@ export default function WeeklyApp() {
       </section>}
       {displayMode === "table" && <section className="weekly-section">
         <SectionHeading
-          kicker="Rituel"
-          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? "Cette semaine vs S−1" : "Trimestre en cours"}
-          hint={HINTS.forme}
+          kicker={COPY.detail.kicker}
+          title={selectedOwnerId !== "all" ? visibleOwners[0]?.name || "Fiche" : weekMode ? `Semaine · ${currentWeekShort}` : `${context?.quarter_label || "Trimestre"} · S${context?.week_of_quarter || "?"}`}
+          hint={COPY.detail.hint}
           action={mode === "team" && selectedOwnerId !== "all" ? (
             <Button variant="secondary" onClick={() => setSelectedOwnerId("all")}>Toute l’équipe</Button>
           ) : undefined}
         />
         <div className="weekly-tables weekly-view-transition" key={`table-${period}-${mode}-${selectedOwnerId}`}>
-          {showTeamRollup && <TeamMetricTable owners={visibleOwners} weeks={model.weeks} pulseFor={pulseFor} pipelineFor={pipelineFor} quarterFor={quarterFor} currentIndex={currentIndex} />}
+          {showTeamRollup && <TeamMetricTable owners={visibleOwners} weeks={model.weeks} pulseFor={pulseFor} pipelineFor={pipelineFor} priorPulseFor={priorPulseFor} priorPipelineFor={priorPipelineFor} quarterFor={quarterFor} currentIndex={currentIndex} weekMode={weekMode} compareLabel={compareLabel} priorQuarterLabel={priorQuarterLabel} />}
           {visibleOwners.map((owner) => (
-            <MetricTable key={owner.sf_user_id} owner={owner} weeks={model.weeks} pulse={pulseFor(owner)} pipeline={pipelineFor(owner)} quarter={quarterFor(owner)} currentIndex={currentIndex} />
+            <MetricTable key={owner.sf_user_id} owner={owner} weeks={model.weeks} pulse={pulseFor(owner)} pipeline={pipelineFor(owner)} priorPulse={priorPulseFor(owner)} priorPipeline={priorPipelineFor(owner)} quarter={quarterFor(owner)} currentIndex={currentIndex} weekMode={weekMode} compareLabel={compareLabel} priorQuarterLabel={priorQuarterLabel} />
           ))}
         </div>
       </section>}
       <LeadingFunnel owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} weekMode={weekMode} currentIndex={currentIndex} />
+      {showActivityTrend && (
+        <ActivityTrendChart
+          weeks={model.weeks}
+          owners={visibleOwners}
+          pulseFor={pulseFor}
+          pipelineFor={pipelineFor}
+          currentIndex={currentIndex}
+          showCalls={includeCalls}
+        />
+      )}
       {showPace && pace && <section className="weekly-section">
-        <SectionHeading kicker="Cap" title={weekMode ? "Objectif du trimestre" : "Rythme du trimestre"} hint={HINTS.cap} />
+        <SectionHeading kicker={COPY.rythme.kicker} title={weekMode ? COPY.rythme.titleWeek : COPY.rythme.titleQuarter} hint={COPY.rythme.hint} />
         <PaceStrip pace={pace} />
         {!weekMode && <ConversionRates owners={visibleOwners} pulseFor={pulseFor} pipelineFor={pipelineFor} currentIndex={currentIndex} />}
       </section>}
       <DecisionBoard followUps={followUps} stagnant={stagnant} owners={visibleOwners} quarterBounds={quarterBounds} />
-      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker="Effort" title="Engagement vs signé" hint={HINTS.forecast} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
+      {displayMode === "cards" && showForecast && <section className="weekly-section"><SectionHeading kicker={COPY.courbe.kicker} title={COPY.courbe.title} hint={COPY.courbe.hint} /><ForecastChart weeks={model.weeks} history={forecastHistory} ownerIds={sellerIds} target={target} currentIndex={currentIndex} /></section>}
       <CallFunnelChart weeks={model.weeks} owners={visibleOwners} pulseFor={pulseFor} currentIndex={currentIndex} weekMode={weekMode} />
       {showCustomPipe && <CustomPipeSection pipe={customPipe} owners={visibleOwners} sellerIds={sellerIds} />}
     </>}

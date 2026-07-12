@@ -26,12 +26,34 @@ vi.mock("recharts", () => ({
 
 import WeeklyApp from "./WeeklyApp";
 
+const baseContext = {
+  iso_week: "2026-W28",
+  quarter_label: "FY27-Q1",
+  week_of_quarter: 1,
+  weeks_in_quarter: 13,
+  compare_week: "2026-W27",
+  prior_quarter_label: "FY26-Q4",
+  anchor_week_start: "2026-07-06",
+};
+
 const selfPayload = {
   weeks: 2,
   period: "week" as const,
   timezone: "Europe/Paris",
   range: { from: "2026-06-29", to: "2026-07-12" },
   view: "self" as const,
+  context: baseContext,
+  week_meta: [
+    { week_start: "2026-06-29", iso_week: "2026-W27" },
+    { week_start: "2026-07-06", iso_week: "2026-W28" },
+  ],
+  period_history: {
+    weeks: [
+      { week_start: "2026-06-29", iso_week: "2026-W27", quarter: "FY27-Q1" },
+      { week_start: "2026-07-06", iso_week: "2026-W28", quarter: "FY27-Q1" },
+    ],
+    quarters: ["FY27-Q1"],
+  },
   owners: [{ sf_user_id: "self", name: "Ada Lovelace", email: "ada@xos-learning.fr", role: "commercial" as const, tracking: "commercial" as const }],
   pulse: [
     { sf_user_id: "self", week: "2026-W27", week_start: "2026-06-29", calls: 2, meetings: 1, proposals: 0 },
@@ -135,6 +157,8 @@ const quarterPayload = {
   weeks: 2,
   period: "quarter" as const,
   range: { from: "2026-06-29", to: "2026-07-12" },
+  prior_pulse: selfPayload.pulse.map((row) => ({ ...row, meetings: Math.max(0, row.meetings - 1), calls: Math.max(0, row.calls - 1) })),
+  prior_pipeline: selfPayload.pipeline.map((row) => ({ ...row, generated_count: Math.max(0, row.generated_count - 1), won_amount: Math.max(0, row.won_amount - 1000) })),
 };
 
 beforeEach(() => {
@@ -147,7 +171,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe("Weekly Perf", () => {
   it("renders the Monday decision board with weighted and stagnant opps", async () => {
     render(<WeeklyApp />);
-    expect(await screen.findByText("Opportunités essentielles du trimestre")).toBeTruthy();
+    expect(await screen.findByText("À closer ce trimestre")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Deal à pousser" }).getAttribute("href")).toBe("https://example.salesforce.com/lightning/r/Opportunity/006F/view");
     expect(screen.getByRole("link", { name: "Deal silencieux" })).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
@@ -164,7 +188,7 @@ describe("Weekly Perf", () => {
     fireEvent.click(screen.getByRole("option", { name: "Ada Lovelace" }));
     expect(screen.getByRole("heading", { level: 4, name: "Ada Lovelace" })).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 4, name: "Yanis Agharbi" })).toBeNull();
-    expect(screen.getByText("Funnel appels")).toBeTruthy();
+    expect(screen.getByText("Appels")).toBeTruthy();
     expect(screen.getByText("Non décroché")).toBeTruthy();
   });
 
@@ -173,11 +197,11 @@ describe("Weekly Perf", () => {
 
     expect(await screen.findByText("Ada Lovelace")).toBeTruthy();
     expect(screen.getAllByText("RDV").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("+1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\+100\s*%/).length).toBeGreaterThan(0);
     expect(screen.getByText("OK")).toBeTruthy();
     expect(screen.getByText(/2 RDV sur 5/)).toBeTruthy();
     expect(screen.getByText(/bon rythme trimestre/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Repères de la semaine/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /snapshot de la période/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Équipe" })).toBeNull();
   });
 
@@ -195,16 +219,18 @@ describe("Weekly Perf", () => {
     render(<WeeklyApp />);
     await screen.findByText("Ada Lovelace");
     fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
-    expect(await screen.findByText("Trimestre en cours")).toBeTruthy();
+    expect(await screen.findByText(/FY27-Q1 · S1\/13/)).toBeTruthy();
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("period=quarter"))).toBe(true);
+    expect(await screen.findByText("Semaine après semaine")).toBeTruthy();
+    expect(screen.getByText("Projeté vs signé")).toBeTruthy();
   });
 
   it("shows consolidated team stats in team view", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(teamPayload), { status: 200 })));
     render(<WeeklyApp />);
     fireEvent.click(await screen.findByRole("button", { name: "Équipe" }));
-    expect(await screen.findByText("Consolidé vs S−1")).toBeTruthy();
-    const rollup = screen.getByText("Consolidé vs S−1").closest(".weekly-section") as HTMLElement;
+    expect(await screen.findByText(/Consolidé · S27/)).toBeTruthy();
+    const rollup = screen.getByText(/Consolidé · S27/).closest(".weekly-section") as HTMLElement;
     expect(within(rollup).getByText("RDV")).toBeTruthy();
     expect(within(rollup).getByText("10")).toBeTruthy();
     expect(within(rollup).getByText("CA signé")).toBeTruthy();
@@ -222,9 +248,9 @@ describe("Weekly Perf", () => {
     await screen.findByText("Ada Lovelace");
     expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
     fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
-    expect(await screen.findByText("Trimestre en cours")).toBeTruthy();
+    expect(await screen.findByText(/FY27-Q1 · S1\/13/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cards" }).className).toContain("xos-btn--primary");
-    expect(screen.getByText("Objectif trimestre")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Où en est le trimestre" })).toBeTruthy();
   });
 
   it("shows the full team roster without a DG badge", async () => {
@@ -275,25 +301,25 @@ describe("Weekly Perf", () => {
     expect(screen.getByText("Deal SM")).toBeTruthy();
   });
 
-  it("renders leading flux before Cap and call funnel lower on the page", async () => {
+  it("renders chaîne before rythme and appels lower on the page", async () => {
     render(<WeeklyApp />);
-    expect(await screen.findByText("Flux menant")).toBeTruthy();
-    expect(screen.queryByText(/Les signés se lisent au Cap/)).toBeNull();
+    expect(await screen.findByText("Chaîne")).toBeTruthy();
+    expect(screen.getByText("RDV → détection → volume")).toBeTruthy();
     expect(screen.getByText("Volume détecté")).toBeTruthy();
     expect(screen.getByText("Objectif du trimestre")).toBeTruthy();
     expect(screen.getAllByText("Mois indicatifs")).toHaveLength(1);
     expect(screen.getByText(/Juil\./)).toBeTruthy();
-    expect(screen.getByText("Projection fin de trimestre")).toBeTruthy();
-    expect(screen.getByText("Funnel appels")).toBeTruthy();
+    expect(screen.getByText("Projeté fin de trimestre")).toBeTruthy();
+    expect(screen.getByText("Appels")).toBeTruthy();
     expect(screen.getByText("Non décroché")).toBeTruthy();
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.queryByText("Généré, puis gagné")).toBeNull();
 
-    const leading = screen.getByText("Flux menant");
-    const cap = screen.getByText("Objectif du trimestre");
-    const funnel = screen.getByText("Funnel appels");
-    expect(leading.compareDocumentPosition(cap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(cap.compareDocumentPosition(funnel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const leading = screen.getByText("Chaîne");
+    const rythme = screen.getByText("Objectif du trimestre");
+    const appels = screen.getByText("Appels");
+    expect(leading.compareDocumentPosition(rythme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rythme.compareDocumentPosition(appels) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("computes table totals and week-over-week deltas client-side", async () => {
@@ -302,11 +328,11 @@ describe("Weekly Perf", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tableau" }));
     const table = screen.getByRole("table", { name: "Suivi hebdomadaire de Ada Lovelace" });
     expect(within(table).getByRole("columnheader", { name: "Total" })).toBeTruthy();
-    expect(within(table).getByRole("columnheader", { name: "Δ S−1" })).toBeTruthy();
+    expect(within(table).getByRole("columnheader", { name: /Écart vs S27/ })).toBeTruthy();
     expect(within(table).getByRole("row", { name: /RDV effectués/ })).toBeTruthy();
     expect(within(table).queryByRole("row", { name: /Pipe sur-mesure/ })).toBeNull();
     expect(within(table).getAllByRole("row")).toHaveLength(8);
     expect(within(table).queryByRole("row", { name: /Target/ })).toBeNull();
-    expect(screen.getByText("Objectif trimestre")).toBeTruthy();
+    expect(within(table.closest(".weekly-table-card") as HTMLElement).getByText("Objectif")).toBeTruthy();
   });
 });
