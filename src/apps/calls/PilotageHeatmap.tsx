@@ -81,7 +81,7 @@ export function PilotageHeatmap({
         <div className="pilotage-heatmap__head">
           <div>
             <h3>Calendrier</h3>
-            <p className="pilotage-heatmap__hint">Cliquez un jour pour filtrer Pilotage.</p>
+            <p className="pilotage-heatmap__hint">Cliquez un jour pour filtrer.</p>
           </div>
           <div className="calls-seg pilotage-heatmap__metric" role="group" aria-label="Métrique affichée">
             <button
