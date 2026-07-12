@@ -2882,6 +2882,12 @@
   gap: 1rem;
 }
 
+@media (max-width: 640px) {
+  .calls-help__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .calls-help__cols {
   list-style: none;
   margin: 0;
@@ -3011,10 +3017,80 @@
   gap: 0.55rem;
 }
 
-@media (max-width: 640px) {
-  .calls-help__grid {
-    grid-template-columns: 1fr;
-  }
+.calls-rdv-subjects,
+.calls-rdv-durations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.calls-rdv-subjects__btn,
+.calls-rdv-durations__btn {
+  border: 1px solid var(--xos-border);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--xos-text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.calls-rdv-subjects__btn--active,
+.calls-rdv-durations__btn--active {
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 16%, transparent);
+}
+
+.calls-rdv-subjects__btn:has(.calls-rdv-subjects__badge) {
+  font-weight: 600;
+}
+
+.calls-rdv-subjects__badge {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xos-accent);
+  border: 1px solid color-mix(in srgb, var(--xos-accent) 40%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent) 12%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+}
+
+.calls-rdv-subjects__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+}
+
+.calls-rdv-invitees {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.calls-contact-card__industry {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--xos-text-muted);
+}
+
+.calls-context-list__chip {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xos-accent);
+  border: 1px solid color-mix(in srgb, var(--xos-accent) 40%, var(--xos-border));
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+  vertical-align: middle;
+}
+
+.calls-context-list__row--linked strong {
+  color: var(--xos-text);
 }
 
 .calls-rdv-confetti {

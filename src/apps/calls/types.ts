@@ -93,6 +93,15 @@ export type ContactOpportunityItem = {
   amount: number | null;
   close_date: string | null;
   record_url: string | null;
+  /** Contact associé à l’opportunité dans Salesforce (OpportunityContactRole). */
+  linked_to_contact?: boolean;
+};
+
+export type PeerClientAccount = {
+  id: string;
+  name: string;
+  industry: string | null;
+  record_url: string | null;
 };
 
 export type ContactContext = {
@@ -100,6 +109,9 @@ export type ContactContext = {
   account_record_url: string | null;
   email?: string | null;
   title?: string | null;
+  account_name?: string | null;
+  industry?: string | null;
+  peer_clients?: PeerClientAccount[];
   npa: boolean;
   tasks: ContactTaskHistoryItem[];
   opportunities: ContactOpportunityItem[];

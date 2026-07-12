@@ -138,7 +138,7 @@ export async function handleLogging({ action, body, user, client, headers }) {
   }
 
   if (action === "log_event") {
-    const { session_id, contact_id, start, duration_min, invitees } = body;
+    const { session_id, contact_id, start, duration_min, invitees, subject, owner_sf_user_id } = body;
 
     if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
       return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
@@ -149,11 +149,30 @@ export async function handleLogging({ action, body, user, client, headers }) {
     if (!isValidEventStart(start)) {
       return new Response(JSON.stringify({ error: "invalid_start" }), { status: 400, headers });
     }
-    if (!Number.isInteger(duration_min) || duration_min < 1) {
+    const ALLOWED_DURATIONS = [15, 30, 45, 60, 90];
+    if (!Number.isInteger(duration_min) || !ALLOWED_DURATIONS.includes(duration_min)) {
       return new Response(JSON.stringify({ error: "invalid_duration_min" }), { status: 400, headers });
     }
     if (invitees !== undefined && (!Array.isArray(invitees) || invitees.some((id) => typeof id !== "string" || !SF_ID.test(id)))) {
       return new Response(JSON.stringify({ error: "invalid_invitees" }), { status: 400, headers });
+    }
+
+    const ALLOWED_SUBJECTS = [
+      "Rdv découverte prospect",
+      "Rdv détection enjeux client",
+      "Soutenance",
+      "Point suivi client",
+      "Point suivi opportunité",
+    ];
+    if (typeof subject !== "string" || !ALLOWED_SUBJECTS.includes(subject)) {
+      return new Response(JSON.stringify({ error: "invalid_subject" }), { status: 400, headers });
+    }
+    if (
+      owner_sf_user_id !== undefined
+      && owner_sf_user_id !== null
+      && (typeof owner_sf_user_id !== "string" || !SF_ID.test(owner_sf_user_id))
+    ) {
+      return new Response(JSON.stringify({ error: "invalid_owner_sf_user_id" }), { status: 400, headers });
     }
 
     const sessionCheck = await assertSessionOwner(client, session_id, user.id);
@@ -172,6 +191,28 @@ export async function handleLogging({ action, body, user, client, headers }) {
       return new Response(JSON.stringify({ error: profileResult.error }), { status: 500, headers });
     }
 
+    let eventOwnerId = profileResult.sfUserId || undefined;
+    if (owner_sf_user_id) {
+      const { data: ownerProfile } = await client
+        .from("profiles")
+        .select("sf_user_id")
+        .eq("sf_user_id", owner_sf_user_id)
+        .maybeSingle();
+      if (ownerProfile?.sf_user_id) {
+        eventOwnerId = ownerProfile.sf_user_id;
+      } else {
+        const { data: mapped } = await client
+          .from("sf_user_map")
+          .select("sf_user_id")
+          .eq("sf_user_id", owner_sf_user_id)
+          .maybeSingle();
+        if (!mapped?.sf_user_id) {
+          return new Response(JSON.stringify({ error: "owner_not_in_team" }), { status: 400, headers });
+        }
+        eventOwnerId = mapped.sf_user_id;
+      }
+    }
+
     const tokenResult = await fetchSFToken({ client, userId: user.id });
     if (tokenResult.error) {
       return new Response(JSON.stringify({ error: tokenResult.error }), { status: 502, headers });
@@ -180,12 +221,12 @@ export async function handleLogging({ action, body, user, client, headers }) {
     const sfResult = await createEvent(
       tokenResult.accessToken,
       {
-        subject: `RDV — ${contact.contact_name}`,
+        subject,
         startDateTime: start,
         durationMin: duration_min,
         whoId: contact.sf_contact_id,
         whatId: contact.sf_account_id || undefined,
-        ownerId: profileResult.sfUserId || undefined,
+        ownerId: eventOwnerId,
         invitees: invitees || [],
       },
       mapping,
@@ -217,7 +258,13 @@ export async function handleLogging({ action, body, user, client, headers }) {
     await journalAction({
       actorId: user.id,
       actionType: "call_session_event",
-      changes: { start, duration_min, invitees: invitees || [] },
+      changes: {
+        start,
+        duration_min,
+        invitees: invitees || [],
+        subject,
+        owner_sf_user_id: eventOwnerId || null,
+      },
       targets: [{ id: contact.sf_contact_id, type: "Contact", session_contact_id: contact_id, session_id }],
       result: {
         success: !partialInviteeFailure,

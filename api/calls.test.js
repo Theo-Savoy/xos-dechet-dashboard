@@ -202,14 +202,22 @@ describe("GET /api/calls", () => {
   });
 
   it("returns Salesforce-enabled team members with display labels", async () => {
-    mockDb.mockResolvedValueOnce({
-      data: [
-        { id: "user-1", full_name: "Alice Martin", email: "alice@example.com", sf_user_id: "005000000000001" },
-        { id: "user-2", full_name: null, email: "bob@example.com", sf_user_id: "005000000000002" },
-        { id: "user-3", full_name: "Sans Salesforce", email: "none@example.com", sf_user_id: null },
-      ],
-      error: null,
-    });
+    mockDb
+      .mockResolvedValueOnce({
+        data: [
+          { id: "user-1", full_name: "Alice Martin", email: "alice@example.com", sf_user_id: "005000000000001" },
+          { id: "user-2", full_name: null, email: "bob@example.com", sf_user_id: "005000000000002" },
+          { id: "user-3", full_name: "Sans Salesforce", email: "none@example.com", sf_user_id: null },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          { email: "christophe.hirtz@xos-learning.fr", sf_user_id: "005000000000003" },
+          { email: "alice@example.com", sf_user_id: "005000000000001" },
+        ],
+        error: null,
+      });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?resource=team"));
 
@@ -218,13 +226,17 @@ describe("GET /api/calls", () => {
       team: [
         { user_id: "user-1", label: "Alice Martin", sf_user_id: "005000000000001" },
         { user_id: "user-2", label: "bob@example.com", sf_user_id: "005000000000002" },
+        { user_id: "map:christophe.hirtz@xos-learning.fr", label: "Christophe Hirtz", sf_user_id: "005000000000003" },
       ],
     });
     expect(mockFrom).toHaveBeenCalledWith("profiles");
+    expect(mockFrom).toHaveBeenCalledWith("sf_user_map");
   });
 
   it("returns 500 when the team lookup fails", async () => {
     mockDb.mockResolvedValueOnce({ data: null, error: { message: "profiles failed" } });
+    // sf_user_map may still resolve in parallel
+    mockDb.mockResolvedValueOnce({ data: [], error: null });
 
     const res = await GET(makeReq("GET", undefined, "http://localhost/api/calls?resource=team"));
 
@@ -753,6 +765,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-02-30T10:00:00Z",
         duration_min: 30,
       }));
@@ -765,6 +778,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 0,
       }));
@@ -778,6 +792,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 30,
       }));
@@ -798,6 +813,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 45,
       }));
@@ -820,6 +836,7 @@ describe("POST /api/calls", () => {
         action: "log_event",
         session_id: 1,
         contact_id: 101,
+        subject: "Rdv découverte prospect",
         start: "2026-07-15T10:00Z",
         duration_min: 30,
       }));

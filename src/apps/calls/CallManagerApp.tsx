@@ -131,6 +131,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const contextRequest = useRef(0);
   const lastContextKey = useRef<string | null>(null);
   const [focusedContactId, setFocusedContactId] = useState<number | null>(null);
+  const contextCacheRef = useRef<Map<string, ContactContext>>(new Map());
   const contactsRef = useRef<SessionContact[]>([]);
   const pendingLogsRef = useRef(0);
   const logQueueRef = useRef(
@@ -138,6 +139,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       pendingLogsRef.current = pending;
     }),
   );
+
+  const currentSfUserId = team.find((member) => member.user_id === session?.user?.id)?.sf_user_id ?? null;
 
   useEffect(() => {
     contactsRef.current = contacts;
@@ -420,24 +423,45 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   };
 
   const loadContactContext = useCallback(
-    async (sessionId: number, contactId: number) => {
+    async (sessionId: number, contactId: number, options?: { silent?: boolean }) => {
       if (!token) return;
-      const requestId = contextRequest.current + 1;
-      contextRequest.current = requestId;
-      setContactContext(null);
-      setContextContactId(null);
-      setContextLoading(true);
+      const cacheKey = `${sessionId}:${contactId}`;
+      const cached = contextCacheRef.current.get(cacheKey);
+      if (cached && !options?.silent) {
+        setContactContext(cached);
+        setContextContactId(contactId);
+        setContextLoading(false);
+      }
+
+      let requestId = contextRequest.current;
+      if (!options?.silent) {
+        requestId = contextRequest.current + 1;
+        contextRequest.current = requestId;
+        if (!cached) {
+          setContactContext(null);
+          setContextContactId(null);
+          setContextLoading(true);
+        }
+      }
+
       try {
         const context = await fetchContactContext(token, sessionId, contactId);
+        contextCacheRef.current.set(cacheKey, context);
+        if (contextCacheRef.current.size > 12) {
+          const first = contextCacheRef.current.keys().next().value;
+          if (first) contextCacheRef.current.delete(first);
+        }
+        if (options?.silent) return;
         if (contextRequest.current !== requestId) return;
         setContactContext(context);
         setContextContactId(contactId);
       } catch {
+        if (options?.silent) return;
         if (contextRequest.current !== requestId) return;
         setContactContext(null);
         setContextContactId(null);
       } finally {
-        if (contextRequest.current === requestId) setContextLoading(false);
+        if (!options?.silent && contextRequest.current === requestId) setContextLoading(false);
       }
     },
     [token],
@@ -479,6 +503,16 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     if (lastContextKey.current === contextKey) return;
     lastContextKey.current = contextKey;
     void loadContactContext(activeSession.id, targetId);
+
+    // Précharge les 2 prochains pending (hors contact courant) pour fluidifier le switch.
+    const pendingAhead = contacts
+      .filter((c) => c.status === "pending" && c.id !== targetId)
+      .slice(0, 2);
+    for (const contact of pendingAhead) {
+      const key = `${activeSession.id}:${contact.id}`;
+      if (contextCacheRef.current.has(key)) continue;
+      void loadContactContext(activeSession.id, contact.id, { silent: true });
+    }
   }, [view, activeSession?.id, awaitingEvent?.id, focusedContactId, contacts, loadContactContext]);
 
   const openRecalls = useCallback(async () => {
@@ -633,7 +667,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const handleLogRdvAndNext = (
     contactId: number,
     payload: LogPayload,
-    event: { start: string; durationMin: number; invitees: string[] },
+    event: {
+      start: string;
+      durationMin: number;
+      subject: string;
+      ownerSfUserId: string | null;
+    },
   ) => {
     if (!token) return;
     const target = resolveLogTarget(contactId);
@@ -681,7 +720,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
             target.contactId,
             event.start,
             event.durationMin,
-            event.invitees,
+            [],
+            { subject: event.subject, ownerSfUserId: event.ownerSfUserId },
           );
         }
         if (viewAtEnqueue === "recalls") {
@@ -713,7 +753,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   const handleLogEvent = (
     start: string,
     durationMin: number,
-    invitees: string[],
+    meta: { subject: string; ownerSfUserId: string | null },
   ) => {
     if (!token || !activeSession || !awaitingEvent) return;
     const sessionId = activeSession.id;
@@ -730,7 +770,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
 
     logQueueRef.current.enqueue(async () => {
       try {
-        await logEvent(token, sessionId, contactId, start, durationMin, invitees);
+        await logEvent(token, sessionId, contactId, start, durationMin, [], {
+          subject: meta.subject,
+          ownerSfUserId: meta.ownerSfUserId,
+        });
         if (!remainingPending) {
           await finishSessionIfDone(sessionId);
         }
@@ -1032,6 +1075,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           contextContactId={contextContactId}
           contextLoading={contextLoading}
           team={team}
+          currentSfUserId={currentSfUserId}
           onBack={goToSessions}
           onPin={handlePin}
           onFocusContact={setFocusedContactId}
@@ -1039,8 +1083,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           onLogRdvAndNext={(contactId, payload, event) =>
             void handleLogRdvAndNext(contactId, payload, event)
           }
-          onLogEvent={(start, durationMin, invitees) =>
-            void handleLogEvent(start, durationMin, invitees)
+          onLogEvent={(start, durationMin, meta) =>
+            void handleLogEvent(start, durationMin, meta)
           }
           onDeferContacts={(ids, payload) => void handleDeferContacts(ids, payload)}
           onRemoveContacts={(ids) => void handleRemoveContacts(ids)}

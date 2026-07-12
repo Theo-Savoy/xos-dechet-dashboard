@@ -104,14 +104,24 @@ type RunnerViewProps = {
   onLogRdvAndNext: (
     contactId: number,
     payload: LogPayload,
-    event: { start: string; durationMin: number; invitees: string[] },
+    event: {
+      start: string;
+      durationMin: number;
+      subject: string;
+      ownerSfUserId: string | null;
+    },
   ) => void;
   onLogMany: (contactIds: number[], payload: LogPayload) => void;
-  onLogEvent: (start: string, durationMin: number, invitees: string[]) => void;
+  onLogEvent: (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => void;
   onDeferContacts: (contactIds: number[], payload: DeferPayload) => void;
   onRemoveContacts: (contactIds: number[]) => void;
   onUpdateRecall: (contactIds: number[], recallAt: string | null) => void;
   team?: TeamMember[];
+  currentSfUserId?: string | null;
 };
 
 function addDaysIso(days: number): string {
@@ -149,7 +159,11 @@ function formatRelativeDaysFr(iso: string | null | undefined, today = todayParis
 }
 
 function sortOpportunities(opportunities: ContactOpportunityItem[]): ContactOpportunityItem[] {
-  return [...opportunities].sort((a, b) => Number(a.is_closed) - Number(b.is_closed));
+  return [...opportunities].sort((a, b) => {
+    const link = Number(Boolean(b.linked_to_contact)) - Number(Boolean(a.linked_to_contact));
+    if (link !== 0) return link;
+    return Number(a.is_closed) - Number(b.is_closed);
+  });
 }
 
 function listStatusDisplay(contact: SessionContact): {
@@ -312,6 +326,7 @@ export function RunnerView({
   onRemoveContacts,
   onUpdateRecall,
   team = [],
+  currentSfUserId = null,
 }: RunnerViewProps) {
   const isRecallQueue = variant === "recalls";
   const today = todayParisIso();
@@ -674,7 +689,11 @@ export function RunnerView({
     });
   }, [canRecall, comments, doNotCall, focusedContact, onLogAndNext, recallAt, resultat, scheduleRecall, soundsEnabled, willSendRecall]);
 
-  const handleRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
+  const handleRdvSubmit = (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => {
     if (!focusedContact || focusedContact.status !== "pending") return;
     onLogRdvAndNext(
       focusedContact.id,
@@ -684,14 +703,18 @@ export function RunnerView({
         recallAt: null,
         doNotCall,
       },
-      { start, durationMin, invitees },
+      { start, durationMin, subject: meta.subject, ownerSfUserId: meta.ownerSfUserId },
     );
     celebrateRdv();
   };
 
   const handleFinalizeEvent = useCallback(
-    (start: string, durationMin: number, invitees: string[]) => {
-      onLogEvent(start, durationMin, invitees);
+    (
+      start: string,
+      durationMin: number,
+      meta: { subject: string; ownerSfUserId: string | null },
+    ) => {
+      onLogEvent(start, durationMin, meta);
       celebrateRdv();
     },
     [celebrateRdv, onLogEvent],
@@ -1025,7 +1048,11 @@ export function RunnerView({
 
   const continuationLabel = nextContinuationName(session.name);
 
-  const handleBulkRdvSubmit = (start: string, durationMin: number, invitees: string[]) => {
+  const handleBulkRdvSubmit = (
+    start: string,
+    durationMin: number,
+    meta: { subject: string; ownerSfUserId: string | null },
+  ) => {
     if (!singleSelectedId) return;
     onLogRdvAndNext(
       singleSelectedId,
@@ -1035,7 +1062,7 @@ export function RunnerView({
         recallAt: null,
         doNotCall: bulkDoNotCall,
       },
-      { start, durationMin, invitees },
+      { start, durationMin, subject: meta.subject, ownerSfUserId: meta.ownerSfUserId },
     );
     setSelectedIds(new Set());
     setBulkComments("");
@@ -1341,6 +1368,8 @@ export function RunnerView({
                   heading={`Détails du RDV — ${singleSelectedContact.contact_name}`}
                   className="calls-event-panel--inline"
                   team={team}
+                  sessionType={session.session_type}
+                  currentSfUserId={currentSfUserId}
                 />
               ) : (
                 <div className="calls-runner-actions">
@@ -1691,6 +1720,11 @@ export function RunnerView({
                 <p className="calls-contact-card__role">
                   {[displayTitle, focusedContact.account_name || "Compte inconnu"].filter(Boolean).join(" · ")}
                 </p>
+                {contextApplies && contactContext?.industry && (
+                  <p className="calls-contact-card__industry">
+                    Secteur · {contactContext.industry}
+                  </p>
+                )}
                 {(isRecallQueue || focusedContact.status !== "pending") && focusedContact.recall_at && (
                   <div className="calls-contact-card__recall-meta">
                     <span>Rappel</span>
@@ -1768,15 +1802,28 @@ export function RunnerView({
             </GlassCard>
 
             <GlassCard className="calls-context-panel">
-              <h3>Opportunités</h3>
+              <h3>Opportunités du compte</h3>
               {contextApplies && contactContext && contactContext.opportunities.length === 0 && (
-                <p className="calls-muted">Aucune opportunité.</p>
+                <p className="calls-muted">Aucune opportunité sur ce compte.</p>
               )}
               {contextApplies && contactContext && contactContext.opportunities.length > 0 && (
                 <ul className="calls-context-list">
                   {sortedOpportunities.map((opp) => (
-                    <li key={opp.id} className={opp.is_closed ? "calls-context-list__row--closed" : undefined}>
-                      <strong>{opp.name}</strong>
+                    <li
+                      key={opp.id}
+                      className={[
+                        opp.is_closed ? "calls-context-list__row--closed" : "",
+                        opp.linked_to_contact ? "calls-context-list__row--linked" : "",
+                      ].filter(Boolean).join(" ") || undefined}
+                    >
+                      <strong>
+                        {opp.name}
+                        {opp.linked_to_contact && (
+                          <span className="calls-context-list__chip" title="Contact associé à cette opportunité dans Salesforce">
+                            Associé
+                          </span>
+                        )}
+                      </strong>
                       <span>{opp.stage_name ?? "—"}</span>
                       {opp.record_url ? <SalesforceRecordLink href={opp.record_url} /> : <span />}
                     </li>
@@ -1784,6 +1831,21 @@ export function RunnerView({
                 </ul>
               )}
             </GlassCard>
+
+            {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
+              <GlassCard className="calls-context-panel">
+                <h3>Références clients · {contactContext.industry}</h3>
+                <ul className="calls-context-list calls-context-list--peers">
+                  {contactContext.peer_clients.map((peer) => (
+                    <li key={peer.id}>
+                      <strong>{peer.name}</strong>
+                      <span className="calls-muted">Client</span>
+                      {peer.record_url ? <SalesforceRecordLink href={peer.record_url} /> : <span />}
+                    </li>
+                  ))}
+                </ul>
+              </GlassCard>
+            )}
               </>
             )}
           </div>
@@ -1795,6 +1857,8 @@ export function RunnerView({
               onSubmit={handleFinalizeEvent}
               heading={`Finaliser le RDV — ${awaitingEvent.contact_name}`}
               team={team}
+              sessionType={session.session_type}
+              currentSfUserId={currentSfUserId}
             />
           ) : focusedContact.status === "pending" ? (
             <GlassCard className="calls-log-form">
@@ -1851,6 +1915,8 @@ export function RunnerView({
                   heading="Détails du RDV"
                   className="calls-event-panel--inline"
                   team={team}
+                  sessionType={session.session_type}
+                  currentSfUserId={currentSfUserId}
                 />
               ) : (
                 <div className="calls-runner-actions calls-runner-actions--sticky">

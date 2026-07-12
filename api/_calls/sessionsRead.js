@@ -18,21 +18,41 @@ export async function handleSessionsRead({ url, user, client, headers }) {
   }
 
   if (resource === "team") {
-    const { data: profiles, error } = await client
-      .from("profiles")
-      .select("id, full_name, email, sf_user_id")
-      .not("sf_user_id", "is", null)
-      .order("full_name", { ascending: true });
-    if (error) {
+    // Union profiles (déjà connectés) + sf_user_map (commerciaux connus même sans login).
+    const [profilesResult, mapResult] = await Promise.all([
+      client.from("profiles").select("id, full_name, email, sf_user_id").not("sf_user_id", "is", null),
+      client.from("sf_user_map").select("email, sf_user_id"),
+    ]);
+    if (profilesResult.error) {
       return new Response(JSON.stringify({ error: "team_lookup_failed" }), { status: 500, headers });
     }
-    const team = (profiles || [])
-      .filter((profile) => profile.sf_user_id)
-      .map((profile) => ({
+    const bySfId = new Map();
+    for (const profile of profilesResult.data || []) {
+      if (!profile.sf_user_id) continue;
+      bySfId.set(profile.sf_user_id, {
         user_id: profile.id,
         label: profile.full_name || profile.email || profile.sf_user_id,
         sf_user_id: profile.sf_user_id,
-      }));
+      });
+    }
+    // Map entries enrichissent la liste (Paul / Christophe même s'ils n'ont pas encore de profil).
+    if (!mapResult.error) {
+      for (const row of mapResult.data || []) {
+        if (!row.sf_user_id || bySfId.has(row.sf_user_id)) continue;
+        const local = String(row.email || "").split("@")[0] || row.sf_user_id;
+        const label = local
+          .split(/[._-]+/)
+          .filter(Boolean)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ") || row.sf_user_id;
+        bySfId.set(row.sf_user_id, {
+          user_id: `map:${row.email || row.sf_user_id}`,
+          label,
+          sf_user_id: row.sf_user_id,
+        });
+      }
+    }
+    const team = [...bySfId.values()].sort((a, b) => a.label.localeCompare(b.label, "fr"));
     return new Response(JSON.stringify({ team }), { status: 200, headers });
   }
 

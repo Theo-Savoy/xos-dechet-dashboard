@@ -442,6 +442,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
   const opportunity = mapping.objects.opportunity;
   const tf = task.fields;
   const cf = contact.fields;
+  const af = account.fields;
   const of = opportunity.fields;
 
   const contactSoql = [
@@ -470,18 +471,67 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
       ].join(" ")
     : null;
 
-  const [contactResult, tasksResult, oppResult] = await Promise.all([
+  const accountSoql = accountId
+    ? [
+        `SELECT ${af.id}, ${af.name}, ${af.industry}, ${af.customerType}`,
+        `FROM ${account.name}`,
+        `WHERE ${af.id} = '${escapeSOQL(accountId)}'`,
+        `LIMIT 1`,
+      ].join(" ")
+    : null;
+
+  const ocrSoql = [
+    `SELECT OpportunityId`,
+    `FROM OpportunityContactRole`,
+    `WHERE ContactId = '${escapeSOQL(contactId)}'`,
+    `LIMIT 50`,
+  ].join(" ");
+
+  const [contactResult, tasksResult, oppResult, accountResult, ocrResult] = await Promise.all([
     searchContacts(token, contactSoql),
     searchContacts(token, taskSoql),
     oppSoql ? searchContacts(token, oppSoql) : Promise.resolve({ records: [] }),
+    accountSoql ? searchContacts(token, accountSoql) : Promise.resolve({ records: [] }),
+    searchContacts(token, ocrSoql),
   ]);
 
   if (contactResult.error) return { error: contactResult.error };
   if (tasksResult.error) return { error: tasksResult.error };
   if (oppResult.error) return { error: oppResult.error };
+  if (accountResult.error) return { error: accountResult.error };
+  // OCR = OpportunityContactRole (association Contact ↔ Opportunity dans Salesforce).
+  const linkedOppIds = new Set(
+    (ocrResult.error ? [] : ocrResult.records || [])
+      .map((row) => row.OpportunityId)
+      .filter(Boolean),
+  );
 
   const contactRow = contactResult.records?.[0];
+  const accountRow = accountResult.records?.[0];
   const npa = Boolean(contactRow?.[cf.doNotCall]);
+  const industry = accountRow?.[af.industry] || null;
+
+  let peerClients = [];
+  if (industry) {
+    const peersSoql = [
+      `SELECT ${af.id}, ${af.name}, ${af.industry}`,
+      `FROM ${account.name}`,
+      `WHERE ${af.industry} = '${escapeSOQL(industry)}'`,
+      `AND ${af.customerType} = 'Client'`,
+      accountId ? `AND ${af.id} != '${escapeSOQL(accountId)}'` : null,
+      `ORDER BY ${af.name} ASC`,
+      `LIMIT 5`,
+    ].filter(Boolean).join(" ");
+    const peersResult = await searchContacts(token, peersSoql);
+    if (!peersResult.error) {
+      peerClients = (peersResult.records || []).map((record) => ({
+        id: record[af.id],
+        name: record[af.name] || "",
+        industry: record[af.industry] || null,
+        record_url: buildLightningUrl(account.name, record[af.id]),
+      }));
+    }
+  }
 
   const opportunities = (oppResult.records || []).map((record) => ({
     id: record[of.id],
@@ -492,6 +542,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     amount: typeof record[of.amount] === "number" ? record[of.amount] : null,
     close_date: record[of.closeDate] || null,
     record_url: buildLightningUrl(opportunity.name, record[of.id]),
+    linked_to_contact: linkedOppIds.has(record[of.id]),
   }));
 
   return {
@@ -499,6 +550,9 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     account_record_url: accountId ? buildLightningUrl(account.name, accountId) : null,
     email: contactRow?.[cf.email] ?? null,
     title: contactRow?.[cf.title] ?? null,
+    account_name: accountRow?.[af.name] ?? null,
+    industry,
+    peer_clients: peerClients,
     npa,
     tasks: (tasksResult.records || []).map((record) => ({
       id: record[tf.id],

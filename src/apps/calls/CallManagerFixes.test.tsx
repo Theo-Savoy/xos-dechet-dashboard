@@ -79,31 +79,7 @@ describe("EventPanel", () => {
     expect(submit.getAttribute("title")).toContain("à venir");
   });
 
-  it("labels external invitees as CRM IDs and rejects an invalid ID before submitting", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn();
-    render(<EventPanel contactName="Alice" loading={false} onSubmit={onSubmit} />);
-
-    const invitees = screen.getByLabelText("Autres invités (ID CRM)");
-    await user.type(invitees, "not-an-id{Enter}");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(screen.getByRole("alert").textContent).toContain("15 ou 18");
-    expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  it("keeps manual invitees working when no team is available", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn();
-    render(<EventPanel contactName="Alice" loading={false} onSubmit={onSubmit} />);
-
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "003000000000001{Enter}");
-    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.any(String), 30, ["003000000000001"]);
-  });
-
-  it("combines selected colleagues with manual invitees without duplicates", async () => {
+  it("defaults to discovery subject and 60 min for prospection", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(
@@ -111,23 +87,47 @@ describe("EventPanel", () => {
         contactName="Alice"
         loading={false}
         onSubmit={onSubmit}
+        sessionType="prospection"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Rdv découverte prospect/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /60\s*min/i }).getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.any(String),
+      60,
+      { subject: "Rdv découverte prospect", ownerSfUserId: null },
+    );
+  });
+
+  it("defaults SDR attribution to a commercial colleague", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <EventPanel
+        contactName="Alice"
+        loading={false}
+        onSubmit={onSubmit}
+        currentSfUserId="005Sb000007b6dWIAQ"
         team={[
-          { user_id: "user-1", label: "Alice", sf_user_id: "005000000000001" },
-          { user_id: "user-2", label: "Bob", sf_user_id: "005000000000002" },
+          { user_id: "user-1", label: "Yanis", sf_user_id: "005Sb000007b6dWIAQ" },
+          { user_id: "user-2", label: "Christophe", sf_user_id: "005000000000002" },
+          { user_id: "user-3", label: "Paul", sf_user_id: "005000000000003" },
         ]}
       />,
     );
 
-    await user.click(screen.getByLabelText("Alice"));
-    await user.click(screen.getByLabelText("Bob"));
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "003000000000001{Enter}");
-    await user.type(screen.getByLabelText("Autres invités (ID CRM)"), "005000000000001{Enter}");
+    const owner = screen.getByLabelText("Commercial propriétaire du RDV") as HTMLSelectElement;
+    expect(owner.value).toBe("005000000000002");
+    expect(screen.queryByRole("option", { name: /^Moi$/ })).toBeNull();
+    await user.selectOptions(owner, "005000000000003");
     await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.any(String),
-      30,
-      ["005000000000001", "005000000000002", "003000000000001"],
+      60,
+      { subject: "Rdv découverte prospect", ownerSfUserId: "005000000000003" },
     );
   });
 });

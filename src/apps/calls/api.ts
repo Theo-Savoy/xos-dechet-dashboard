@@ -202,6 +202,9 @@ export async function logEvent(
   start: string,
   durationMin: number,
   invitees: string[],
+  options: { subject: string; ownerSfUserId?: string | null } = {
+    subject: "Rdv découverte prospect",
+  },
 ): Promise<void> {
   await apiFetch(token, "/api/calls", {
     method: "POST",
@@ -212,6 +215,8 @@ export async function logEvent(
       start,
       duration_min: durationMin,
       invitees,
+      subject: options.subject,
+      ...(options.ownerSfUserId ? { owner_sf_user_id: options.ownerSfUserId } : {}),
     }),
   });
 }
