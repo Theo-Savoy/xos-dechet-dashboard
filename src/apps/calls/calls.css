@@ -803,11 +803,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.3rem;
   border: 1px solid color-mix(in srgb, var(--xos-border) 90%, transparent);
   background: rgba(255, 255, 255, 0.04);
   color: var(--xos-text);
   border-radius: 0.5rem;
-  padding: 0 0.75rem;
+  padding: 0 0.65rem;
   font: inherit;
   font-size: 0.8rem;
   line-height: 1;
@@ -1816,6 +1817,10 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
   align-items: start;
+}
+
+.calls-cockpit-side > .calls-context-panel:nth-child(3) {
+  grid-column: 1 / -1;
 }
 
 .calls-context-panel--skeleton {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { Button, GlassCard } from "../../components/ui";
 import { isRdvAssigneeCandidate, isSdrCaller } from "./callerTracking";
 import {
@@ -18,6 +18,10 @@ export type EventDraft = {
   ownerSfUserId: string | null;
 };
 
+export type EventPanelHandle = {
+  submit: () => void;
+};
+
 type EventPanelProps = {
   contactName: string;
   loading: boolean;
@@ -34,6 +38,8 @@ type EventPanelProps = {
   sessionType?: SessionType | string | null;
   /** SF user id of the current caller (for “moi” vs attribution SDR). */
   currentSfUserId?: string | null;
+  /** Show ⌘↵ badge on the submit button (inline RDV log). */
+  showSubmitShortcut?: boolean;
 };
 
 function defaultStart(): string {
@@ -43,17 +49,21 @@ function defaultStart(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function EventPanel({
-  contactName,
-  loading,
-  onSubmit,
-  submitLabel,
-  heading,
-  className,
-  team = [],
-  sessionType = "prospection",
-  currentSfUserId = null,
-}: EventPanelProps) {
+export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function EventPanel(
+  {
+    contactName,
+    loading,
+    onSubmit,
+    submitLabel,
+    heading,
+    className,
+    team = [],
+    sessionType = "prospection",
+    currentSfUserId = null,
+    showSubmitShortcut = false,
+  },
+  ref,
+) {
   const subjects = useMemo(() => rdvSubjectsForSession(sessionType), [sessionType]);
   const sdr = isSdrCaller(currentSfUserId);
   const assignees = useMemo(() => {
@@ -116,6 +126,8 @@ export function EventPanel({
     });
   };
 
+  useImperativeHandle(ref, () => ({ submit: handleSubmit }));
+
   const inline = Boolean(className?.includes("calls-event-panel--inline"));
   const Wrapper = inline ? "div" : GlassCard;
   const wrapperClass = ["calls-event-panel", className].filter(Boolean).join(" ");
@@ -130,7 +142,9 @@ export function EventPanel({
       ? "Choisissez une date et une heure à venir"
       : sdr && !ownerSfUserId
         ? "Attribuez le RDV à un commercial"
-        : undefined;
+        : showSubmitShortcut
+          ? "⌘↵"
+          : undefined;
   const selectedSubject = rdvSubjectById(subjectId);
 
   return (
@@ -194,27 +208,32 @@ export function EventPanel({
       </div>
 
       <div className="calls-fb-control">
-        <div className="calls-fb-control__label">
-          {sdr ? "Attribuer le RDV à" : "Propriétaire du RDV"}
-        </div>
-        <select
-          className="calls-input"
-          aria-label="Commercial propriétaire du RDV"
-          value={ownerSfUserId}
-          onChange={(e) => setOwnerSfUserId(e.target.value)}
-        >
-          {!sdr && <option value="">Moi</option>}
-          {sdr && assignees.length === 0 && (
-            <option value="" disabled>
-              Aucun commercial disponible
-            </option>
+        <div className="calls-fb-control__label">Attribué à</div>
+        <div className="calls-chip-row" role="radiogroup" aria-label="Attribué à">
+          {!sdr && (
+            <button
+              type="button"
+              className={`calls-chip${ownerSfUserId === "" ? " calls-chip--active" : ""}`}
+              aria-checked={ownerSfUserId === ""}
+              role="radio"
+              onClick={() => setOwnerSfUserId("")}
+            >
+              Moi
+            </button>
           )}
           {assignees.map((member) => (
-            <option key={member.user_id} value={member.sf_user_id}>
+            <button
+              key={member.user_id}
+              type="button"
+              className={`calls-chip${ownerSfUserId === member.sf_user_id ? " calls-chip--active" : ""}`}
+              aria-checked={ownerSfUserId === member.sf_user_id}
+              role="radio"
+              onClick={() => setOwnerSfUserId(member.sf_user_id)}
+            >
               {member.label}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
         {sdr && (
           <p className="calls-muted calls-rdv-subjects__hint">
             Profil SDR : le RDV est créé par toi, attribué à un commercial.
@@ -234,8 +253,19 @@ export function EventPanel({
         aria-disabled={loading || !canSubmit}
         title={disabledTitle}
       >
-        {loading ? "Enregistrement…" : submitText}
+        {loading ? (
+          "Enregistrement…"
+        ) : (
+          <>
+            {submitText}
+            {showSubmitShortcut && (
+              <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                ⌘↵
+              </kbd>
+            )}
+          </>
+        )}
       </Button>
     </Wrapper>
   );
-}
+});

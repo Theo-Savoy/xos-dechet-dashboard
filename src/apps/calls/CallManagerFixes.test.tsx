@@ -118,10 +118,10 @@ describe("EventPanel", () => {
       />,
     );
 
-    const owner = screen.getByLabelText("Commercial propriétaire du RDV") as HTMLSelectElement;
-    expect(owner.value).toBe("005000000000002");
-    expect(screen.queryByRole("option", { name: /^Moi$/ })).toBeNull();
-    await user.selectOptions(owner, "005000000000003");
+    const group = screen.getByRole("radiogroup", { name: "Attribué à" });
+    expect(within(group).getByRole("radio", { name: "Christophe" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(group).queryByRole("radio", { name: /^Moi$/ })).toBeNull();
+    await user.click(within(group).getByRole("radio", { name: "Paul" }));
     await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
 
     expect(onSubmit).toHaveBeenCalledWith(
@@ -204,9 +204,10 @@ describe("RunnerView", () => {
     expect(screen.getByText("ou")).toBeTruthy();
   });
 
-  it("logs with the keyboard shortcut except for a planned meeting", async () => {
+  it("logs with ⌘↵ for a planned meeting via the Event panel", async () => {
     const user = userEvent.setup();
     const onLogAndNext = vi.fn();
+    const onLogRdvAndNext = vi.fn();
     render(
       <RunnerView
         {...runnerProps}
@@ -214,6 +215,7 @@ describe("RunnerView", () => {
         currentContact={bob}
         awaitingEvent={null}
         onLogAndNext={onLogAndNext}
+        onLogRdvAndNext={onLogRdvAndNext}
       />,
     );
 
@@ -223,6 +225,9 @@ describe("RunnerView", () => {
     await user.click(screen.getByRole("button", { name: "RDV planifié" }));
     fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
     expect(onLogAndNext).toHaveBeenCalledTimes(1);
+    expect(onLogRdvAndNext).toHaveBeenCalledTimes(1);
+    expect(onLogRdvAndNext.mock.calls[0][0]).toBe(bob.id);
+    expect(onLogRdvAndNext.mock.calls[0][1]).toMatchObject({ resultat: "RDV planifié" });
   });
 
   it("toggles to list mode with session statuses", async () => {

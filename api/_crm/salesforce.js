@@ -487,18 +487,45 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
     `LIMIT 50`,
   ].join(" ");
 
-  const [contactResult, tasksResult, oppResult, accountResult, ocrResult] = await Promise.all([
+  const event = mapping.objects.event;
+  const ef = event.fields;
+  const eventSoql = accountId
+    ? [
+        `SELECT Id, ${ef.subject}, ${ef.startDateTime}, ${ef.whoId}, ${ef.whatId}`,
+        `FROM ${event.name}`,
+        `WHERE ${ef.whatId} = '${escapeSOQL(accountId)}'`,
+        `ORDER BY ${ef.startDateTime} DESC NULLS LAST`,
+        `LIMIT 10`,
+      ].join(" ")
+    : [
+        `SELECT Id, ${ef.subject}, ${ef.startDateTime}, ${ef.whoId}, ${ef.whatId}`,
+        `FROM ${event.name}`,
+        `WHERE ${ef.whoId} = '${escapeSOQL(contactId)}'`,
+        `ORDER BY ${ef.startDateTime} DESC NULLS LAST`,
+        `LIMIT 10`,
+      ].join(" ");
+
+  const [contactResult, tasksResult, oppResult, accountResult, ocrResult, eventResult] = await Promise.all([
     searchContacts(token, contactSoql),
     searchContacts(token, taskSoql),
     oppSoql ? searchContacts(token, oppSoql) : Promise.resolve({ records: [] }),
     accountSoql ? searchContacts(token, accountSoql) : Promise.resolve({ records: [] }),
     searchContacts(token, ocrSoql),
+    searchContacts(token, eventSoql),
   ]);
 
   if (contactResult.error) return { error: contactResult.error };
   if (tasksResult.error) return { error: tasksResult.error };
   if (oppResult.error) return { error: oppResult.error };
   if (accountResult.error) return { error: accountResult.error };
+  // Events best-effort : si inaccessible, on continue sans historique RDV.
+  const events = (eventResult.error ? [] : eventResult.records || []).map((record) => ({
+    id: record.Id,
+    subject: record[ef.subject] || null,
+    start_date_time: record[ef.startDateTime] || null,
+    record_url: buildLightningUrl(event.name, record.Id),
+    linked_to_contact: record[ef.whoId] === contactId,
+  }));
   // OCR = OpportunityContactRole (association Contact ↔ Opportunity dans Salesforce).
   const linkedOppIds = new Set(
     (ocrResult.error ? [] : ocrResult.records || [])
@@ -563,6 +590,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
       record_url: buildLightningUrl(task.name, record[tf.id]),
     })),
     opportunities,
+    events,
   };
 }
 

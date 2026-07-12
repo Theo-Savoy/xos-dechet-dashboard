@@ -97,6 +97,15 @@ export type ContactOpportunityItem = {
   linked_to_contact?: boolean;
 };
 
+export type ContactEventItem = {
+  id: string;
+  subject: string | null;
+  start_date_time: string | null;
+  record_url: string | null;
+  /** Event.WhoId = contact courant. */
+  linked_to_contact?: boolean;
+};
+
 export type PeerClientAccount = {
   id: string;
   name: string;
@@ -115,6 +124,7 @@ export type ContactContext = {
   npa: boolean;
   tasks: ContactTaskHistoryItem[];
   opportunities: ContactOpportunityItem[];
+  events?: ContactEventItem[];
 };
 
 export type SessionDetail = {

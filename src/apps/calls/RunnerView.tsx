@@ -7,7 +7,7 @@ import {
   RELANCE_DEFAULT_RESULTATS,
   type ResultatCall,
 } from "../../crm";
-import { EventPanel } from "./EventPanel";
+import { EventPanel, type EventPanelHandle } from "./EventPanel";
 import { EmptyState } from "./EmptyState";
 import { CommandBar, ShortcutHelp } from "./CommandBar";
 import { ComboOnboardingDemo } from "./ComboOnboardingDemo";
@@ -45,6 +45,7 @@ import {
 import { nextContinuationName } from "./sessionNaming";
 import type {
   ContactContext,
+  ContactEventItem,
   ContactOpportunityItem,
   SessionContact,
   SessionDetail,
@@ -166,6 +167,14 @@ function sortOpportunities(opportunities: ContactOpportunityItem[]): ContactOppo
   });
 }
 
+function sortEvents(events: ContactEventItem[]): ContactEventItem[] {
+  return [...events].sort((a, b) => {
+    const link = Number(Boolean(b.linked_to_contact)) - Number(Boolean(a.linked_to_contact));
+    if (link !== 0) return link;
+    return String(b.start_date_time || "").localeCompare(String(a.start_date_time || ""));
+  });
+}
+
 function listStatusDisplay(contact: SessionContact): {
   label: string;
   variant: "success" | "warning" | "accent" | "muted" | "default";
@@ -223,12 +232,12 @@ function ResultButtons({
   );
 }
 
-const RECALL_PRESETS: { days: number; label: string }[] = [
-  { days: 0, label: "Aujourd'hui" },
-  { days: 1, label: "+1 j" },
-  { days: 3, label: "+3 j" },
-  { days: 7, label: "+7 j" },
-  { days: 14, label: "+14 j" },
+const RECALL_PRESETS: { days: number; label: string; shiftDigit: string }[] = [
+  { days: 0, label: "Aujourd'hui", shiftDigit: "1" },
+  { days: 1, label: "+1 j", shiftDigit: "2" },
+  { days: 3, label: "+3 j", shiftDigit: "3" },
+  { days: 7, label: "+7 j", shiftDigit: "4" },
+  { days: 14, label: "+14 j", shiftDigit: "5" },
 ];
 
 function RecallFields({
@@ -266,8 +275,10 @@ function RecallFields({
           type="checkbox"
           checked={scheduleRecall}
           onChange={(e) => onScheduleRecallChange(e.target.checked)}
+          aria-label="Planifier un rappel"
         />
-        Planifier un rappel
+        <span aria-hidden="true">Planifier un rappel</span>
+        <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">R</kbd>
       </label>
       {scheduleRecall ? (
         <div className="calls-recall__track" role="group" aria-label="Choisir la date de rappel">
@@ -278,9 +289,14 @@ function RecallFields({
                 type="button"
                 className={`calls-recall__chip${activePreset === preset.days ? " calls-recall__chip--active" : ""}`}
                 aria-pressed={activePreset === preset.days}
+                aria-label={preset.label}
+                title={`⇧${preset.shiftDigit}`}
                 onClick={() => pickPreset(preset.days)}
               >
-                {preset.label}
+                <span aria-hidden="true">{preset.label}</span>
+                <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                  ⇧{preset.shiftDigit}
+                </kbd>
               </button>
             ))}
           </div>
@@ -302,16 +318,20 @@ function RecallFields({
   );
 }
 
-function ContextSideSkeleton() {
+function ContextSideSkeleton({ quiet = false }: { quiet?: boolean }) {
   return (
     <>
       <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
         <h3>Historique d&apos;appels</h3>
-        <p className="calls-muted">Chargement…</p>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
       </GlassCard>
       <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
         <h3>Opportunités du compte</h3>
-        <p className="calls-muted">Chargement…</p>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
+      </GlassCard>
+      <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
+        <h3>RDV du compte</h3>
+        <p className="calls-muted">{quiet ? "\u00a0" : "Chargement…"}</p>
       </GlassCard>
     </>
   );
@@ -330,7 +350,7 @@ export function RunnerView({
   contactContext,
   contextContactId,
   contextTargetContactId = null,
-  contextLoading,
+  contextLoading: _contextLoading,
   onBack,
   onPin,
   onFocusContact,
@@ -383,6 +403,7 @@ export function RunnerView({
   const [goalBurst, setGoalBurst] = useState(false);
   const sessionRdvRef = useRef(sessionRdvCount);
   const bootstrappedDetail = useRef(false);
+  const eventPanelRef = useRef<EventPanelHandle>(null);
 
   useEffect(() => {
     setPinned(false);
@@ -543,12 +564,28 @@ export function RunnerView({
     contactContext && contextContactId != null && contextContactId === focusedContact?.id,
   );
   const contextBusy = Boolean(
-    contextLoading && contextTargetContactId === focusedContact?.id,
+    focusedContact
+    && contextTargetContactId === focusedContact.id
+    && contextContactId !== focusedContact.id,
   );
   const contextApplies = contextReady;
+  const [showContextSkeleton, setShowContextSkeleton] = useState(false);
+
+  useEffect(() => {
+    if (!contextBusy) {
+      setShowContextSkeleton(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowContextSkeleton(true), 160);
+    return () => window.clearTimeout(timer);
+  }, [contextBusy, focusedContact?.id]);
   const sortedOpportunities = useMemo(
     () => sortOpportunities(contactContext?.opportunities ?? []),
     [contactContext?.opportunities],
+  );
+  const sortedEvents = useMemo(
+    () => sortEvents(contactContext?.events ?? []),
+    [contactContext?.events],
   );
   const nextContact = useMemo(() => {
     if (!focusedContact) return pendingContacts[0] ?? null;
@@ -970,6 +1007,23 @@ export function RunnerView({
       // Démo / overlays gèrent Esc + focus trap eux-mêmes.
       if (demoOpen || commandBarOpen || helpOpen) return;
 
+      // ⌘↵ doit marcher même dans un champ (commentaires / date RDV).
+      if (
+        event.key === "Enter"
+        && isModKey(event)
+        && mode === "detail"
+        && !loading
+        && focusedContact?.status === "pending"
+      ) {
+        event.preventDefault();
+        if (resultat === "RDV planifié") {
+          eventPanelRef.current?.submit();
+        } else {
+          handleSubmit();
+        }
+        return;
+      }
+
       if (isTypingTarget(event.target)) return;
 
       if (event.key === "?" || (event.shiftKey && event.key === "/")) {
@@ -982,19 +1036,6 @@ export function RunnerView({
       if (event.key === "Escape") {
         setBulkRecallPicker(null);
         setDeferIds(null);
-        return;
-      }
-
-      if (
-        event.key === "Enter"
-        && isModKey(event)
-        && mode === "detail"
-        && !loading
-        && focusedContact?.status === "pending"
-        && resultat !== "RDV planifié"
-      ) {
-        event.preventDefault();
-        handleSubmit();
         return;
       }
 
@@ -1815,7 +1856,7 @@ export function RunnerView({
 
           <div className="calls-cockpit-side">
             {contextBusy ? (
-              <ContextSideSkeleton />
+              <ContextSideSkeleton quiet={!showContextSkeleton} />
             ) : (
               <>
             <GlassCard className="calls-context-panel">
@@ -1869,6 +1910,36 @@ export function RunnerView({
                 </ul>
               )}
             </GlassCard>
+
+            <GlassCard className="calls-context-panel">
+              <h3>RDV du compte</h3>
+              {contextApplies && contactContext && (contactContext.events?.length ?? 0) === 0 && (
+                <p className="calls-muted">Aucun RDV sur ce compte.</p>
+              )}
+              {contextApplies && contactContext && (contactContext.events?.length ?? 0) > 0 && (
+                <ul className="calls-context-list">
+                  {sortedEvents.map((event) => (
+                    <li
+                      key={event.id}
+                      className={event.linked_to_contact ? "calls-context-list__row--linked" : undefined}
+                    >
+                      <strong>
+                        {event.subject || "RDV"}
+                        {event.linked_to_contact && (
+                          <span className="calls-context-list__chip" title="RDV associé à ce contact (WhoId)">
+                            Associé
+                          </span>
+                        )}
+                      </strong>
+                      <span className="calls-context-list__date xos-numeric">
+                        {formatActivityDateFr(event.start_date_time)}
+                      </span>
+                      {event.record_url ? <SalesforceRecordLink href={event.record_url} /> : <span />}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </GlassCard>
               </>
             )}
           </div>
@@ -1909,8 +1980,10 @@ export function RunnerView({
                   type="checkbox"
                   checked={doNotCall}
                   onChange={(e) => setDoNotCall(e.target.checked)}
+                  aria-label="Ne pas rappeler (NPA) — définitif"
                 />
-                Ne pas rappeler (NPA) — définitif
+                <span aria-hidden="true">Ne pas rappeler (NPA) — définitif</span>
+                <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">N</kbd>
               </label>
               {doNotCall && (
                 <p className="calls-muted calls-npa-hint">
@@ -1931,6 +2004,7 @@ export function RunnerView({
 
               {resultat === "RDV planifié" ? (
                 <EventPanel
+                  ref={eventPanelRef}
                   contactName={focusedContact.contact_name}
                   loading={loading}
                   onSubmit={handleRdvSubmit}
@@ -1940,6 +2014,7 @@ export function RunnerView({
                   team={team}
                   sessionType={session.session_type}
                   currentSfUserId={currentSfUserId}
+                  showSubmitShortcut
                 />
               ) : (
                 <div className="calls-runner-actions calls-runner-actions--sticky">
@@ -1950,7 +2025,16 @@ export function RunnerView({
                   )}
                   <div className="calls-runner-actions__row">
                     <Button onClick={handleSubmit} disabled={loading} title="⌘↵">
-                      {loading ? "Enregistrement…" : "Logguer & suivant"}
+                      {loading ? (
+                        "Enregistrement…"
+                      ) : (
+                        <>
+                          Logguer & suivant
+                          <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">
+                            ⌘↵
+                          </kbd>
+                        </>
+                      )}
                     </Button>
                     {!isRecallQueue && (
                       <Button

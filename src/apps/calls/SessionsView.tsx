@@ -16,10 +16,12 @@ type SessionsViewProps = {
   recallsLoading: boolean;
   loading: boolean;
   error: string | null;
+  canPilotage?: boolean;
   onRefresh: () => void;
   onNewSession: () => void;
   onOpenSession: (sessionId: number, contactId?: number) => void;
   onOpenRecalls: () => void;
+  onOpenPilotage?: () => void;
   onUpdateSession: (
     sessionId: number,
     patch: { name?: string; scheduled_for?: string | null; session_type?: SessionType },
@@ -104,10 +106,12 @@ export function SessionsView({
   recallsLoading,
   loading,
   error,
+  canPilotage = false,
   onRefresh,
   onNewSession,
   onOpenSession,
   onOpenRecalls,
+  onOpenPilotage,
   onUpdateSession,
   onDeleteSession,
 }: SessionsViewProps) {
@@ -223,6 +227,11 @@ export function SessionsView({
           <h2>Prospection</h2>
         </div>
         <div className="calls-view__actions">
+          {canPilotage && onOpenPilotage && (
+            <Button variant="secondary" onClick={onOpenPilotage}>
+              Pilotage
+            </Button>
+          )}
           <Button variant="secondary" onClick={onRefresh} disabled={loading}>
             Actualiser
           </Button>

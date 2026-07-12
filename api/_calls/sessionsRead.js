@@ -3,11 +3,16 @@ import { listPresets } from "./presets.js";
 import mapping from "../_crm/mapping.js";
 import { fetchContactContext, fetchSFToken } from "../_crm/salesforce.js";
 import { computeHubKpis, enrichSessionContacts, getParisDateRange, isNotFoundError } from "./http.js";
+import { handleProspectionCockpit } from "./prospectionCockpit.js";
 
 export async function handleSessionsRead({ url, user, client, headers }) {
   const sessionIdParam = url.searchParams.get("session_id");
   const statsParam = url.searchParams.get("stats");
   const resource = url.searchParams.get("resource");
+
+  if (resource === "prospection_cockpit") {
+    return handleProspectionCockpit({ url, user, client, headers });
+  }
 
   if (resource === "presets") {
     const result = await listPresets(client, user.id);

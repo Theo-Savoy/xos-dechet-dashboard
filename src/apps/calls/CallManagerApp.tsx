@@ -27,10 +27,10 @@ import {
   CallsApiError,
 } from "./api";
 import { addShortcut } from "../../os/shortcuts";
-import { pendingContactsAhead, resolveContextContactId } from "./runnerContext";
-
-const CONTEXT_PREFETCH_AHEAD = 5;
-const CONTEXT_CACHE_MAX = 24;
+import { resolveContextContactId, pendingContactsAhead } from "./runnerContext";
+import { PilotageView } from "./PilotageView";
+import { supabase } from "../../lib/supabase";
+import type { AppRole } from "../../os/registry";
 import { createDialerLogQueue } from "./dialerLogQueue";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
@@ -50,7 +50,10 @@ import type {
 } from "./types";
 import "./calls.css";
 
-type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "loading-params";
+const CONTEXT_PREFETCH_AHEAD = 8;
+const CONTEXT_CACHE_MAX = 32;
+
+type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
 
 function findNextPending(contacts: SessionContact[]): SessionContact | null {
   return contacts.find((c) => c.status === "pending") ?? null;
@@ -91,9 +94,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   // Si on arrive avec un session_id dans les params (ex. raccourci bureau), on
   // saute la page d'accueil "sessions" et on affiche un loader le temps du
   // fetch. La view bascule ensuite vers runner/recap via openSession().
-  const [view, setView] = useState<View>(() =>
-    params?.session_id ? "loading-params" : "sessions",
-  );
+  // params.view=pilotage ouvre le cockpit manager.
+  const [view, setView] = useState<View>(() => {
+    if (params?.session_id) return "loading-params";
+    if (params?.view === "pilotage") return "pilotage";
+    return "sessions";
+  });
+  const [appRole, setAppRole] = useState<AppRole>("commercial");
+  const canPilotage = appRole === "manager" || appRole === "admin";
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [stats, setStats] = useState<CallStats | null>(null);
   const [recalls, setRecalls] = useState<RecallInboxItem[]>([]);
@@ -252,6 +260,26 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
   }, [token, loadSessions]);
 
   useEffect(() => {
+    const email = session?.user?.email;
+    if (!email) return;
+    let cancelled = false;
+    void supabase
+      .from("profiles")
+      .select("role")
+      .eq("email", email)
+      .maybeSingle()
+      .then(({ data }) => {
+        const value = data?.role;
+        if (!cancelled && (value === "admin" || value === "manager" || value === "commercial")) {
+          setAppRole(value);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email]);
+
+  useEffect(() => {
     const sessionId = params?.session_id;
     if (sessionId && token) {
       const id = Number(sessionId);
@@ -260,6 +288,12 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       }
     }
   }, [params?.session_id, token, openSession]);
+
+  useEffect(() => {
+    if (params?.view === "pilotage" && !params?.session_id) {
+      setView("pilotage");
+    }
+  }, [params?.view, params?.session_id]);
 
   const invalidatePreview = () => {
     previewRequest.current += 1;
@@ -452,7 +486,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         contextRequest.current = requestId;
         contextTargetRef.current = contactId;
         setContextTargetContactId(contactId);
-        setContextLoading(true);
+        // Only show loading if we don't already have an in-flight prefetch for this contact.
+        if (!contextInflightRef.current.has(cacheKey)) {
+          setContextLoading(true);
+        }
       }
 
       let pending = contextInflightRef.current.get(cacheKey);
@@ -524,6 +561,8 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         lastContextKey.current = null;
         setContactContext(null);
         setContextContactId(null);
+        setContextTargetContactId(null);
+        contextTargetRef.current = null;
         return;
       }
       const contextKey = `${focused.origin_session_id}:${focused.id}`;
@@ -531,7 +570,6 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
         lastContextKey.current = contextKey;
         void loadContactContext(focused.origin_session_id, focused.id);
       }
-      // Prefetch des rappels suivants dans la file affichée.
       const focusedIndex = contacts.findIndex((c) => c.id === focused.id);
       const ahead = (focusedIndex >= 0 ? contacts.slice(focusedIndex + 1) : contacts)
         .slice(0, CONTEXT_PREFETCH_AHEAD)
@@ -547,10 +585,20 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
 
     if (!activeSession) return;
     const targetId = resolveContextContactId(contacts, awaitingEvent?.id, focusedContactId);
+
+    // Warm the cache as soon as the runner opens: current + next N pending.
+    const warmIds = [
+      ...(targetId != null ? [targetId] : []),
+      ...pendingContactsAhead(contacts, targetId, CONTEXT_PREFETCH_AHEAD).map((c) => c.id),
+    ];
+    prefetchContactContexts(activeSession.id, [...new Set(warmIds)]);
+
     if (!targetId) {
       lastContextKey.current = null;
       setContactContext(null);
       setContextContactId(null);
+      setContextTargetContactId(null);
+      contextTargetRef.current = null;
       return;
     }
     const contextKey = `${activeSession.id}:${targetId}`;
@@ -558,10 +606,6 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
       lastContextKey.current = contextKey;
       void loadContactContext(activeSession.id, targetId);
     }
-
-    // Précharge les N prochains pending dans l’ordre de file (même logique que « Ensuite »).
-    const aheadIds = pendingContactsAhead(contacts, targetId, CONTEXT_PREFETCH_AHEAD).map((c) => c.id);
-    prefetchContactContexts(activeSession.id, aheadIds);
   }, [
     view,
     activeSession?.id,
@@ -1031,6 +1075,10 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
     await addShortcut("calls", { session_id: String(activeSession.id) }, label);
   };
 
+  const handlePinPilotage = async () => {
+    await addShortcut("calls", { view: "pilotage" }, "Pilotage");
+  };
+
   const goToSessions = () => {
     setView("sessions");
     setActiveSession(null);
@@ -1064,6 +1112,7 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           recallsLoading={recallsLoading}
           loading={sessionsLoading}
           error={sessionsError}
+          canPilotage={canPilotage}
           onRefresh={() => void loadSessions()}
           onNewSession={() => {
             setView("new");
@@ -1080,9 +1129,14 @@ export default function CallManagerApp({ params }: CallManagerAppProps) {
           }}
           onOpenSession={(id, contactId) => void openSession(id, contactId)}
           onOpenRecalls={() => void openRecalls()}
+          onOpenPilotage={() => setView("pilotage")}
           onUpdateSession={handleUpdateSession}
           onDeleteSession={handleDeleteSession}
         />
+      )}
+
+      {view === "pilotage" && (
+        <PilotageView onBack={goToSessions} onPin={handlePinPilotage} />
       )}
 
       {view === "new" && (

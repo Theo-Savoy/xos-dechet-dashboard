@@ -243,7 +243,10 @@ export async function handleLogging({ action, body, user, client, headers }) {
     if (eventId) {
       const { error: updateError } = await client
         .from("call_session_contacts")
-        .update({ sf_event_id: eventId })
+        .update({
+          sf_event_id: eventId,
+          ...(eventOwnerId ? { rdv_owner_sf_user_id: eventOwnerId } : {}),
+        })
         .eq("id", contact_id);
 
       if (updateError) {

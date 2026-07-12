@@ -2,7 +2,7 @@ const RDV_GOAL_KEY_PREFIX = "xos-combo-rdv-goal:";
 
 export type RdvHeat = 1 | 2 | 3 | 4 | 5;
 
-export const RDV_GOAL_PRESETS = [3, 5, 8, 10] as const;
+export const RDV_GOAL_PRESETS = [1, 2, 3, 4, 5] as const;
 
 export function rdvGoalStorageKey(sessionId: number): string {
   return `${RDV_GOAL_KEY_PREFIX}${sessionId}`;
@@ -33,9 +33,9 @@ export function writeRdvGoal(sessionId: number, goal: number | null): void {
 /** Intensité visuelle : 1 soft → 4 heat → 5 objectif atteint. */
 export function rdvHeatLevel(count: number, goalJustHit: boolean): RdvHeat {
   if (goalJustHit) return 5;
-  if (count >= 8) return 4;
-  if (count >= 5) return 3;
-  if (count >= 3) return 2;
+  if (count >= 5) return 4;
+  if (count >= 4) return 3;
+  if (count >= 2) return 2;
   return 1;
 }
 

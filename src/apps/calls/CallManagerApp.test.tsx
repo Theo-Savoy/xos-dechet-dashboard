@@ -19,9 +19,21 @@ vi.mock("../../auth/useSession", () => ({
   })),
 }));
 
-// Évite de tirer lib/supabase (qui exige les env VITE_*) via os/shortcuts.
+// Évite de tirer lib/supabase (qui exige les env VITE_*) via os/shortcuts / profils.
 vi.mock("../../os/shortcuts", () => ({
   addShortcut: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../../lib/supabase", () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: { role: "manager" }, error: null }),
+        }),
+      }),
+    }),
+  },
 }));
 
 import CallManagerApp from "./CallManagerApp";
@@ -386,15 +398,18 @@ describe("CallManagerApp component", () => {
     const user = userEvent.setup();
     render(<CallManagerApp params={{ session_id: "1" }} />);
     await screen.findByRole("heading", { name: "Changement de contact" });
-    await waitFor(() => expect(contextFetches).toEqual(["/api/calls?session_id=1&context_contact_id=101"]));
+    await waitFor(() => {
+      expect(contextFetches[0]).toBe("/api/calls?session_id=1&context_contact_id=101");
+      expect(contextFetches).toContain("/api/calls?session_id=1&context_contact_id=101");
+    });
 
     await user.click(screen.getByRole("button", { name: "Liste" }));
     await user.click(screen.getByRole("button", { name: "Bruno Martin" }));
 
-    await waitFor(() => expect(contextFetches).toEqual([
-      "/api/calls?session_id=1&context_contact_id=101",
-      "/api/calls?session_id=1&context_contact_id=102",
-    ]));
+    await waitFor(() => {
+      expect(contextFetches).toContain("/api/calls?session_id=1&context_contact_id=101");
+      expect(contextFetches).toContain("/api/calls?session_id=1&context_contact_id=102");
+    });
   });
 
   it("logs selected contacts in waves of four and aggregates failures", async () => {
