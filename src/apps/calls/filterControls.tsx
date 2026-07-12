@@ -98,10 +98,17 @@ export function TriState({
 }
 
 /** Liste searchable à cases à cocher pour picklists volumineuses. */
+export type PicklistGroup<T extends string> = {
+  id: string;
+  label: string;
+  values: readonly T[];
+};
+
 export function PicklistMultiSelect<T extends string>({
   label,
   hint,
   options,
+  groups,
   value,
   onChange,
   searchPlaceholder = "Rechercher…",
@@ -109,11 +116,21 @@ export function PicklistMultiSelect<T extends string>({
   label: string;
   hint?: string;
   options: readonly { value: T; label: string }[];
+  groups?: readonly PicklistGroup<T>[];
   value: T[];
   onChange: (next: T[]) => void;
   searchPlaceholder?: string;
 }) {
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (!groups?.length) return new Set();
+    const open = new Set<string>();
+    for (const group of groups) {
+      if (group.values.some((item) => value.includes(item))) open.add(group.id);
+    }
+    if (open.size === 0 && groups[0]) open.add(groups[0].id);
+    return open;
+  });
   const inputId = useId();
   const listId = useId();
   const normalizedQuery = query.trim().toLowerCase();
@@ -121,18 +138,125 @@ export function PicklistMultiSelect<T extends string>({
   const optionValues = new Set(optionByValue.keys());
   const obsoleteValues = value.filter((item) => !optionValues.has(item));
   const selectedKnown = value.filter((item) => optionValues.has(item));
-  const visible = normalizedQuery
-    ? options.filter((opt) => opt.label.toLowerCase().includes(normalizedQuery))
-    : [
-        ...options.filter((opt) => value.includes(opt.value)),
-        ...options.filter((opt) => !value.includes(opt.value)),
-      ];
 
   const toggle = (v: T) => {
     onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
   };
 
   const remove = (v: T) => onChange(value.filter((item) => item !== v));
+
+  const toggleFamily = (familyValues: readonly T[]) => {
+    const allSelected = familyValues.every((item) => value.includes(item));
+    if (allSelected) {
+      onChange(value.filter((item) => !familyValues.includes(item)));
+    } else {
+      const next = new Set(value);
+      for (const item of familyValues) next.add(item);
+      onChange([...next]);
+    }
+  };
+
+  const toggleExpanded = (groupId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const sortOptions = (items: { value: T; label: string }[]) => [
+    ...items.filter((opt) => value.includes(opt.value)),
+    ...items.filter((opt) => !value.includes(opt.value)),
+  ];
+
+  const filteredOptions = normalizedQuery
+    ? options.filter((opt) => opt.label.toLowerCase().includes(normalizedQuery))
+    : null;
+
+  const renderOption = (opt: { value: T; label: string }) => {
+    const checked = value.includes(opt.value);
+    return (
+      <label
+        key={opt.value}
+        className={`calls-checkbox calls-checkbox--tight calls-picklist__option${checked ? " calls-picklist__option--checked" : ""}`}
+      >
+        <input type="checkbox" checked={checked} onChange={() => toggle(opt.value)} />
+        <span className="calls-checkbox__label">{opt.label}</span>
+      </label>
+    );
+  };
+
+  const renderGrouped = () => {
+    if (!groups?.length) return null;
+    return groups.map((group) => {
+      const groupOptions = sortOptions(
+        group.values
+          .map((v) => optionByValue.get(v))
+          .filter((opt): opt is { value: T; label: string } => Boolean(opt)),
+      );
+      if (normalizedQuery) {
+        const visible = groupOptions.filter((opt) =>
+          opt.label.toLowerCase().includes(normalizedQuery),
+        );
+        if (visible.length === 0) return null;
+        return (
+          <div key={group.id} className="calls-picklist__family">
+            <div className="calls-picklist__family-head">
+              <span className="calls-picklist__family-label">{group.label}</span>
+            </div>
+            {visible.map(renderOption)}
+          </div>
+        );
+      }
+
+      const isOpen = expanded.has(group.id);
+      const selectedInFamily = group.values.filter((item) => value.includes(item)).length;
+      return (
+        <div key={group.id} className="calls-picklist__family">
+          <div className="calls-picklist__family-head">
+            <button
+              type="button"
+              className="calls-picklist__family-toggle"
+              aria-expanded={isOpen}
+              onClick={() => toggleExpanded(group.id)}
+            >
+              <span className="calls-picklist__family-chevron" aria-hidden="true">
+                {isOpen ? "▾" : "▸"}
+              </span>
+              <span className="calls-picklist__family-label">{group.label}</span>
+              {selectedInFamily > 0 && (
+                <span className="calls-picklist__family-count xos-numeric">{selectedInFamily}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="calls-picklist__family-all"
+              onClick={() => toggleFamily(group.values)}
+            >
+              {group.values.every((item) => value.includes(item)) ? "Aucun" : "Tout"}
+            </button>
+          </div>
+          {isOpen && groupOptions.map(renderOption)}
+        </div>
+      );
+    });
+  };
+
+  const renderFlat = () => {
+    const visible = filteredOptions ?? sortOptions([...options]);
+    return visible.map(renderOption);
+  };
+
+  const hasVisible =
+    groups?.length && normalizedQuery
+      ? groups.some((group) =>
+          group.values.some((v) => {
+            const label = optionByValue.get(v)?.label ?? v;
+            return label.toLowerCase().includes(normalizedQuery);
+          }),
+        )
+      : (filteredOptions ?? options).length > 0;
 
   return (
     <div className="calls-fb-control">
@@ -202,23 +326,8 @@ export function PicklistMultiSelect<T extends string>({
           )}
         </div>
         <div id={listId} className="calls-picklist" role="group" aria-label={label}>
-          {visible.map((opt) => {
-            const checked = value.includes(opt.value);
-            return (
-              <label
-                key={opt.value}
-                className={`calls-checkbox calls-checkbox--tight calls-picklist__option${checked ? " calls-picklist__option--checked" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(opt.value)}
-                />
-                <span className="calls-checkbox__label">{opt.label}</span>
-              </label>
-            );
-          })}
-          {visible.length === 0 && <p className="calls-picklist__empty">Aucun résultat.</p>}
+          {groups?.length ? renderGrouped() : renderFlat()}
+          {!hasVisible && <p className="calls-picklist__empty">Aucun résultat.</p>}
         </div>
       </div>
     </div>

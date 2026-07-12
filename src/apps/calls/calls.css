@@ -2646,10 +2646,82 @@
 
 .calls-picklist {
   display: grid;
-  gap: 0.15rem;
-  max-height: 14.5rem;
+  gap: 0.35rem;
+  max-height: 16.5rem;
   overflow: auto;
   padding: 0.4rem;
+}
+
+.calls-picklist__family {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.calls-picklist__family-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.35rem 0.4rem;
+  margin: 0 -0.15rem;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--xos-surface, #0a0e1c) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.calls-picklist__family-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--xos-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.calls-picklist__family-chevron {
+  color: var(--xos-text-muted);
+  font-size: 0.7rem;
+  width: 0.75rem;
+  flex-shrink: 0;
+}
+
+.calls-picklist__family-label {
+  min-width: 0;
+}
+
+.calls-picklist__family-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
+  color: var(--xos-text);
+}
+
+.calls-picklist__family-all {
+  border: 0;
+  background: transparent;
+  color: var(--xos-accent);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  flex-shrink: 0;
+}
+
+.calls-picklist__family-all:hover {
+  text-decoration: underline;
 }
 
 .calls-picklist__option {
