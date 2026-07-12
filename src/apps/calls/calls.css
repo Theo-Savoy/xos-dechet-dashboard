@@ -3076,6 +3076,58 @@
   color: var(--xos-text-muted);
 }
 
+.calls-contact-card__peers {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0;
+  min-width: 0;
+}
+
+.calls-contact-card__peers-label {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xos-text-muted);
+}
+
+.calls-contact-card__peers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.calls-contact-card__peer {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--xos-text);
+  text-decoration: none;
+  border: 1px solid var(--xos-border);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+a.calls-contact-card__peer:hover {
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+  color: var(--xos-accent);
+}
+
+.calls-contact-card__peer--static {
+  color: var(--xos-text-muted);
+}
+
 .calls-context-list__chip {
   margin-left: 0.4rem;
   font-size: 0.65rem;

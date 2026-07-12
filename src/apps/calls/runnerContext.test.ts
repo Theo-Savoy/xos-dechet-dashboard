@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveContextContactId } from "./runnerContext";
+import { pendingContactsAhead, resolveContextContactId } from "./runnerContext";
 import type { SessionContact } from "./types";
 
 const base = {
@@ -37,5 +37,27 @@ describe("resolveContextContactId", () => {
 
   it("keeps focused pending contact when user opened their fiche", () => {
     expect(resolveContextContactId(contacts, null, 2)).toBe(2);
+  });
+});
+
+describe("pendingContactsAhead", () => {
+  const contacts: SessionContact[] = [
+    { ...base, id: 1, contact_name: "A", status: "pending" },
+    { ...base, id: 2, contact_name: "B", status: "called" },
+    { ...base, id: 3, contact_name: "C", status: "pending" },
+    { ...base, id: 4, contact_name: "D", status: "pending" },
+    { ...base, id: 5, contact_name: "E", status: "pending" },
+  ];
+
+  it("takes the next pending rows after the current contact", () => {
+    expect(pendingContactsAhead(contacts, 1, 2).map((c) => c.id)).toEqual([3, 4]);
+  });
+
+  it("does not prefetch earlier pending contacts when focus jumped ahead", () => {
+    expect(pendingContactsAhead(contacts, 3, 5).map((c) => c.id)).toEqual([4, 5]);
+  });
+
+  it("starts from the beginning when there is no current contact", () => {
+    expect(pendingContactsAhead(contacts, null, 2).map((c) => c.id)).toEqual([1, 3]);
   });
 });

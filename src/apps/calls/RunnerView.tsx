@@ -1725,6 +1725,32 @@ export function RunnerView({
                     Secteur · {contactContext.industry}
                   </p>
                 )}
+                {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
+                  <div className="calls-contact-card__peers" aria-label="Références clients">
+                    <span className="calls-contact-card__peers-label">Refs</span>
+                    <ul className="calls-contact-card__peers-list">
+                      {contactContext.peer_clients.map((peer) => (
+                        <li key={peer.id}>
+                          {peer.record_url ? (
+                            <a
+                              className="calls-contact-card__peer"
+                              href={peer.record_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={peer.name}
+                            >
+                              {peer.name}
+                            </a>
+                          ) : (
+                            <span className="calls-contact-card__peer calls-contact-card__peer--static" title={peer.name}>
+                              {peer.name}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {(isRecallQueue || focusedContact.status !== "pending") && focusedContact.recall_at && (
                   <div className="calls-contact-card__recall-meta">
                     <span>Rappel</span>
@@ -1773,8 +1799,8 @@ export function RunnerView({
             </div>
           </GlassCard>
 
-          <div className={`calls-cockpit-side${contextLoading ? " calls-cockpit-side--loading" : ""}`}>
-            {contextLoading ? (
+          <div className={`calls-cockpit-side${contextLoading && !contextApplies ? " calls-cockpit-side--loading" : ""}`}>
+            {contextLoading && !contextApplies ? (
               <GlassCard className="calls-context-panel calls-context-panel--skeleton" aria-busy="true">
                 <p className="calls-muted">Chargement historique & opportunités…</p>
               </GlassCard>
@@ -1831,21 +1857,6 @@ export function RunnerView({
                 </ul>
               )}
             </GlassCard>
-
-            {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
-              <GlassCard className="calls-context-panel">
-                <h3>Références clients · {contactContext.industry}</h3>
-                <ul className="calls-context-list calls-context-list--peers">
-                  {contactContext.peer_clients.map((peer) => (
-                    <li key={peer.id}>
-                      <strong>{peer.name}</strong>
-                      <span className="calls-muted">Client</span>
-                      {peer.record_url ? <SalesforceRecordLink href={peer.record_url} /> : <span />}
-                    </li>
-                  ))}
-                </ul>
-              </GlassCard>
-            )}
               </>
             )}
           </div>

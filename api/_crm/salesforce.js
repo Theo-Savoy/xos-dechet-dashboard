@@ -520,7 +520,7 @@ export async function fetchContactContext(token, { contactId, accountId }, mappi
       `AND ${af.customerType} = 'Client'`,
       accountId ? `AND ${af.id} != '${escapeSOQL(accountId)}'` : null,
       `ORDER BY ${af.name} ASC`,
-      `LIMIT 5`,
+      `LIMIT 3`,
     ].filter(Boolean).join(" ");
     const peersResult = await searchContacts(token, peersSoql);
     if (!peersResult.error) {
