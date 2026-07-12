@@ -9,6 +9,7 @@ import {
   NIVEAU_DECISION_OPTIONS,
   RESULTAT_CALL_VALUES,
   SECTEUR_VALUES,
+  SECTEUR_FAMILIES,
   TIER_VALUES,
   TYPE_CLIENT_VALUES,
   type CallTargetPreset,
@@ -206,6 +207,11 @@ export function FilterBuilder({
           <PicklistMultiSelect
             label="Secteurs d'activité"
             options={asOptions(SECTEUR_VALUES)}
+            groups={SECTEUR_FAMILIES.map((family) => ({
+              id: family.id,
+              label: family.label,
+              values: family.secteurs,
+            }))}
             value={filters.entreprise.secteurs}
             onChange={(secteurs) => setEntreprise({ secteurs })}
             searchPlaceholder="Filtrer les secteurs…"
