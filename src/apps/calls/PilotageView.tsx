@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
+import { CallFunnelCard, stagesFromPeriodKpis } from "./CallFunnelCard";
 import type { PeriodKpis } from "./types";
 import {
   fetchProspectionCockpit,
@@ -130,30 +131,20 @@ function dayCallersToCards(rows: CockpitDayCallerRow[]): CallerCard[] {
     .sort((a, b) => b.kpis.calls - a.kpis.calls || a.label.localeCompare(b.label, "fr"));
 }
 
-function FunnelStrip({ kpis }: { kpis: PeriodKpis }) {
+function KpiFootnote({
+  kpis,
+  extras,
+}: {
+  kpis: PeriodKpis;
+  extras?: ReactNode;
+}) {
   return (
-    <section className="pilotage-kpis" aria-label="Funnel">
-      <GlassCard className="pilotage-stat">
-        <span>Appels</span>
-        <strong className="xos-numeric">{kpis.calls}</strong>
-      </GlassCard>
-      <GlassCard className="pilotage-stat">
-        <span>Taux décroché</span>
-        <strong className="xos-numeric">{pct(kpis.rate_decroche)}</strong>
-      </GlassCard>
-      <GlassCard className="pilotage-stat">
-        <span>Taux argumenté</span>
-        <strong className="xos-numeric">{pct(kpis.rate_argumente)}</strong>
-      </GlassCard>
-      <GlassCard className="pilotage-stat">
-        <span>RDV / décroché</span>
-        <strong className="xos-numeric">{pct(kpis.rate_rdv_per_decroche)}</strong>
-      </GlassCard>
-      <GlassCard className="pilotage-stat pilotage-stat--accent">
-        <span>RDV pris</span>
-        <strong className="xos-numeric">{kpis.rdv}</strong>
-      </GlassCard>
-    </section>
+    <p className="pilotage-secondary">
+      RDV / décroché <strong className="xos-numeric">{pct(kpis.rate_rdv_per_decroche)}</strong>
+      <span aria-hidden="true"> · </span>
+      Hors liste <strong className="xos-numeric">{kpis.npa}</strong>
+      {extras}
+    </p>
   );
 }
 
@@ -177,7 +168,7 @@ function CommercialCard({
         <strong>{caller.label}</strong>
         {caller.tracking === "sdr" && <Tag variant="muted">SDR</Tag>}
       </div>
-      <div className="pilotage-caller-card__funnel" aria-label={`Funnel ${caller.label}`}>
+      <div className="pilotage-caller-card__funnel" aria-label={`Résumé ${caller.label}`}>
         <div>
           <span>Appels</span>
           <strong className="xos-numeric">{caller.kpis.calls}</strong>
@@ -231,7 +222,7 @@ export function PilotageView({
       if (err instanceof PilotageApiError && err.code === "forbidden") {
         setError("Réservé aux managers.");
       } else {
-        setError("Impossible de charger le cockpit.");
+        setError("Impossible de charger Pilotage.");
       }
       setData(null);
     } finally {
@@ -273,7 +264,6 @@ export function PilotageView({
       };
     }
 
-    // Vue Jours
     if (expandedDay) {
       const day = byDay.find((d) => d.date === expandedDay);
       if (day) {
@@ -331,7 +321,7 @@ export function PilotageView({
 
   const kpis = filtered.kpis;
   const periodLabel =
-    period === "day" ? "aujourd’hui (Paris)" : period === "week" ? "cette semaine" : "ce mois";
+    period === "day" ? "aujourd’hui" : period === "week" ? "cette semaine" : "ce mois";
 
   return (
     <div className="calls-view pilotage-app">
@@ -340,7 +330,7 @@ export function PilotageView({
           <Tag variant="accent">Combo</Tag>
           <h2>Pilotage</h2>
           <p className="pilotage-header__sub">
-            Cockpit équipe · funnel, séances et attribution RDV · {periodLabel}
+            L’équipe en un coup d’œil · {periodLabel}
           </p>
         </div>
         <div className="calls-view__actions pilotage-header__actions">
@@ -370,7 +360,7 @@ export function PilotageView({
               Mois
             </button>
           </div>
-          <div className="calls-seg" role="group" aria-label="Mode de détail">
+          <div className="calls-seg" role="group" aria-label="Détail">
             <button
               type="button"
               className={`calls-seg__btn${detailMode === "days" ? " calls-seg__btn--active" : ""}`}
@@ -378,7 +368,7 @@ export function PilotageView({
               disabled={period === "day" && byDay.length <= 1}
               title={
                 period === "day" && byDay.length <= 1
-                  ? "Un seul jour — basculez en Vue Séances"
+                  ? "Un seul jour — passez par Séances"
                   : undefined
               }
               onClick={() => {
@@ -386,7 +376,7 @@ export function PilotageView({
                 setSelectedCallerId(null);
               }}
             >
-              Vue Jours
+              Jours
             </button>
             <button
               type="button"
@@ -398,7 +388,7 @@ export function PilotageView({
                 setSelectedCallerId(null);
               }}
             >
-              Vue Séances
+              Séances
             </button>
           </div>
           <Button variant="secondary" onClick={() => void load()} disabled={loading}>
@@ -418,47 +408,43 @@ export function PilotageView({
             </Button>
           )}
           <Button variant="secondary" onClick={onBack}>
-            Séances
+            Retour
           </Button>
         </div>
       </header>
 
       {error && <p className="pilotage-error" role="alert">{error}</p>}
 
-      <FunnelStrip kpis={kpis} />
-
-      <p className="pilotage-secondary">
-        RDV / argumenté <strong className="xos-numeric">{pct(kpis.rate_rdv_per_argumente)}</strong>
-        <span aria-hidden="true"> · </span>
-        NPA <strong className="xos-numeric">{kpis.npa}</strong>
-        <span aria-hidden="true"> · </span>
-        Décrochés <strong className="xos-numeric">{kpis.decroche}</strong>
-        <span aria-hidden="true"> · </span>
-        Argumentés <strong className="xos-numeric">{kpis.argumente}</strong>
-        {detailMode === "sessions" && sessions.length > 0 && (
-          <>
-            <span aria-hidden="true"> · </span>
-            {selectedSessions.length}/{sessions.length} séance
-            {sessions.length > 1 ? "s" : ""}
-          </>
-        )}
-        {detailMode === "days" && expandedDay && (
-          <>
-            <span aria-hidden="true"> · </span>
-            Jour sélectionné&nbsp;:{" "}
-            <strong>{byDay.find((d) => d.date === expandedDay)?.label ?? expandedDay}</strong>
-          </>
-        )}
-      </p>
+      <div className="pilotage-funnel-block">
+        <CallFunnelCard stages={stagesFromPeriodKpis(kpis)} />
+        <KpiFootnote
+          kpis={kpis}
+          extras={
+            <>
+              {detailMode === "sessions" && sessions.length > 0 && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {selectedSessions.length}/{sessions.length} séance
+                  {sessions.length > 1 ? "s" : ""}
+                </>
+              )}
+              {detailMode === "days" && expandedDay && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  {byDay.find((d) => d.date === expandedDay)?.label ?? expandedDay}
+                </>
+              )}
+            </>
+          }
+        />
+      </div>
 
       {detailMode === "sessions" && (
         <GlassCard className="pilotage-panel pilotage-sessions-panel">
           <div className="pilotage-panel__toolbar">
             <div>
               <h3>Séances</h3>
-              <p className="pilotage-panel__hint">
-                Cochez les séances pour recalculer le funnel et les commerciaux.
-              </p>
+              <p className="pilotage-panel__hint">Cochez pour filtrer l’équipe et le funnel.</p>
             </div>
             <div className="calls-seg" role="group" aria-label="Sélection séances">
               <button
@@ -481,7 +467,7 @@ export function PilotageView({
           </div>
 
           {sessions.length === 0 ? (
-            <p className="pilotage-empty">Aucune séance active ou touchée sur la période.</p>
+            <p className="pilotage-empty">Aucune séance sur la période.</p>
           ) : (
             <ul className="pilotage-session-list">
               {sessions.map((session) => {
@@ -501,7 +487,7 @@ export function PilotageView({
                           <strong>{session.name}</strong>
                           {session.shared && <Tag variant="accent">Partagée</Tag>}
                           <span className="pilotage-muted">
-                            {session.status === "active" ? " · active" : " · terminée"}
+                            {session.status === "active" ? " · en cours" : " · terminée"}
                             {typeof session.member_count === "number" && session.member_count > 1
                               ? ` · ${session.member_count} membres`
                               : ""}
@@ -513,7 +499,7 @@ export function PilotageView({
                             {SESSION_TYPE_LABEL[session.session_type] || session.session_type}
                           </span>
                           <span className="xos-numeric">
-                            {session.kpis.calls} appels · {pct(session.kpis.rate_decroche)} déc. ·{" "}
+                            {session.kpis.calls} appels · {pct(session.kpis.rate_decroche)} décroché ·{" "}
                             {session.kpis.rdv} RDV
                           </span>
                           <span className="pilotage-muted xos-numeric">
@@ -535,9 +521,7 @@ export function PilotageView({
           <div className="pilotage-panel__toolbar">
             <div>
               <h3>Par jour</h3>
-              <p className="pilotage-panel__hint">
-                Cliquez un jour pour filtrer le funnel et les commerciaux.
-              </p>
+              <p className="pilotage-panel__hint">Choisissez un jour pour zoomer.</p>
             </div>
             {expandedDay && (
               <Button
@@ -553,7 +537,7 @@ export function PilotageView({
           </div>
 
           {byDay.length === 0 ? (
-            <p className="pilotage-empty">Aucune activité journalière sur la période.</p>
+            <p className="pilotage-empty">Aucune activité sur la période.</p>
           ) : (
             <ul className="pilotage-day-list">
               {byDay.map((day) => {
@@ -575,7 +559,7 @@ export function PilotageView({
                       </span>
                       <span className="pilotage-day-row__kpis xos-numeric">
                         <span>{day.kpis.calls} appels</span>
-                        <span>{pct(day.kpis.rate_decroche)} déc.</span>
+                        <span>{pct(day.kpis.rate_decroche)} décroché</span>
                         <span>{day.kpis.rdv} RDV</span>
                       </span>
                     </button>
@@ -600,10 +584,8 @@ export function PilotageView({
       )}
 
       <GlassCard className="pilotage-panel">
-        <h3>Commerciaux</h3>
-        <p className="pilotage-panel__hint">
-          Qui a passé les appels (crédité via logged_by). Cliquez une carte pour le détail.
-        </p>
+        <h3>Équipe</h3>
+        <p className="pilotage-panel__hint">Qui a passé les appels. Cliquez pour le détail.</p>
 
         {filtered.callers.length === 0 ? (
           <p className="pilotage-empty">Aucune activité sur la période.</p>
@@ -631,39 +613,38 @@ export function PilotageView({
                 Fermer
               </Button>
             </div>
-            <FunnelStrip kpis={selectedCaller.kpis} />
-            <p className="pilotage-secondary">
-              RDV / argumenté{" "}
-              <strong className="xos-numeric">{pct(selectedCaller.kpis.rate_rdv_per_argumente)}</strong>
-              <span aria-hidden="true"> · </span>
-              NPA <strong className="xos-numeric">{selectedCaller.kpis.npa}</strong>
-              <span aria-hidden="true"> · </span>
-              Décrochés <strong className="xos-numeric">{selectedCaller.kpis.decroche}</strong>
-              <span aria-hidden="true"> · </span>
-              Argumentés <strong className="xos-numeric">{selectedCaller.kpis.argumente}</strong>
-              {typeof selectedCaller.sessions_active === "number" && (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  Séances actives{" "}
-                  <strong className="xos-numeric">{selectedCaller.sessions_active}</strong>
-                </>
-              )}
-            </p>
+            <CallFunnelCard
+              stages={stagesFromPeriodKpis(selectedCaller.kpis)}
+              title={selectedCaller.label}
+              compact
+            />
+            <KpiFootnote
+              kpis={selectedCaller.kpis}
+              extras={
+                typeof selectedCaller.sessions_active === "number" ? (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    Séances en cours{" "}
+                    <strong className="xos-numeric">{selectedCaller.sessions_active}</strong>
+                  </>
+                ) : null
+              }
+            />
           </div>
         )}
       </GlassCard>
 
       <div className="pilotage-grid">
         <GlassCard className="pilotage-panel">
-          <h3>RDV attribués</h3>
-          <p className="pilotage-panel__hint">Chez qui le RDV est propriétaire dans Salesforce.</p>
+          <h3>RDV par commercial</h3>
+          <p className="pilotage-panel__hint">Chez qui le RDV est au calendrier.</p>
           {(data?.by_rdv_owner.length ?? 0) === 0 ? (
             <p className="pilotage-empty">Aucun RDV sur la période.</p>
           ) : (
             <table className="pilotage-table">
               <thead>
                 <tr>
-                  <th>Propriétaire</th>
+                  <th>Commercial</th>
                   <th>RDV</th>
                   <th>Dont via SDR</th>
                 </tr>
@@ -682,10 +663,10 @@ export function PilotageView({
         </GlassCard>
 
         <GlassCard className="pilotage-panel">
-          <h3>Détail des RDV</h3>
-          <p className="pilotage-panel__hint">Qui a pris l’appel → à qui le RDV est attribué.</p>
+          <h3>Derniers RDV</h3>
+          <p className="pilotage-panel__hint">Qui a appelé, à qui le RDV revient.</p>
           {(data?.rdv_attributions.length ?? 0) === 0 ? (
-            <p className="pilotage-empty">Aucun RDV journalisé sur la période.</p>
+            <p className="pilotage-empty">Aucun RDV sur la période.</p>
           ) : (
             <table className="pilotage-table">
               <thead>
@@ -693,7 +674,7 @@ export function PilotageView({
                   <th>Quand</th>
                   <th>Contact</th>
                   <th>Appelant</th>
-                  <th>Attribué à</th>
+                  <th>Pour</th>
                   <th>Séance</th>
                 </tr>
               </thead>
