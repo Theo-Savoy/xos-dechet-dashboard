@@ -165,7 +165,7 @@ describe("prospection_cockpit", () => {
         anchor: null,
       }),
     );
-    expect(body.heatmap).toHaveLength(42);
+    expect(body.heatmap).toHaveLength(91);
     expect(body.heatmap[0]).toEqual(
       expect.objectContaining({
         date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -198,7 +198,7 @@ describe("prospection_cockpit", () => {
     const body = await res.json();
     expect(body.period).toBe("day");
     expect(body.range.anchor).toBe("2026-06-01");
-    expect(body.heatmap).toHaveLength(42);
+    expect(body.heatmap).toHaveLength(91);
     const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
     expect(body.heatmap[body.heatmap.length - 1].date).toBe(today);
   });

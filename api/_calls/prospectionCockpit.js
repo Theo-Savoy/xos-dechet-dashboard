@@ -8,7 +8,7 @@ import {
 } from "./http.js";
 import { getProfile } from "./profileCache.js";
 
-const HEATMAP_DAYS = 42;
+const HEATMAP_DAYS = 91;
 
 function parisDayKey(iso) {
   return new Intl.DateTimeFormat("sv-SE", {

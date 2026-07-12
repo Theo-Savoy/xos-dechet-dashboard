@@ -213,8 +213,8 @@
 }
 
 .pilotage-heatmap {
-  --heatmap-gap: 0.2rem;
-  --heatmap-cell-h: 1.7rem;
+  --heatmap-gap: 0.18rem;
+  --heatmap-row-label: 1.65rem;
   display: grid;
   gap: 0.55rem;
   width: 100%;
@@ -295,45 +295,73 @@
   );
 }
 
-.pilotage-heatmap__weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--heatmap-gap);
+.pilotage-heatmap__matrix-wrap {
   width: 100%;
+  min-width: 0;
+}
+
+.pilotage-heatmap__months {
+  display: grid;
+  grid-template-columns: var(--heatmap-row-label) repeat(var(--week-cols, 1), minmax(0, 1fr));
+  gap: var(--heatmap-gap);
+  align-items: end;
+  min-height: 1rem;
+  margin-bottom: 0.1rem;
+}
+
+.pilotage-heatmap__corner {
+  display: block;
+}
+
+.pilotage-heatmap__month {
   font-size: 0.68rem;
+  line-height: 1.1;
   color: var(--xos-text-muted);
-  text-align: center;
+  text-transform: capitalize;
+  white-space: nowrap;
+  padding-left: 0.05rem;
+  margin-left: calc(var(--month-row, 0) * 20%);
+}
+
+.pilotage-heatmap__matrix {
+  display: grid;
+  gap: var(--heatmap-gap);
+  width: 100%;
+}
+
+.pilotage-heatmap__matrix-row {
+  display: grid;
+  grid-template-columns: var(--heatmap-row-label) repeat(var(--week-cols, 1), minmax(0, 1fr));
+  gap: var(--heatmap-gap);
+  align-items: stretch;
+}
+
+.pilotage-heatmap__row-label {
+  font-size: 0.64rem;
+  color: var(--xos-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 0.15rem;
   letter-spacing: 0.02em;
-}
-
-.pilotage-heatmap__grid {
-  display: grid;
-  gap: var(--heatmap-gap);
-  width: 100%;
-}
-
-.pilotage-heatmap__week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--heatmap-gap);
-  width: 100%;
 }
 
 .pilotage-heatmap__cell {
   position: relative;
   width: 100%;
-  height: var(--heatmap-cell-h);
+  aspect-ratio: 1;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--xos-border) 75%, transparent);
-  border-radius: 0.35rem;
+  max-height: 1.55rem;
+  border: 1px solid color-mix(in srgb, var(--xos-border) 72%, transparent);
+  border-radius: 0.3rem;
   color: var(--xos-text);
   font: inherit;
   cursor: pointer;
-  padding: 0.12rem 0.15rem;
+  padding: 0.1rem 0.12rem;
   display: grid;
   grid-template-rows: auto 1fr;
   align-items: start;
-  justify-items: start;
+  justify-items: stretch;
   background: rgba(255, 255, 255, 0.03);
   transition: border-color 0.12s ease, transform 0.1s ease, box-shadow 0.12s ease;
 }

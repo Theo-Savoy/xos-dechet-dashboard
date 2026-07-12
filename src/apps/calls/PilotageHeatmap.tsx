@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
 import type { CockpitHeatmapDay } from "./pilotageApi";
+import {
+  buildWeekdayHeatmapGrid,
+  WEEKDAY_LABELS,
+} from "./pilotageHeatmapLayout";
 
 export type HeatmapMetric = "calls" | "rdv";
 
@@ -10,57 +14,12 @@ type PilotageHeatmapProps = {
   onPrefetchDay?: (date: string) => void;
 };
 
-type WeekRow = {
-  key: string;
-  cells: Array<CockpitHeatmapDay | null>;
-};
-
-/** Group heatmap days into Mon–Sun weeks (pad empty leading/trailing cells). */
-function weeksFromDays(days: CockpitHeatmapDay[]): WeekRow[] {
-  if (days.length === 0) return [];
-
-  const byDate = new Map(days.map((d) => [d.date, d]));
-  const first = days[0].date;
-  const last = days[days.length - 1].date;
-
-  const [fy, fm, fd] = first.split("-").map(Number);
-  const firstUtc = new Date(Date.UTC(fy, fm - 1, fd, 12));
-  const firstDow = firstUtc.getUTCDay();
-  const mondayOffset = firstDow === 0 ? 6 : firstDow - 1;
-
-  const gridStart = new Date(firstUtc);
-  gridStart.setUTCDate(gridStart.getUTCDate() - mondayOffset);
-
-  const [ly, lm, ld] = last.split("-").map(Number);
-  const lastUtc = new Date(Date.UTC(ly, lm - 1, ld, 12));
-  const lastDow = lastUtc.getUTCDay();
-  const sundayPad = lastDow === 0 ? 0 : 7 - lastDow;
-  const gridEnd = new Date(lastUtc);
-  gridEnd.setUTCDate(gridEnd.getUTCDate() + sundayPad);
-
-  const weeks: WeekRow[] = [];
-  const cursor = new Date(gridStart);
-  while (cursor.getTime() <= gridEnd.getTime()) {
-    const cells: Array<CockpitHeatmapDay | null> = [];
-    const weekKey = cursor.toISOString().slice(0, 10);
-    for (let i = 0; i < 7; i++) {
-      const key = cursor.toISOString().slice(0, 10);
-      cells.push(byDate.get(key) ?? null);
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-    weeks.push({ key: weekKey, cells });
-  }
-  return weeks;
-}
-
 /** Soften low values so the gradient stays readable. */
 function intensity(value: number, max: number): number {
   if (max <= 0 || value <= 0) return 0;
   const linear = Math.min(1, value / max);
   return Math.sqrt(linear);
 }
-
-const WEEKDAYS = ["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"];
 
 export function PilotageHeatmap({
   days,
@@ -69,20 +28,24 @@ export function PilotageHeatmap({
   onPrefetchDay,
 }: PilotageHeatmapProps) {
   const [metric, setMetric] = useState<HeatmapMetric>("calls");
-  const weeks = useMemo(() => weeksFromDays(days), [days]);
+  const grid = useMemo(() => buildWeekdayHeatmapGrid(days), [days]);
   const maxValue = useMemo(
     () => days.reduce((m, d) => Math.max(m, metric === "calls" ? d.calls : d.rdv), 0),
     [days, metric],
   );
 
-  if (weeks.length === 0) return null;
+  if (grid.columns === 0) return null;
 
   return (
-    <section className="pilotage-heatmap" aria-label="Activité récente">
+    <section
+      className="pilotage-heatmap"
+      aria-label="Activité récente"
+      style={{ ["--week-cols" as string]: String(grid.columns) }}
+    >
       <div className="pilotage-heatmap__head">
         <div>
           <h3>Calendrier</h3>
-          <p className="pilotage-heatmap__hint">Cliquez un jour pour filtrer.</p>
+          <p className="pilotage-heatmap__hint">Jours ouvrés · cliquez pour filtrer.</p>
         </div>
         <div className="calls-seg pilotage-heatmap__metric" role="group" aria-label="Métrique affichée">
           <button
@@ -110,61 +73,77 @@ export function PilotageHeatmap({
         <span className="pilotage-heatmap__scale-bound xos-numeric">{maxValue}</span>
       </div>
 
-      <div className="pilotage-heatmap__weekdays" aria-hidden="true">
-        {WEEKDAYS.map((label) => (
-          <span key={label}>{label}</span>
-        ))}
-      </div>
+      <div className="pilotage-heatmap__matrix-wrap">
+        <div className="pilotage-heatmap__months" aria-hidden="true">
+          <span className="pilotage-heatmap__corner" />
+          {grid.monthMarkers.map((marker) => (
+            <span
+              key={`${marker.col}-${marker.row}-${marker.label}`}
+              className="pilotage-heatmap__month"
+              style={{
+                gridColumnStart: marker.col + 2,
+                ["--month-row" as string]: String(marker.row),
+              }}
+            >
+              {marker.label}
+            </span>
+          ))}
+        </div>
 
-      <div className="pilotage-heatmap__grid" role="grid" aria-label="Jours">
-        {weeks.map((week) => (
-          <div key={week.key} className="pilotage-heatmap__week" role="row">
-            {week.cells.map((cell, idx) => {
-              if (!cell) {
+        <div className="pilotage-heatmap__matrix" role="grid" aria-label="Jours ouvrés">
+          {grid.rows.map((weekRow, rowIdx) => (
+            <div key={WEEKDAY_LABELS[rowIdx]} className="pilotage-heatmap__matrix-row" role="row">
+              <span className="pilotage-heatmap__row-label" aria-hidden="true">
+                {WEEKDAY_LABELS[rowIdx]}
+              </span>
+              {weekRow.map((cell, colIdx) => {
+                if (!cell) {
+                  return (
+                    <span
+                      key={`empty-${rowIdx}-${colIdx}`}
+                      className="pilotage-heatmap__cell pilotage-heatmap__cell--empty"
+                      role="gridcell"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+
+                const value = metric === "calls" ? cell.calls : cell.rdv;
+                const heatT = intensity(value, maxValue);
+                const selected = selectedDate === cell.date;
+                const dayNum = Number(cell.date.slice(8, 10));
+
                 return (
-                  <span
-                    key={`${week.key}-empty-${idx}`}
-                    className="pilotage-heatmap__cell pilotage-heatmap__cell--empty"
+                  <button
+                    key={cell.date}
+                    type="button"
                     role="gridcell"
-                  />
+                    className={[
+                      "pilotage-heatmap__cell",
+                      `pilotage-heatmap__cell--${metric}`,
+                      value > 0 ? "pilotage-heatmap__cell--active" : "",
+                      selected ? "pilotage-heatmap__cell--selected" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={{ ["--heat-t" as string]: String(heatT) }}
+                    title={`${cell.label} · ${cell.calls} appels · ${cell.rdv} RDV`}
+                    aria-label={`${cell.label}, ${cell.calls} appels, ${cell.rdv} RDV`}
+                    aria-pressed={selected}
+                    onClick={() => onSelectDay(cell.date)}
+                    onMouseEnter={() => onPrefetchDay?.(cell.date)}
+                    onFocus={() => onPrefetchDay?.(cell.date)}
+                  >
+                    <span className="pilotage-heatmap__day">{dayNum}</span>
+                    {value > 0 ? (
+                      <span className="pilotage-heatmap__value xos-numeric">{value}</span>
+                    ) : null}
+                  </button>
                 );
-              }
-
-              const value = metric === "calls" ? cell.calls : cell.rdv;
-              const heatT = intensity(value, maxValue);
-              const selected = selectedDate === cell.date;
-              const dayNum = Number(cell.date.slice(8, 10));
-
-              return (
-                <button
-                  key={cell.date}
-                  type="button"
-                  role="gridcell"
-                  className={[
-                    "pilotage-heatmap__cell",
-                    `pilotage-heatmap__cell--${metric}`,
-                    value > 0 ? "pilotage-heatmap__cell--active" : "",
-                    selected ? "pilotage-heatmap__cell--selected" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  style={{ ["--heat-t" as string]: String(heatT) }}
-                  title={`${cell.label} · ${cell.calls} appels · ${cell.rdv} RDV`}
-                  aria-label={`${cell.label}, ${cell.calls} appels, ${cell.rdv} RDV`}
-                  aria-pressed={selected}
-                  onClick={() => onSelectDay(cell.date)}
-                  onMouseEnter={() => onPrefetchDay?.(cell.date)}
-                  onFocus={() => onPrefetchDay?.(cell.date)}
-                >
-                  <span className="pilotage-heatmap__day">{dayNum}</span>
-                  {value > 0 ? (
-                    <span className="pilotage-heatmap__value xos-numeric">{value}</span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+              })}
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
