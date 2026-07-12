@@ -1182,7 +1182,8 @@ describe("call targeting copy and controls", () => {
 
     render(<FilterBuilder {...filterBuilderProps} filters={legacyPreset} />);
 
-    expect(screen.getByLabelText("Finance")).toBeTruthy();
+    expect(screen.getByText("Finance")).toBeTruthy();
+    expect(screen.getByText("(obsolète)")).toBeTruthy();
     expect((screen.getByRole("checkbox", { name: /Jamais appelé/i }) as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByText("Durée min (sec)")).toBeNull();
   });

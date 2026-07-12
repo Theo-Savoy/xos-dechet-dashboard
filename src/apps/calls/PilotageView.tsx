@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
@@ -18,6 +18,42 @@ import {
 import "./pilotage.css";
 
 type DetailMode = "days" | "sessions";
+
+type CockpitSlice = {
+  data: ProspectionCockpit | null;
+  selectedSessionIds: Set<number>;
+};
+
+type CockpitSliceAction =
+  | { type: "apply"; cockpit: ProspectionCockpit }
+  | { type: "selectAll"; sessionIds: number[] }
+  | { type: "selectNone" }
+  | { type: "toggle"; id: number }
+  | { type: "clear" };
+
+function cockpitSliceReducer(state: CockpitSlice, action: CockpitSliceAction): CockpitSlice {
+  switch (action.type) {
+    case "apply":
+      return {
+        data: action.cockpit,
+        selectedSessionIds: new Set((action.cockpit.sessions ?? []).map((s) => s.id)),
+      };
+    case "selectAll":
+      return { ...state, selectedSessionIds: new Set(action.sessionIds) };
+    case "selectNone":
+      return { ...state, selectedSessionIds: new Set() };
+    case "toggle": {
+      const next = new Set(state.selectedSessionIds);
+      if (next.has(action.id)) next.delete(action.id);
+      else next.add(action.id);
+      return { ...state, selectedSessionIds: next };
+    }
+    case "clear":
+      return { data: null, selectedSessionIds: new Set() };
+    default:
+      return state;
+  }
+}
 
 type CallerCard = {
   user_id: string;
@@ -329,23 +365,29 @@ export function PilotageView({
   const [period, setPeriod] = useState<CockpitPeriod>("day");
   const [anchor, setAnchor] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<DetailMode>("sessions");
-  const [data, setData] = useState<ProspectionCockpit | null>(null);
+  const [cockpitSlice, dispatchCockpit] = useReducer(cockpitSliceReducer, {
+    data: null,
+    selectedSessionIds: new Set<number>(),
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cockpitCache = useRef<Map<string, ProspectionCockpit>>(new Map());
   const prefetching = useRef<Set<string>>(new Set());
+  const loadSeq = useRef(0);
   const dataRef = useRef<ProspectionCockpit | null>(null);
   const [pinned, setPinned] = useState(false);
-  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<number>>(new Set());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [selectedCallerId, setSelectedCallerId] = useState<string | null>(null);
   const [showAllRdv, setShowAllRdv] = useState(false);
 
+  const data = cockpitSlice.data;
+  const selectedSessionIds = cockpitSlice.selectedSessionIds;
+
   const RDV_PREVIEW_LIMIT = 5;
 
   const applyCockpit = useCallback((next: ProspectionCockpit, activePeriod: CockpitPeriod) => {
-    setData(next);
-    setSelectedSessionIds(new Set((next.sessions ?? []).map((s) => s.id)));
+    dispatchCockpit({ type: "apply", cockpit: next });
+    dataRef.current = next;
     setExpandedDay(null);
     setSelectedCallerId(null);
     setShowAllRdv(false);
@@ -356,13 +398,15 @@ export function PilotageView({
 
   const load = useCallback(async () => {
     if (!token) return;
+    const seq = ++loadSeq.current;
     const key = cockpitCacheKey(period, anchor);
     const cached = cockpitCache.current.get(key);
 
     if (cached) {
-      applyCockpit(cached, period);
-      dataRef.current = cached;
-      setLoading(false);
+      if (seq === loadSeq.current) {
+        applyCockpit(cached, period);
+        setLoading(false);
+      }
     } else if (!dataRef.current) {
       setLoading(true);
     }
@@ -370,21 +414,24 @@ export function PilotageView({
 
     try {
       const next = await fetchProspectionCockpit(token, period, anchor);
+      if (seq !== loadSeq.current) return;
       cockpitCache.current.set(key, next);
       applyCockpit(next, period);
-      dataRef.current = next;
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       if (!cached && !dataRef.current) {
         if (err instanceof PilotageApiError && err.code === "forbidden") {
           setError("Réservé aux managers.");
         } else {
           setError("Impossible de charger Pilotage.");
         }
-        setData(null);
+        dispatchCockpit({ type: "clear" });
         dataRef.current = null;
       }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) {
+        setLoading(false);
+      }
     }
   }, [token, period, anchor, applyCockpit]);
 
@@ -437,10 +484,14 @@ export function PilotageView({
   const sessions = data?.sessions ?? [];
   const byDay = data?.by_day ?? [];
 
-  const selectedSessions = useMemo(
-    () => sessions.filter((s) => selectedSessionIds.has(s.id)),
-    [sessions, selectedSessionIds],
-  );
+  const selectedSessions = useMemo(() => {
+    const picked = sessions.filter((s) => selectedSessionIds.has(s.id));
+    // Transition entre jours : ids encore ceux de la période précédente.
+    if (sessions.length > 0 && selectedSessionIds.size > 0 && picked.length === 0) {
+      return sessions;
+    }
+    return picked;
+  }, [sessions, selectedSessionIds]);
 
   const filtered = useMemo(() => {
     if (!data) {
@@ -486,20 +537,15 @@ export function PilotageView({
   );
 
   const selectAllSessions = () => {
-    setSelectedSessionIds(new Set(sessions.map((s) => s.id)));
+    dispatchCockpit({ type: "selectAll", sessionIds: sessions.map((s) => s.id) });
   };
 
   const selectNoSessions = () => {
-    setSelectedSessionIds(new Set());
+    dispatchCockpit({ type: "selectNone" });
   };
 
   const toggleSession = (id: number) => {
-    setSelectedSessionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    dispatchCockpit({ type: "toggle", id });
   };
 
   if (sessionLoading || (loading && !data && !error)) {
