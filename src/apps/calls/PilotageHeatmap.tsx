@@ -1,9 +1,13 @@
+import { useMemo, useState } from "react";
 import type { CockpitHeatmapDay } from "./pilotageApi";
+
+export type HeatmapMetric = "calls" | "rdv";
 
 type PilotageHeatmapProps = {
   days: CockpitHeatmapDay[];
   selectedDate?: string | null;
   onSelectDay: (date: string) => void;
+  onPrefetchDay?: (date: string) => void;
 };
 
 type WeekRow = {
@@ -60,10 +64,14 @@ export function PilotageHeatmap({
   days,
   selectedDate,
   onSelectDay,
+  onPrefetchDay,
 }: PilotageHeatmapProps) {
-  const weeks = weeksFromDays(days);
-  const maxCalls = days.reduce((m, d) => Math.max(m, d.calls), 0);
-  const maxRdv = days.reduce((m, d) => Math.max(m, d.rdv), 0);
+  const [metric, setMetric] = useState<HeatmapMetric>("calls");
+  const weeks = useMemo(() => weeksFromDays(days), [days]);
+  const maxValue = useMemo(
+    () => days.reduce((m, d) => Math.max(m, metric === "calls" ? d.calls : d.rdv), 0),
+    [days, metric],
+  );
 
   if (weeks.length === 0) return null;
 
@@ -71,16 +79,30 @@ export function PilotageHeatmap({
     <section className="pilotage-heatmap" aria-label="Activité récente">
       <div className="pilotage-heatmap__head">
         <h3>Calendrier</h3>
-        <div className="pilotage-heatmap__legend" aria-hidden="true">
-          <span className="pilotage-heatmap__legend-item">
-            <span className="pilotage-heatmap__swatch pilotage-heatmap__swatch--calls" />
+        <div className="calls-seg pilotage-heatmap__metric" role="group" aria-label="Métrique affichée">
+          <button
+            type="button"
+            className={`calls-seg__btn${metric === "calls" ? " calls-seg__btn--active" : ""}`}
+            aria-pressed={metric === "calls"}
+            onClick={() => setMetric("calls")}
+          >
             Appels
-          </span>
-          <span className="pilotage-heatmap__legend-item">
-            <span className="pilotage-heatmap__swatch pilotage-heatmap__swatch--rdv" />
+          </button>
+          <button
+            type="button"
+            className={`calls-seg__btn${metric === "rdv" ? " calls-seg__btn--active" : ""}`}
+            aria-pressed={metric === "rdv"}
+            onClick={() => setMetric("rdv")}
+          >
             RDV
-          </span>
+          </button>
         </div>
+      </div>
+
+      <div className="pilotage-heatmap__scale" aria-hidden="true">
+        <span className="pilotage-heatmap__scale-bound xos-numeric">0</span>
+        <div className={`pilotage-heatmap__gradient pilotage-heatmap__gradient--${metric}`} />
+        <span className="pilotage-heatmap__scale-bound xos-numeric">{maxValue}</span>
       </div>
 
       <div className="pilotage-heatmap__weekdays" aria-hidden="true">
@@ -103,8 +125,8 @@ export function PilotageHeatmap({
                 );
               }
 
-              const callT = intensity(cell.calls, maxCalls);
-              const rdvT = intensity(cell.rdv, maxRdv);
+              const value = metric === "calls" ? cell.calls : cell.rdv;
+              const heatT = intensity(value, maxValue);
               const selected = selectedDate === cell.date;
               const dayNum = Number(cell.date.slice(8, 10));
 
@@ -113,23 +135,22 @@ export function PilotageHeatmap({
                   key={cell.date}
                   type="button"
                   role="gridcell"
-                  className={`pilotage-heatmap__cell${selected ? " pilotage-heatmap__cell--selected" : ""}`}
-                  style={{
-                    ["--call-t" as string]: String(callT),
-                    ["--rdv-t" as string]: String(rdvT),
-                  }}
+                  className={[
+                    "pilotage-heatmap__cell",
+                    `pilotage-heatmap__cell--${metric}`,
+                    selected ? "pilotage-heatmap__cell--selected" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={{ ["--heat-t" as string]: String(heatT) }}
                   title={`${cell.label} · ${cell.calls} appels · ${cell.rdv} RDV`}
                   aria-label={`${cell.label}, ${cell.calls} appels, ${cell.rdv} RDV`}
                   aria-pressed={selected}
                   onClick={() => onSelectDay(cell.date)}
+                  onMouseEnter={() => onPrefetchDay?.(cell.date)}
+                  onFocus={() => onPrefetchDay?.(cell.date)}
                 >
                   <span className="pilotage-heatmap__day">{dayNum}</span>
-                  {cell.rdv > 0 && (
-                    <span
-                      className="pilotage-heatmap__rdv-dot"
-                      style={{ opacity: 0.35 + rdvT * 0.65 }}
-                    />
-                  )}
                 </button>
               );
             })}

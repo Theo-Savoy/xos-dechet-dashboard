@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
@@ -181,6 +181,10 @@ function todayParisDate(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
 }
 
+function cockpitCacheKey(period: CockpitPeriod, anchor: string | null): string {
+  return `${period}:${anchor ?? "live"}`;
+}
+
 function shiftAnchor(anchor: string, period: CockpitPeriod, dir: -1 | 1): string {
   const [y, m, d] = anchor.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d, 12));
@@ -291,36 +295,82 @@ export function PilotageView({
   const [detailMode, setDetailMode] = useState<DetailMode>("sessions");
   const [data, setData] = useState<ProspectionCockpit | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cockpitCache = useRef<Map<string, ProspectionCockpit>>(new Map());
+  const prefetching = useRef<Set<string>>(new Set());
   const [pinned, setPinned] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<number>>(new Set());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [selectedCallerId, setSelectedCallerId] = useState<string | null>(null);
+  const [showAllRdv, setShowAllRdv] = useState(false);
+
+  const RDV_PREVIEW_LIMIT = 5;
+
+  const applyCockpit = useCallback((next: ProspectionCockpit, activePeriod: CockpitPeriod) => {
+    setData(next);
+    setSelectedSessionIds(new Set((next.sessions ?? []).map((s) => s.id)));
+    setExpandedDay(null);
+    setSelectedCallerId(null);
+    setShowAllRdv(false);
+    if (activePeriod === "day") {
+      setDetailMode("sessions");
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
+    const key = cockpitCacheKey(period, anchor);
+    const cached = cockpitCache.current.get(key);
+
+    if (cached) {
+      applyCockpit(cached, period);
+      setLoading(false);
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+      setRefreshing(false);
+    }
     setError(null);
+
     try {
       const next = await fetchProspectionCockpit(token, period, anchor);
-      setData(next);
-      setSelectedSessionIds(new Set((next.sessions ?? []).map((s) => s.id)));
-      setExpandedDay(null);
-      setSelectedCallerId(null);
-      if (period === "day") {
-        setDetailMode("sessions");
-      }
+      cockpitCache.current.set(key, next);
+      applyCockpit(next, period);
     } catch (err) {
-      if (err instanceof PilotageApiError && err.code === "forbidden") {
-        setError("Réservé aux managers.");
-      } else {
-        setError("Impossible de charger Pilotage.");
+      if (!cached) {
+        if (err instanceof PilotageApiError && err.code === "forbidden") {
+          setError("Réservé aux managers.");
+        } else {
+          setError("Impossible de charger Pilotage.");
+        }
+        setData(null);
       }
-      setData(null);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [token, period, anchor]);
+  }, [token, period, anchor, applyCockpit]);
+
+  const prefetchDay = useCallback(
+    (date: string) => {
+      if (!token) return;
+      const key = cockpitCacheKey("day", date);
+      if (cockpitCache.current.has(key) || prefetching.current.has(key)) return;
+      prefetching.current.add(key);
+      void fetchProspectionCockpit(token, "day", date)
+        .then((next) => {
+          cockpitCache.current.set(key, next);
+        })
+        .catch(() => {
+          /* ignore prefetch errors */
+        })
+        .finally(() => {
+          prefetching.current.delete(key);
+        });
+    },
+    [token],
+  );
 
   useEffect(() => {
     void load();
@@ -417,6 +467,11 @@ export function PilotageView({
   const todayStr = todayParisDate();
   const canGoNext = shiftAnchor(effectiveAnchor, period, 1) <= todayStr;
   const heatmapDays = data?.heatmap ?? [];
+  const rdvAttributions = data?.rdv_attributions ?? [];
+  const hasMoreRdv = rdvAttributions.length > RDV_PREVIEW_LIMIT;
+  const visibleRdvAttributions = showAllRdv
+    ? rdvAttributions
+    : rdvAttributions.slice(0, RDV_PREVIEW_LIMIT);
 
   const goPrev = () => setAnchor(shiftAnchor(effectiveAnchor, period, -1));
   const goNext = () => {
@@ -424,12 +479,13 @@ export function PilotageView({
     if (next <= todayStr) setAnchor(next);
   };
   const selectHeatmapDay = (date: string) => {
+    prefetchDay(date);
     setPeriod("day");
     setAnchor(date);
   };
 
   return (
-    <div className="calls-view pilotage-app">
+    <div className={`calls-view pilotage-app${refreshing ? " pilotage-app--refreshing" : ""}`}>
       <header className="calls-view__header pilotage-header">
         <div>
           <Tag variant="accent">Combo</Tag>
@@ -546,6 +602,7 @@ export function PilotageView({
         days={heatmapDays}
         selectedDate={period === "day" ? effectiveAnchor : null}
         onSelectDay={selectHeatmapDay}
+        onPrefetchDay={prefetchDay}
       />
 
       {detailMode === "sessions" && (
@@ -795,9 +852,22 @@ export function PilotageView({
         </GlassCard>
 
         <GlassCard className="pilotage-panel">
-          <h3>Derniers RDV</h3>
-          <p className="pilotage-panel__hint">Qui a appelé, à qui le RDV revient.</p>
-          {(data?.rdv_attributions.length ?? 0) === 0 ? (
+          <div className="pilotage-panel__toolbar">
+            <div>
+              <h3>Derniers RDV</h3>
+              <p className="pilotage-panel__hint">Qui a appelé, à qui le RDV revient.</p>
+            </div>
+            {hasMoreRdv && (
+              <button
+                type="button"
+                className="calls-seg__btn"
+                onClick={() => setShowAllRdv((open) => !open)}
+              >
+                {showAllRdv ? "Réduire" : `Tout voir (${rdvAttributions.length})`}
+              </button>
+            )}
+          </div>
+          {rdvAttributions.length === 0 ? (
             <p className="pilotage-empty">Aucun RDV sur la période.</p>
           ) : (
             <table className="pilotage-table">
@@ -811,7 +881,7 @@ export function PilotageView({
                 </tr>
               </thead>
               <tbody>
-                {data?.rdv_attributions.map((row) => (
+                {visibleRdvAttributions.map((row) => (
                   <tr key={row.session_contact_id}>
                     <td className="xos-numeric">{formatWhen(row.called_at)}</td>
                     <td>
