@@ -1,9 +1,27 @@
-/* Weekly Perf — spacing & motion tokens */
+/*
+ * Lundi responsive contract
+ * Widths: minimum supported 320px; compact <600px; intermediate 600–899px;
+ * desktop >=900px; no artificial maximum (the app fills its X OS window).
+ * Overflow audit (pre-fix line numbers):
+ * 1. L109 display toggle could not shrink and competed with the control cluster.
+ * 2. L228 tooltip max-content width could exceed a narrow app window.
+ * 3. L452–459 metric grids fixed up to five columns and cramped long labels.
+ * 4. L505 the pace split reserved 150px regardless of parent width.
+ * 5. L702 the five-track funnel needed a parent-width compact layout.
+ * 6. L854/L868 filter controls had rigid minimum widths inside wrapping rows.
+ * 7. L1135 the 760px ledger table could push ancestors instead of its scroll wrapper.
+ * Fixed risks: 7. The ledger remains horizontally scrollable by design.
+ */
 .weekly-app {
   --weekly-gap: 1.5rem;
   --weekly-gap-sm: .75rem;
   --weekly-radius: .75rem;
   --weekly-ease: cubic-bezier(.22, 1, .36, 1);
+  container-name: weekly-app;
+  container-type: inline-size;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 100%;
   box-sizing: border-box;
   padding: clamp(1rem, 2.4vw, 1.75rem);
@@ -225,7 +243,8 @@
 .weekly-tip__panel {
   z-index: 30050;
   box-sizing: border-box;
-  width: max-content;
+  width: min(22rem, calc(100vw - 2rem));
+  max-width: 100%;
   padding: .7rem .85rem;
   border-radius: .65rem;
   border: 1px solid color-mix(in srgb, var(--xos-border) 90%, var(--xos-accent));
@@ -359,7 +378,7 @@
 /* —— Pulse cards —— */
 .weekly-pulse-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17.5rem), 1fr));
   gap: var(--weekly-gap-sm);
   align-items: stretch;
 }
@@ -1132,7 +1151,7 @@
 
 .weekly-table {
   width: 100%;
-  min-width: 760px;
+  min-width: min(47.5rem, max(100%, 40rem));
   border-collapse: separate;
   border-spacing: 0;
   color: var(--xos-text);
@@ -1298,6 +1317,75 @@
     gap: .55rem;
   }
   .weekly-leading-rate { justify-self: start; padding: 0; }
+}
+
+@container weekly-app (max-width: 899px) {
+  .weekly-pace,
+  .weekly-leading-funnel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .weekly-leading-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+
+  .weekly-metrics,
+  .weekly-metrics--2,
+  .weekly-metrics--3,
+  .weekly-metrics--4,
+  .weekly-metrics--5,
+  .weekly-quarter-stats,
+  .weekly-custom-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  }
+
+  .weekly-controls__cluster,
+  .weekly-tables,
+  .weekly-table-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .weekly-table-wrap {
+    max-width: 100%;
+    overflow: auto;
+    overscroll-behavior-inline: contain;
+  }
+}
+
+@container weekly-app (max-width: 599px) {
+  .weekly-app {
+    --weekly-gap: 1rem;
+    padding: 0.85rem;
+  }
+
+  .weekly-period,
+  .weekly-controls__cluster,
+  .weekly-controls .xos-select,
+  .weekly-controls .xos-select__trigger,
+  .weekly-display-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .weekly-controls__cluster {
+    align-items: stretch;
+  }
+
+  .weekly-seg {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .weekly-seg .xos-btn {
+    flex: 1 1 auto;
+  }
+
+  .weekly-pace-hero,
+  .weekly-conversion {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 600px) {

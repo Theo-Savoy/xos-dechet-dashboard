@@ -1,0 +1,25 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Labo at 500px > keeps the shell bounded and exposes responsive CSS 1`] = `
+{
+  "layout": "compact",
+  "surface": "cleaner-app",
+  "width": 500,
+}
+`;
+
+exports[`Labo at 800px > keeps the shell bounded and exposes responsive CSS 1`] = `
+{
+  "layout": "intermediate",
+  "surface": "cleaner-app",
+  "width": 800,
+}
+`;
+
+exports[`Labo at 1200px > keeps the shell bounded and exposes responsive CSS 1`] = `
+{
+  "layout": "desktop",
+  "surface": "cleaner-app",
+  "width": 1200,
+}
+`;

@@ -1,4 +1,23 @@
+/*
+ * Labo responsive contract
+ * Widths: minimum supported 320px; compact <560px; intermediate 560–899px;
+ * desktop >=900px; wide desktop >=1100px; no artificial maximum.
+ * Overflow audit (pre-fix line numbers):
+ * 1. L77 tab groups were inline-flex; the parent scroll region is now explicitly bounded.
+ * 2. L243/L846 fixed four/six-column KPI grids cramped labels in resized windows.
+ * 3. L325/L337 filter minimum widths competed in one nowrap toolbar.
+ * 4. L361 the bulk bar had three rigid grid tracks and only stacked at 560px.
+ * 5. L518 the 74rem table could push ancestors; scrolling is isolated to its wrapper.
+ * 6. L597/L602 opportunity-name widths were fixed and long titles needed ellipsis.
+ * 7. L1304 the detail split required 18rem even when the app—not viewport—was narrow.
+ * Fixed risks: 7. Intentional wide data tables remain horizontally scrollable.
+ */
 .cleaner-app {
+  box-sizing: border-box;
+  container-name: cleaner-app;
+  container-type: inline-size;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 100%;
   overflow: auto;
@@ -72,6 +91,8 @@
   display: flex;
   gap: 0.25rem;
   overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
 }
 .cleaner-tab-group {
   display: inline-flex;
@@ -358,7 +379,10 @@
   bottom: 0.75rem;
   z-index: 4;
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 14rem), 1fr)
+  );
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
@@ -510,12 +534,14 @@
 .cleaner-opportunities__table-wrap {
   min-width: 0;
   overflow: auto;
+  max-width: 100%;
+  overscroll-behavior: contain;
   border: 1px solid var(--xos-border);
   border-radius: 0.75rem;
 }
 .cleaner-opportunities__table {
   width: max-content;
-  min-width: 74rem;
+  min-width: min(74rem, max(100%, 56rem));
   border-collapse: collapse;
   font-size: 0.78rem;
 }
@@ -594,12 +620,12 @@
   background: color-mix(in srgb, var(--xos-alert) 14%, transparent);
 }
 .cleaner-opportunities__name-cell {
-  width: 18rem;
-  max-width: 18rem;
+  width: clamp(12rem, 25vw, 18rem);
+  max-width: clamp(12rem, 25vw, 18rem);
 }
 .cleaner-opportunities__name {
   display: inline-block;
-  max-width: 16rem;
+  max-width: min(16rem, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
@@ -1043,6 +1069,17 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .cleaner-app *,
+  .cleaner-app *::before,
+  .cleaner-app *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* V3-A workspace composition: a compact queue with an optional detail rail. */
 .cleaner-shell h1,
 .cleaner-shell h2,
@@ -1415,6 +1452,77 @@
     max-height: none;
     overflow: auto;
     background: var(--xos-window-content-bg);
+  }
+}
+
+@container cleaner-app (max-width: 899px) {
+  .cleaner-opportunities__kpis,
+  .cleaner-opportunities__analytics-kpis,
+  .cleaner-opportunities__analytics-summary,
+  .cleaner-opportunities__analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  }
+
+  .cleaner-opportunities__filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    overflow: visible;
+  }
+
+  .cleaner-opportunities__search,
+  .cleaner-opportunities__reasons-filter {
+    grid-column: auto;
+  }
+
+  .cleaner-opportunities__bulk-bar {
+    top: 0.5rem;
+  }
+
+  .cleaner-opportunities__main.has-detail {
+    display: block;
+  }
+
+  .cleaner-opportunities__detail-column {
+    display: contents;
+  }
+
+  .cleaner-opportunities__detail {
+    position: fixed;
+    z-index: 20;
+    inset: 0.75rem;
+    width: auto;
+    max-height: none;
+    overflow: auto;
+  }
+}
+
+@container cleaner-app (max-width: 559px) {
+  .cleaner-shell__header,
+  .cleaner-cockpit-module,
+  .cleaner-opportunities__intro,
+  .cleaner-opportunities__selection {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .cleaner-cockpit__totals,
+  .cleaner-opportunities__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cleaner-cockpit-module .xos-btn,
+  .cleaner-opportunities__bulk-actions,
+  .cleaner-opportunities__bulk-actions > * {
+    width: 100%;
+  }
+
+  .cleaner-opportunities__bulk-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cleaner-opportunities__bulk-actions {
+    justify-content: start;
   }
 }
 

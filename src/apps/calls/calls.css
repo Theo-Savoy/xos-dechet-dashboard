@@ -1,4 +1,25 @@
+/*
+ * Combo responsive contract
+ * Widths: minimum supported 320px; compact <720px; intermediate 720–899px;
+ * desktop >=900px; no artificial maximum (the app fills its X OS window).
+ * Overflow audit (pre-fix line numbers):
+ * 1. L64/L236 fixed four-column KPI grids compressed labels at compact widths.
+ * 2. L126 card overflow hid content without first allowing flex children to shrink.
+ * 3. L356 the seven-column calendar needed smaller gaps/cell padding in narrow windows.
+ * 4. L853 the editor's fixed grid columns could exceed a resized app window.
+ * 5. L1099 and L1702 wide data grids relied on min-width; their wrappers now own scrolling.
+ * 6. L1552 recall rows used a fixed 7.5rem leading column until a viewport breakpoint.
+ * 7. L2074 viewport media queries did not follow the resizable X OS window; container
+ *    queries now adapt sessions, cockpit grids, text truncation and action groups.
+ * Fixed risks: 7. Intentional wide tables remain horizontally scrollable.
+ */
 .calls-app {
+  box-sizing: border-box;
+  container-name: calls-app;
+  container-type: inline-size;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 100%;
   padding: clamp(1rem, 2.5vw, 1.5rem);
   color: var(--xos-text);
@@ -118,6 +139,10 @@
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 22rem), 1fr)
+  );
   gap: 0.65rem;
 }
 
@@ -163,12 +188,20 @@
   gap: 0.5rem;
 }
 
+.calls-session-card__top > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .calls-session-card__top strong {
   font-size: 1.02rem;
   letter-spacing: -0.02em;
 }
 
 .calls-session-card__date {
+  flex: 0 0 auto;
   color: var(--xos-text-muted);
   font-size: 0.82rem;
 }
@@ -2095,6 +2128,68 @@
 
   .calls-cockpit-list__rows li > :nth-child(n + 3) {
     grid-column: 2;
+  }
+}
+
+/* The app is resizable inside a desktop window, so component width—not the
+   browser viewport—is the reliable responsive signal. */
+@container calls-app (max-width: 899px) {
+  .calls-stats,
+  .calls-recap-stats,
+  .calls-hub-kpis__grid,
+  .calls-cockpit-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  }
+
+  .calls-cockpit-side,
+  .calls-session-editor__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calls-cockpit-list__scroll,
+  .calls-preview__list-wrap {
+    min-width: 0;
+    max-width: 100%;
+    overflow: auto;
+  }
+}
+
+@container calls-app (max-width: 719px) {
+  .calls-app {
+    padding: 0.85rem;
+  }
+
+  .calls-view__actions,
+  .calls-hub-toolbar__primary,
+  .calls-session-card__actions,
+  .calls-runner-actions__row {
+    width: 100%;
+  }
+
+  .calls-view__actions > *,
+  .calls-session-card__actions > * {
+    flex: 1 1 10rem;
+  }
+
+  .calls-session-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calls-calendar {
+    padding: 0.7rem;
+  }
+
+  .calls-calendar__weekdays,
+  .calls-calendar__grid {
+    gap: 0.18rem;
+  }
+
+  .calls-recalls__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calls-recalls__meta {
+    justify-items: start;
   }
 }
 
