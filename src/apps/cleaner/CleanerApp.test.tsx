@@ -145,7 +145,7 @@ describe('CleanerApp component', () => {
     render(<CleanerApp />);
 
     await waitFor(() =>
-      expect(screen.getAllByTestId('cleaner-cockpit-module')).toHaveLength(2),
+      expect(screen.getAllByTestId('cleaner-cockpit-module')).toHaveLength(1),
     );
     expect(
       screen
@@ -174,13 +174,13 @@ describe('CleanerApp component', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Ouvrir Secteurs obsolètes' }),
+        screen.getByRole('button', {
+          name: 'Ouvrir Opportunités suspectes ou abandonnées',
+        }),
       ).toBeTruthy(),
     );
     expect(
-      screen.getByRole('button', {
-        name: 'Ouvrir Opportunités suspectes ou abandonnées',
-      }),
-    ).toBeTruthy();
+      screen.queryByRole('button', { name: 'Ouvrir Secteurs obsolètes' }),
+    ).toBeNull();
   });
 });

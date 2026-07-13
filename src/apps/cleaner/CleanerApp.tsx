@@ -90,17 +90,10 @@ export default function CleanerApp({ params }: CleanerAppProps) {
     void fetchOpportunityWorkspace(session.accessToken)
       .then((workspace) => {
         if (cancelled) return;
-        const sectorsSummary = {
-          moduleId: 'recettes',
-          recipeId: 'sectors',
-          label: 'Secteurs obsolètes',
-          criticality: 'warning' as const,
-          anomalyCount: 0,
-          affectedRecordCount: 0,
-          resolvedPeriodCount: 0,
-          previousPeriodDelta: null,
-          lastRefreshedAt: null,
-        };
+        // The cleaner home only summarises the Opportunity workspace.
+        // The 'Secteurs obsolètes' recipe is reachable from the Recettes
+        // top-level tab (deduped in V17) and is no longer mirrored here
+        // to avoid rendering the same recipe twice.
         if (workspace.items.length === 0) {
           setCockpit({
             status: 'ready',
@@ -116,7 +109,6 @@ export default function CleanerApp({ params }: CleanerAppProps) {
                 previousPeriodDelta: null,
                 lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
               },
-              sectorsSummary,
             ],
           });
           return;
@@ -126,7 +118,6 @@ export default function CleanerApp({ params }: CleanerAppProps) {
           (total, item) => total + item.anomalies.length,
           0,
         );
-        // One to four records need attention; five or more are critical. Zero stays the dedicated empty state.
         const criticality =
           workspace.items.length >= 5 ? 'critical' : 'warning';
         setCockpit({
@@ -143,7 +134,6 @@ export default function CleanerApp({ params }: CleanerAppProps) {
               previousPeriodDelta: null,
               lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
             },
-            sectorsSummary,
           ],
         });
       })
