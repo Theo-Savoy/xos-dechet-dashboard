@@ -1,11 +1,19 @@
+import { useMemo, useState } from 'react';
 import type { OpportunityWorkspaceItem } from './api';
-import { reasonFamilyForRule, type OpportunityFilters } from './filterState';
+import {
+  reasonFamilyKeyForRule,
+  REASON_FAMILY_LABELS,
+  REASON_FAMILY_ORDER,
+  type OpportunityFilters,
+} from './filterState';
 
 type OpportunitiesFiltersProps = {
   items: OpportunityWorkspaceItem[];
   filters: OpportunityFilters;
   onChange: (filters: OpportunityFilters) => void;
   onReset: () => void;
+  showTreated?: boolean;
+  onToggleTreated?: () => void;
 };
 
 function options(
@@ -26,15 +34,32 @@ export function OpportunitiesFilters({
   filters,
   onChange,
   onReset,
+  showTreated = false,
+  onToggleTreated,
 }: OpportunitiesFiltersProps) {
-  const reasons = new Map<string, Map<string, string>>();
-  items.forEach((item) =>
-    item.anomalies.forEach((anomaly) => {
-      const family = reasonFamilyForRule(anomaly.ruleId);
-      if (!reasons.has(family)) reasons.set(family, new Map());
-      reasons.get(family)?.set(anomaly.ruleId, anomaly.label);
-    }),
-  );
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+  const reasons = useMemo(() => {
+    const grouped = new Map<string, Map<string, string>>();
+    items.forEach((item) =>
+      item.anomalies.forEach((anomaly) => {
+        const family = reasonFamilyKeyForRule(anomaly.ruleId);
+        if (!grouped.has(family)) grouped.set(family, new Map());
+        grouped.get(family)?.set(anomaly.ruleId, anomaly.label);
+      }),
+    );
+    return grouped;
+  }, [items]);
+
+  const selectedReasonIds = Object.values(filters.reasonFamilies).flat();
+  const reasonLabel =
+    selectedReasonIds.length === 0
+      ? 'Toutes les raisons'
+      : selectedReasonIds.length === 1
+        ? [...reasons.values()]
+            .flatMap((family) => [...family.entries()])
+            .find(([ruleId]) => ruleId === selectedReasonIds[0])?.[1] ||
+          '1 raison sélectionnée'
+        : `${selectedReasonIds.length} raisons sélectionnées`;
 
   const selectSingle = (
     key: 'owners' | 'categories' | 'saleTypes',
@@ -51,13 +76,23 @@ export function OpportunitiesFilters({
     onChange({ ...filters, reasonFamilies });
   };
 
+  const groupedReasons = [
+    ...REASON_FAMILY_ORDER,
+    ...[...reasons.keys()].filter(
+      (family) =>
+        !REASON_FAMILY_ORDER.includes(
+          family as (typeof REASON_FAMILY_ORDER)[number],
+        ),
+    ),
+  ];
+
   return (
     <section
       className="cleaner-opportunities__filters"
       aria-label="Filtres des opportunités"
     >
-      <label className="cleaner-opportunities__search">
-        Rechercher
+      <label className="cleaner-opportunities__filter-field cleaner-opportunities__search">
+        <span>Rechercher</span>
         <input
           aria-label="Rechercher"
           type="search"
@@ -69,8 +104,8 @@ export function OpportunitiesFilters({
           placeholder="Nom, compte, owner…"
         />
       </label>
-      <label>
-        Owner
+      <label className="cleaner-opportunities__filter-field">
+        <span>Owner</span>
         <select
           aria-label="Owner"
           value={filters.owners[0] || ''}
@@ -84,8 +119,8 @@ export function OpportunitiesFilters({
           ))}
         </select>
       </label>
-      <label>
-        Catégorie
+      <label className="cleaner-opportunities__filter-field">
+        <span>Catégorie</span>
         <select
           aria-label="Catégorie"
           value={filters.categories[0] || ''}
@@ -99,8 +134,8 @@ export function OpportunitiesFilters({
           ))}
         </select>
       </label>
-      <label>
-        Type de vente
+      <label className="cleaner-opportunities__filter-field">
+        <span>Type de vente</span>
         <select
           aria-label="Type de vente"
           value={filters.saleTypes[0] || ''}
@@ -114,29 +149,77 @@ export function OpportunitiesFilters({
           ))}
         </select>
       </label>
-      {[...reasons.entries()].map(([family, familyReasons]) => (
-        <fieldset key={family} className="cleaner-opportunities__reason-group">
-          <legend>Raisons · {family}</legend>
-          {[...familyReasons.entries()].map(([ruleId, label]) => (
-            <label key={ruleId}>
-              <input
-                type="checkbox"
-                checked={
-                  filters.reasonFamilies[family]?.includes(ruleId) || false
-                }
-                onChange={() => toggleReason(family, ruleId)}
-              />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-      ))}
+      <div className="cleaner-opportunities__filter-field cleaner-opportunities__reasons-filter">
+        <span>Raisons</span>
+        <button
+          className="cleaner-opportunities__filter-trigger"
+          type="button"
+          aria-label="Raisons"
+          aria-haspopup="true"
+          aria-expanded={reasonsOpen}
+          aria-controls="opportunity-reasons-menu"
+          onClick={() => setReasonsOpen((open) => !open)}
+        >
+          <span>{reasonLabel}</span>
+          <span aria-hidden="true">⌄</span>
+        </button>
+        {reasonsOpen ? (
+          <div
+            className="cleaner-opportunities__reasons-menu"
+            id="opportunity-reasons-menu"
+            role="menu"
+          >
+            {groupedReasons.map((family) => {
+              const familyReasons = reasons.get(family);
+              if (!familyReasons?.size) return null;
+              const label =
+                REASON_FAMILY_LABELS[
+                  family as keyof typeof REASON_FAMILY_LABELS
+                ] || 'Autres anomalies';
+              return (
+                <fieldset key={family}>
+                  <legend>{label}</legend>
+                  {[...familyReasons.entries()]
+                    .sort((left, right) =>
+                      left[1].localeCompare(right[1], 'fr-FR'),
+                    )
+                    .map(([ruleId, label]) => (
+                      <label key={ruleId}>
+                        <input
+                          type="checkbox"
+                          checked={
+                            filters.reasonFamilies[family]?.includes(ruleId) ||
+                            false
+                          }
+                          onChange={() => toggleReason(family, ruleId)}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                </fieldset>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
       <button
-        className="xos-btn xos-btn--secondary"
+        className={`cleaner-opportunities__treated-toggle${showTreated ? ' is-active' : ''}`}
         type="button"
-        onClick={onReset}
+        aria-label="Traitées"
+        aria-pressed={showTreated}
+        onClick={onToggleTreated}
       >
-        Réinitialiser les filtres
+        Traitées
+      </button>
+      <button
+        className="cleaner-opportunities__filters-reset"
+        type="button"
+        onClick={() => {
+          setReasonsOpen(false);
+          onReset();
+        }}
+      >
+        Réinitialiser
       </button>
     </section>
   );

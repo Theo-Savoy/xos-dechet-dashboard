@@ -19,6 +19,7 @@ export type OpportunityFilters = {
   categories: string[];
   saleTypes: string[];
   reasonFamilies: Record<string, string[]>;
+  criticality?: 'critical' | 'warning' | 'healthy';
 };
 
 export type OpportunityWorkspaceState = {
@@ -29,7 +30,29 @@ export type OpportunityWorkspaceState = {
   activeView: 'cleaning' | 'analytics' | 'history';
 };
 
-export const OPPORTUNITY_PAGE_SIZE = 2;
+export const OPPORTUNITY_PAGE_SIZE = 25;
+
+export const REASON_FAMILY_LABELS = {
+  closedate: '⏰ Close date dépassée',
+  activity: "⚡ Pas d'activité",
+  amount_missing: '💰 Absence de montant',
+  prob_zero: '📉 Probabilité',
+  owner_inactive: '👤 Propriétaire inactif / ancien',
+  age: "📅 Ancienneté d'opportunité",
+  stalled: '📌 Étape enlisée',
+  incoherent_amount: '⚠️ Montant incohérent',
+} as const;
+
+export const REASON_FAMILY_ORDER = [
+  'closedate',
+  'activity',
+  'amount_missing',
+  'prob_zero',
+  'owner_inactive',
+  'age',
+  'stalled',
+  'incoherent_amount',
+] as const;
 
 export function createInitialOpportunityFilters(): OpportunityFilters {
   return {
@@ -45,12 +68,42 @@ function text(value: unknown): string {
   return value == null ? '' : String(value).toLocaleLowerCase('fr-FR');
 }
 
+export function reasonFamilyKeyForRule(ruleId: string): string {
+  if (ruleId.includes('close_date') || ruleId.includes('closedate'))
+    return 'closedate';
+  if (ruleId.includes('activity')) return 'activity';
+  if (ruleId.includes('probability')) return 'prob_zero';
+  if (ruleId.includes('owner')) return 'owner_inactive';
+  if (ruleId.includes('age') || ruleId.includes('created_over')) return 'age';
+  if (ruleId.includes('stage')) return 'stalled';
+  if (
+    ruleId.includes('amount_implausible') ||
+    ruleId.includes('amount.implausible') ||
+    ruleId.includes('incoherent_amount') ||
+    ruleId.includes('amount.incoherent')
+  )
+    return 'incoherent_amount';
+  if (ruleId.includes('amount_missing') || ruleId.includes('amount.missing'))
+    return 'amount_missing';
+  return 'other';
+}
+
+/**
+ * Keep the coarse family names used by analytics navigation backwards
+ * compatible while the cleaning selector uses the legacy's eight groups.
+ */
 export function reasonFamilyForRule(ruleId: string): string {
-  if (ruleId.includes('owner')) return 'owner';
-  if (ruleId.includes('amount') || ruleId.includes('probability'))
+  const family = reasonFamilyKeyForRule(ruleId);
+  if (family === 'owner_inactive') return 'owner';
+  if (
+    family === 'amount_missing' ||
+    family === 'incoherent_amount' ||
+    family === 'prob_zero'
+  )
     return 'amount';
-  if (ruleId.includes('close_date') || ruleId.includes('age')) return 'timing';
-  if (ruleId.includes('stage')) return 'stage';
+  if (family === 'closedate' || family === 'activity' || family === 'age')
+    return 'timing';
+  if (family === 'stalled') return 'stage';
   return 'other';
 }
 
@@ -58,6 +111,16 @@ export function matchesOpportunityFilters(
   item: OpportunityDiagnostic,
   filters: OpportunityFilters,
 ): boolean {
+  if (filters.criticality) {
+    const criticality = item.anomalies.some(
+      (anomaly) => anomaly.severity === 'critical',
+    )
+      ? 'critical'
+      : item.anomalies.some((anomaly) => anomaly.severity === 'warning')
+        ? 'warning'
+        : 'healthy';
+    if (criticality !== filters.criticality) return false;
+  }
   const query = text(filters.search).trim();
   if (
     query &&
@@ -83,7 +146,8 @@ export function matchesOpportunityFilters(
     if (!rules.length) return true;
     return item.anomalies.some(
       (anomaly) =>
-        reasonFamilyForRule(anomaly.ruleId) === family &&
+        (reasonFamilyKeyForRule(anomaly.ruleId) === family ||
+          reasonFamilyForRule(anomaly.ruleId) === family) &&
         rules.includes(anomaly.ruleId),
     );
   });

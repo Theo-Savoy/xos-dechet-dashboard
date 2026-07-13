@@ -119,7 +119,7 @@ export function CleanerShell({
         onClose={close}
         visibleModules={visibleModules}
       />
-      <main className="cleaner-shell__body">
+      <main className="cleaner-shell__body" data-active-module={state.active}>
         {state.active === 'home' && (
           <CleanerCockpit state={cockpit} onOpenModule={open} />
         )}

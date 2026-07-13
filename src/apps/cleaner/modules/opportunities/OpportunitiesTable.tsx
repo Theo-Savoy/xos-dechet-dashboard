@@ -67,6 +67,15 @@ export function OpportunitiesTable({
                 >
                   {label}
                 </button>
+                {key === 'score' ? (
+                  <span
+                    className="cleaner-opportunities__score-help"
+                    title="Le score priorise les anomalies les plus urgentes."
+                    aria-hidden="true"
+                  >
+                    ⓘ
+                  </span>
+                ) : null}
               </th>
             ))}
             <th scope="col">Raisons</th>
@@ -142,7 +151,7 @@ export function OpportunitiesTable({
           Précédente
         </button>
         <span>
-          Page {state.page} sur {pageCount}
+          Page {state.page} / {pageCount}
         </span>
         <button
           className="xos-btn xos-btn--secondary"

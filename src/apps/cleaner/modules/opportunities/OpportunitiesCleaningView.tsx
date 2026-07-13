@@ -32,6 +32,32 @@ type OpportunitiesCleaningViewProps = {
   onCloseDetail: () => void;
 };
 
+function wasTreated(item: OpportunityWorkspaceItem): boolean {
+  if (item.loss_reason) return true;
+  return Boolean(
+    item.history?.some((entry) => {
+      const action = String(
+        entry.action || entry.action_type || '',
+      ).toLowerCase();
+      return (
+        action.includes('update') ||
+        action.includes('close') ||
+        action.includes('treat')
+      );
+    }),
+  );
+}
+
+function criticalityFor(
+  item: OpportunityWorkspaceItem,
+): 'critical' | 'warning' | 'healthy' {
+  if (item.anomalies.some((anomaly) => anomaly.severity === 'critical'))
+    return 'critical';
+  if (item.anomalies.some((anomaly) => anomaly.severity === 'warning'))
+    return 'warning';
+  return 'healthy';
+}
+
 export function OpportunitiesCleaningView({
   accessToken,
   capabilities,
@@ -51,10 +77,17 @@ export function OpportunitiesCleaningView({
   const [result, setResult] = useState<OpportunityCommandResult | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [commandLoading, setCommandLoading] = useState(false);
+  const [showTreated, setShowTreated] = useState(false);
+  const workspaceItems = useMemo(
+    () => items.filter((item) => wasTreated(item) === showTreated),
+    [items, showTreated],
+  );
   const filteredItems = useMemo(
     () =>
-      items.filter((item) => matchesOpportunityFilters(item, state.filters)),
-    [items, state.filters],
+      workspaceItems.filter((item) =>
+        matchesOpportunityFilters(item, state.filters),
+      ),
+    [workspaceItems, state.filters],
   );
   const sortedItems = useMemo(
     () => sortOpportunityItems(filteredItems, state.sort),
@@ -187,13 +220,15 @@ export function OpportunitiesCleaningView({
       )
       .finally(() => setCommandLoading(false));
   };
-  const inactiveOwners = items.filter((item) =>
-    item.anomalies.some((anomaly) => anomaly.ruleId.includes('owner.inactive')),
+  const criticalCount = filteredItems.filter(
+    (item) => criticalityFor(item) === 'critical',
   ).length;
-  const incoherentAmounts = items.filter((item) =>
-    item.anomalies.some((anomaly) => anomaly.ruleId.includes('amount')),
+  const warningCount = filteredItems.filter(
+    (item) => criticalityFor(item) === 'warning',
   ).length;
-  const noActivity = items.filter((item) => !item.last_activity).length;
+  const healthyCount = filteredItems.filter(
+    (item) => criticalityFor(item) === 'healthy',
+  ).length;
 
   return (
     <section
@@ -206,7 +241,7 @@ export function OpportunitiesCleaningView({
           <h2 id="cleaner-opportunities-title">Opportunités à corriger</h2>
         </div>
         <span className="cleaner-opportunities__freshness">
-          Données Salesforce · {items.length} reçues
+          Données Salesforce · {workspaceItems.length} reçues
         </span>
       </div>
       <div
@@ -214,109 +249,125 @@ export function OpportunitiesCleaningView({
         aria-label="Indicateurs de nettoyage"
       >
         <button
+          className="cleaner-opportunities__kpi cleaner-opportunities__kpi--total"
           type="button"
           aria-label={`Opportunités à nettoyer (${filteredItems.length})`}
-          onClick={() => updateFilters({ ...state.filters, search: '' })}
+          onClick={() =>
+            updateFilters({
+              ...state.filters,
+              search: '',
+              criticality: undefined,
+            })
+          }
         >
           <strong>{filteredItems.length}</strong>
           <span>À nettoyer</span>
         </button>
         <button
+          className="cleaner-opportunities__kpi cleaner-opportunities__kpi--critical"
           type="button"
+          aria-label={`Opportunités critiques (${criticalCount})`}
           onClick={() =>
-            updateFilters({
-              ...state.filters,
-              reasonFamilies: { owner: ['opportunity.owner.inactive'] },
-            })
+            updateFilters({ ...state.filters, criticality: 'critical' })
           }
         >
-          <strong>{inactiveOwners}</strong>
-          <span>Owners inactifs</span>
+          <strong>{criticalCount}</strong>
+          <span>Critiques</span>
         </button>
         <button
+          className="cleaner-opportunities__kpi cleaner-opportunities__kpi--warning"
           type="button"
+          aria-label={`Opportunités avec avertissement (${warningCount})`}
           onClick={() =>
-            updateFilters({
-              ...state.filters,
-              reasonFamilies: {
-                amount: [
-                  'opportunity.amount.missing',
-                  'opportunity.amount.implausible',
-                ],
-              },
-            })
+            updateFilters({ ...state.filters, criticality: 'warning' })
           }
         >
-          <strong>{incoherentAmounts}</strong>
-          <span>Montants incohérents</span>
+          <strong>{warningCount}</strong>
+          <span>Avertissements</span>
         </button>
         <button
+          className="cleaner-opportunities__kpi cleaner-opportunities__kpi--healthy"
           type="button"
+          aria-label={`Opportunités sans anomalie (${healthyCount})`}
           onClick={() =>
-            updateFilters({
-              ...state.filters,
-              reasonFamilies: { other: ['opportunity.activity.missing'] },
-            })
+            updateFilters({ ...state.filters, criticality: 'healthy' })
           }
         >
-          <strong>{noActivity}</strong>
-          <span>Sans activité</span>
+          <strong>{healthyCount}</strong>
+          <span>Sans anomalie</span>
         </button>
       </div>
-      <OpportunitiesFilters
-        items={items}
-        filters={state.filters}
-        onChange={updateFilters}
-        onReset={() =>
-          updateFilters({
-            search: '',
-            owners: [],
-            categories: [],
-            saleTypes: [],
-            reasonFamilies: {},
-          })
-        }
-      />
-      <BulkActionBar
-        selectedCount={state.selectedIds.size}
-        filteredCount={filteredItems.length}
-        currentPageCount={pageItems.length}
-        currentPageSelectedCount={
-          pageItems.filter((item) => state.selectedIds.has(item.id)).length
-        }
-        allFilteredSelected={
-          filteredItems.length > 0 &&
-          filteredItems.every((item) => state.selectedIds.has(item.id))
-        }
-        capabilities={capabilities}
-        onSelectAll={selectAll}
-        onClear={clearSelection}
-        onStartAction={startCommand}
-      />
-      {filteredItems.length ? (
-        <OpportunitiesTable
-          items={pageItems}
-          state={{ ...state, page: safePage }}
-          pageCount={page.pageCount}
-          onSort={sort}
-          onToggleSelection={toggle}
-          onTogglePage={togglePage}
-          onPageChange={(pageNumber) =>
-            onStateChange({
-              ...state,
-              page: Math.min(Math.max(pageNumber, 1), page.pageCount),
+      <div className="cleaner-opportunities__workspace">
+        <OpportunitiesFilters
+          items={workspaceItems}
+          filters={state.filters}
+          onChange={updateFilters}
+          onReset={() =>
+            updateFilters({
+              search: '',
+              owners: [],
+              categories: [],
+              saleTypes: [],
+              reasonFamilies: {},
             })
           }
-          onOpenDetail={onOpenDetail}
+          showTreated={showTreated}
+          onToggleTreated={() => {
+            setShowTreated((value) => !value);
+            onStateChange({ ...state, page: 1, selectedIds: new Set() });
+          }}
         />
-      ) : (
-        <div className="cleaner-opportunities__empty" role="status">
-          Aucune opportunité à nettoyer.
+        <BulkActionBar
+          selectedCount={state.selectedIds.size}
+          filteredCount={filteredItems.length}
+          currentPageCount={pageItems.length}
+          currentPageSelectedCount={
+            pageItems.filter((item) => state.selectedIds.has(item.id)).length
+          }
+          allFilteredSelected={
+            filteredItems.length > 0 &&
+            filteredItems.every((item) => state.selectedIds.has(item.id))
+          }
+          capabilities={capabilities}
+          onSelectAll={selectAll}
+          onClear={clearSelection}
+          onStartAction={startCommand}
+        />
+        <div
+          className={`cleaner-opportunities__main${detail ? ' has-detail' : ''}`}
+        >
+          <div className="cleaner-opportunities__table-column">
+            {filteredItems.length ? (
+              <OpportunitiesTable
+                items={pageItems}
+                state={{ ...state, page: safePage }}
+                pageCount={page.pageCount}
+                onSort={sort}
+                onToggleSelection={toggle}
+                onTogglePage={togglePage}
+                onPageChange={(pageNumber) =>
+                  onStateChange({
+                    ...state,
+                    page: Math.min(Math.max(pageNumber, 1), page.pageCount),
+                  })
+                }
+                onOpenDetail={onOpenDetail}
+              />
+            ) : (
+              <div className="cleaner-opportunities__empty" role="status">
+                {showTreated
+                  ? 'Aucune opportunité traitée.'
+                  : 'Aucune opportunité à nettoyer.'}
+              </div>
+            )}
+          </div>
+          {detail ? (
+            <div className="cleaner-opportunities__detail-column">
+              <OpportunityDetailPanel item={detail} onClose={onCloseDetail} />
+            </div>
+          ) : null}
         </div>
-      )}
-      {detail ? (
-        <OpportunityDetailPanel item={detail} onClose={onCloseDetail} />
-      ) : null}
+      </div>
       {commandAction ? (
         <CommandPreviewPanel
           action={commandAction}

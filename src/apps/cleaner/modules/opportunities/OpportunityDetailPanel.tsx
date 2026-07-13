@@ -47,16 +47,32 @@ export function OpportunityDetailPanel({
           <dt>Montant</dt>
           <dd>{item.amount ?? '—'}</dd>
         </div>
+        <div>
+          <dt>Proba</dt>
+          <dd>{item.probability == null ? '—' : `${item.probability}%`}</dd>
+        </div>
       </dl>
-      <section>
+      <section className="cleaner-opportunities__detail-reasons">
         <h3>Preuves et raisons</h3>
         {item.anomalies.length ? (
           item.anomalies.map((anomaly) => (
-            <article key={anomaly.ruleId}>
-              <strong>{anomaly.label}</strong>
-              <p>
-                {anomaly.severity} · score {anomaly.score}
-              </p>
+            <article
+              className="cleaner-opportunities__anomaly-card"
+              key={anomaly.ruleId}
+            >
+              <div className="cleaner-opportunities__anomaly-header">
+                <strong>{anomaly.label}</strong>
+                <span
+                  className={`cleaner-opportunities__severity cleaner-opportunities__severity--${anomaly.severity}`}
+                >
+                  {anomaly.severity === 'critical'
+                    ? 'Critique'
+                    : 'Avertissement'}
+                </span>
+              </div>
+              <span className="cleaner-opportunities__anomaly-score">
+                Score {anomaly.score}
+              </span>
               {anomaly.evidence.map((evidence) => (
                 <dl
                   key={`${anomaly.ruleId}-${evidence.field}`}
