@@ -3178,6 +3178,61 @@
   gap: 0.75rem;
 }
 
+.calls-sound-prefs {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--xos-border) 65%, transparent);
+}
+
+.calls-sound-prefs__head h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+}
+
+.calls-sound-prefs__head p {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.calls-sound-prefs__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.calls-sound-prefs__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.calls-sound-prefs__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.calls-sound-prefs__row input {
+  margin-top: 0.2rem;
+}
+
+.calls-sound-prefs__copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.calls-sound-prefs__label {
+  font-size: 0.88rem;
+}
+
+.calls-sound-prefs__hint {
+  font-size: 0.74rem;
+}
+
 .calls-demo {
   place-items: center;
   background:

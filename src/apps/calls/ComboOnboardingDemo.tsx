@@ -1,8 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, GlassCard } from "../../components/ui";
 import { markComboDemoSeen } from "./comboKeyboard";
+import type { ComboSoundGroup } from "./comboSoundPrefs";
 import { useComboOverlay } from "./comboOverlay";
-import { playComboSound, unlockComboAudio } from "./comboSounds";
+import { playComboSound, unlockComboAudio, type SoundKind } from "./comboSounds";
+
+type DemoBeat = {
+  at: number;
+  title: string;
+  body: string;
+  sound: SoundKind;
+  group?: ComboSoundGroup;
+  chip?: string;
+};
+
+const BEATS: DemoBeat[] = [
+  { at: 0, title: "Combo", body: "Prospection au rythme du clavier.", sound: "demo" },
+  { at: 3_000, title: "1", body: "Résultat — Appel non décroché", sound: "result-pick", chip: "Non décroché" },
+  { at: 7_500, title: "⇧3", body: "Rappel dans 3 jours", sound: "recall", group: "navigation", chip: "+3 j" },
+  { at: 13_000, title: "⌘↵", body: "Loggué · contact suivant", sound: "success" },
+  { at: 17_000, title: "⌘K · ?", body: "Toutes les actions, toujours sous la main.", sound: "whoosh" },
+];
 
 type ComboOnboardingDemoProps = {
   open: boolean;
@@ -10,14 +28,6 @@ type ComboOnboardingDemoProps = {
 };
 
 const DEMO_MS = 22_000;
-
-const BEATS = [
-  { at: 0, title: "Combo", body: "Prospection au rythme du clavier.", sound: "demo" as const },
-  { at: 3_000, title: "1", body: "Résultat — Appel non décroché", sound: "tick" as const, chip: "Non décroché" },
-  { at: 7_500, title: "⇧3", body: "Rappel dans 3 jours", sound: "recall" as const, chip: "+3 j" },
-  { at: 13_000, title: "⌘↵", body: "Loggué · contact suivant", sound: "success" as const },
-  { at: 17_000, title: "⌘K · ?", body: "Toutes les actions, toujours sous la main.", sound: "whoosh" as const },
-];
 
 export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps) {
   const [elapsed, setElapsed] = useState(0);
@@ -55,7 +65,7 @@ export function ComboOnboardingDemo({ open, onClose }: ComboOnboardingDemoProps)
     for (const [index, beat] of BEATS.entries()) {
       if (elapsed < beat.at || played.has(index)) continue;
       setPlayed((prev) => new Set(prev).add(index));
-      playComboSound(beat.sound);
+      playComboSound(beat.sound, beat.group ? { group: beat.group } : undefined);
     }
     if (elapsed > DEMO_MS) {
       finish(false);

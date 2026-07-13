@@ -23,6 +23,7 @@ import {
   type ComboActionId,
   writeSoundsEnabled,
 } from "./comboKeyboard";
+import { readSoundPrefs } from "./comboSoundPrefs";
 import { playComboSound, playRdvCelebrateSound } from "./comboSounds";
 import { RdvConfetti } from "./RdvConfetti";
 import {
@@ -212,10 +213,12 @@ function ResultButtons({
   value,
   onChange,
   disabledValues = [],
+  onPick,
 }: {
   value: ResultatCall;
   onChange: (value: ResultatCall) => void;
   disabledValues?: ResultatCall[];
+  onPick?: () => void;
 }) {
   return (
     <div className="calls-result-seg" role="group" aria-label="Résultat de l'appel">
@@ -230,7 +233,10 @@ function ResultButtons({
             aria-pressed={value === opt.value}
             disabled={disabled}
             title={disabled ? "Sélectionnez un seul contact pour planifier un RDV" : digit}
-            onClick={() => onChange(opt.value)}
+            onClick={() => {
+              if (opt.value !== value) onPick?.();
+              onChange(opt.value);
+            }}
           >
             <span>{opt.label}</span>
             <kbd className="calls-kbd calls-kbd--inline" aria-hidden="true">{digit}</kbd>
@@ -408,6 +414,7 @@ export function RunnerView({
   const [helpOpen, setHelpOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !hasSeenComboDemo());
   const [soundsEnabled, setSoundsEnabled] = useState(readSoundsEnabled);
+  const [soundPrefs, setSoundPrefs] = useState(readSoundPrefs);
   const [sessionRdvCount, setSessionRdvCount] = useState(() => countSessionRdvs(contacts));
   const [rdvGoal, setRdvGoal] = useState<number | null>(() =>
     isRecallQueue ? null : readRdvGoal(session.id),
@@ -769,7 +776,7 @@ export function RunnerView({
       recallAt: willSendRecall ? recallAt : null,
       doNotCall,
     });
-    playComboSound(willSendRecall ? "recall" : "success", soundsEnabled);
+    playComboSound(willSendRecall ? "recall" : "success", { master: soundsEnabled });
     setToast({
       kind: "plain",
       message: willSendRecall
@@ -907,7 +914,7 @@ export function RunnerView({
       const next = pool[nextIndex];
       if (!next) return;
       openDetail(next.id);
-      playComboSound("tick", soundsEnabled);
+      playComboSound("nav", { master: soundsEnabled });
     },
     [contacts, filteredContacts, focusedContact?.id, focusedId, openDetail, soundsEnabled],
   );
@@ -925,13 +932,13 @@ export function RunnerView({
           const next = resultatFromDigit(digit);
           if (!next) return;
           setResultat(next);
-          playComboSound("tick", soundsEnabled);
+          playComboSound("result-pick", { master: soundsEnabled });
           return;
         }
         case "toggle-recall": {
           if (mode !== "detail" || focusedContact?.status !== "pending") return;
           setScheduleRecall((v) => !v);
-          playComboSound("tick", soundsEnabled);
+          playComboSound("nav", { master: soundsEnabled });
           return;
         }
         case "recall-0":
@@ -944,13 +951,13 @@ export function RunnerView({
           if (!preset) return;
           setScheduleRecall(true);
           handleDefaultRecallDays(preset.days);
-          playComboSound("recall", soundsEnabled);
+          playComboSound("recall", { master: soundsEnabled, group: "navigation" });
           return;
         }
         case "toggle-npa": {
           if (mode !== "detail" || focusedContact?.status !== "pending") return;
           setDoNotCall((v) => !v);
-          playComboSound("warn", soundsEnabled);
+          playComboSound("warn", { master: soundsEnabled });
           return;
         }
         case "log-next":
@@ -964,25 +971,25 @@ export function RunnerView({
           return;
         case "mode-list":
           setMode("list");
-          playComboSound("tick", soundsEnabled);
+          playComboSound("nav", { master: soundsEnabled });
           return;
         case "mode-fiche":
           if (focusedContact) openDetail(focusedContact.id);
           else if (currentContact) openDetail(currentContact.id);
           else setMode("detail");
-          playComboSound("tick", soundsEnabled);
+          playComboSound("nav", { master: soundsEnabled });
           return;
         case "call": {
           const phone = focusedContact?.phone;
           if (!phone) return;
           window.open(`tel:${phone}`, "_self");
-          playComboSound("tick", soundsEnabled);
+          playComboSound("nav", { master: soundsEnabled });
           return;
         }
         case "defer": {
           if (isRecallQueue || !focusedContact || focusedContact.status !== "pending") return;
           openDefer([focusedContact.id]);
-          playComboSound("tick", soundsEnabled);
+          playComboSound("nav", { master: soundsEnabled });
           return;
         }
         case "remove": {
@@ -992,11 +999,11 @@ export function RunnerView({
         }
         case "help":
           setHelpOpen(true);
-          playComboSound("whoosh", soundsEnabled);
+          playComboSound("whoosh", { master: soundsEnabled });
           return;
         case "command-bar":
           setCommandBarOpen(true);
-          playComboSound("whoosh", soundsEnabled);
+          playComboSound("whoosh", { master: soundsEnabled });
           return;
         case "replay-demo":
           setDemoOpen(true);
@@ -1034,7 +1041,7 @@ export function RunnerView({
         event.stopPropagation();
         if (demoOpen || helpOpen) return;
         setCommandBarOpen(true);
-        playComboSound("whoosh", soundsEnabled);
+        playComboSound("whoosh", { master: soundsEnabled });
         return;
       }
 
@@ -1063,7 +1070,7 @@ export function RunnerView({
       if (event.key === "?" || (event.shiftKey && event.key === "/")) {
         event.preventDefault();
         setHelpOpen(true);
-        playComboSound("whoosh", soundsEnabled);
+        playComboSound("whoosh", { master: soundsEnabled });
         return;
       }
 
@@ -1249,7 +1256,7 @@ export function RunnerView({
             variant="secondary"
             onClick={() => {
               setCommandBarOpen(true);
-              playComboSound("whoosh", soundsEnabled);
+              playComboSound("whoosh", { master: soundsEnabled });
             }}
             title="Command bar (⌘K)"
             aria-label="Command bar"
@@ -1260,7 +1267,7 @@ export function RunnerView({
             variant="secondary"
             onClick={() => {
               setHelpOpen(true);
-              playComboSound("whoosh", soundsEnabled);
+              playComboSound("whoosh", { master: soundsEnabled });
             }}
             title="Aide raccourcis (?)"
             aria-label="Aide raccourcis"
@@ -1465,6 +1472,7 @@ export function RunnerView({
                   value={bulkResultat}
                   onChange={setBulkResultat}
                   disabledValues={singleSelectedId ? [] : ["RDV planifié"]}
+                  onPick={() => playComboSound("result-pick", { master: soundsEnabled })}
                 />
               </div>
               <details className="calls-bulk-options">
@@ -2077,7 +2085,11 @@ export function RunnerView({
                 <div className="calls-fb-control__label">
                   <span>Résultat</span>
                 </div>
-                <ResultButtons value={resultat} onChange={setResultat} />
+                <ResultButtons
+                  value={resultat}
+                  onChange={setResultat}
+                  onPick={() => playComboSound("result-pick", { master: soundsEnabled })}
+                />
               </div>
 
               {canRecall && (
@@ -2294,6 +2306,9 @@ export function RunnerView({
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         onOpenCommandBar={() => setCommandBarOpen(true)}
+        soundsEnabled={soundsEnabled}
+        soundPrefs={soundPrefs}
+        onSoundPrefsChange={setSoundPrefs}
       />
       <ComboOnboardingDemo open={demoOpen} onClose={() => setDemoOpen(false)} />
     </div>

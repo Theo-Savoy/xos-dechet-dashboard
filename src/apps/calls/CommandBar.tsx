@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, GlassCard } from "../../components/ui";
+import { ComboSoundSettings } from "./ComboSoundSettings";
 import {
   type ComboActionDef,
   type ComboActionId,
   filterComboActions,
 } from "./comboKeyboard";
+import type { ComboSoundPrefs } from "./comboSoundPrefs";
 import { useComboOverlay } from "./comboOverlay";
 
 type CommandBarProps = {
@@ -149,9 +151,19 @@ type ShortcutHelpProps = {
   open: boolean;
   onClose: () => void;
   onOpenCommandBar: () => void;
+  soundsEnabled: boolean;
+  soundPrefs: ComboSoundPrefs;
+  onSoundPrefsChange: (next: ComboSoundPrefs) => void;
 };
 
-export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpProps) {
+export function ShortcutHelp({
+  open,
+  onClose,
+  onOpenCommandBar,
+  soundsEnabled,
+  soundPrefs,
+  onSoundPrefsChange,
+}: ShortcutHelpProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const handleEscape = useCallback(() => onClose(), [onClose]);
   useComboOverlay(open, rootRef, handleEscape);
@@ -211,6 +223,11 @@ export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpPr
             ))}
           </ul>
         </div>
+        <ComboSoundSettings
+          prefs={soundPrefs}
+          onChange={onSoundPrefsChange}
+          masterEnabled={soundsEnabled}
+        />
         <div className="calls-help__foot">
           <Button
             variant="secondary"
