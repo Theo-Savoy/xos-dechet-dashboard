@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRealtimeNotifications } from './useRealtimeNotifications';
 import { NotificationsProvider, useNotificationsStore } from './notificationsStore';
 
-const { getSession, channel, on, unsubscribe } = vi.hoisted(() => {
+const { getSession, channel, on, subscribe, unsubscribe } = vi.hoisted(() => {
   const callbacks: Array<(payload: { new: unknown }) => void> = [];
   const channelObject = {
     on: vi.fn((_event: string, _filter: unknown, callback: (payload: { new: unknown }) => void) => {
@@ -53,6 +53,22 @@ function Harness() {
   return <output>{notifications.map((notification) => notification.title).join(',')}</output>;
 }
 
+function StatusHarness({
+  onStatus,
+  onEvent,
+}: {
+  onStatus: (status: string) => void;
+  onEvent: () => void;
+}) {
+  useRealtimeNotifications({
+    accessToken: 'token',
+    onInsert: () => {},
+    onStatus,
+    onEvent,
+  });
+  return null;
+}
+
 describe('useRealtimeNotifications', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -92,5 +108,31 @@ describe('useRealtimeNotifications', () => {
 
     cleanup();
     expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it('reports channel status and postgres changes to health observers', async () => {
+    const onStatus = vi.fn();
+    const onEvent = vi.fn();
+    render(
+      <NotificationsProvider>
+        <StatusHarness onStatus={onStatus} onEvent={onEvent} />
+      </NotificationsProvider>,
+    );
+
+    await waitFor(() => expect(on).toHaveBeenCalled());
+    const subscribeCall = (subscribe as unknown as {
+      mock: { calls: unknown[][] };
+    }).mock.calls[0];
+    const subscribeCallback = subscribeCall?.[0] as
+      | ((status: string) => void)
+      | undefined;
+    subscribeCallback?.('SUBSCRIBED');
+    expect(onStatus).toHaveBeenCalledWith('SUBSCRIBED');
+
+    const insertCallback = on.mock.calls[0]?.[2] as
+      | ((payload: { new: unknown }) => void)
+      | undefined;
+    act(() => insertCallback?.({ new: incoming }));
+    expect(onEvent).toHaveBeenCalledTimes(1);
   });
 });

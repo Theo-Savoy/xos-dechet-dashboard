@@ -17,11 +17,19 @@ export async function GET(request) {
   const unreadOnly = url.searchParams.get("unread") === "1";
   const limitRaw = Number(url.searchParams.get("limit") || 40);
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 40;
+  const since = url.searchParams.get("since") || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    await client.rpc("purge_user_notifications", { max_age_hours: 24 });
+  } catch {
+    // Purging is best effort; a missing migration must not break reads.
+  }
 
   let query = client
     .from("user_notifications")
     .select("id, kind, title, body, payload, created_at, read_at")
     .eq("recipient_id", user.id)
+    .gt("created_at", since)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (unreadOnly) query = query.is("read_at", null);
@@ -33,6 +41,7 @@ export async function GET(request) {
     .from("user_notifications")
     .select("id", { count: "exact", head: true })
     .eq("recipient_id", user.id)
+    .gt("created_at", since)
     .is("read_at", null);
   if (countError) return respond(500, { error: "notifications_count_failed" });
 

@@ -20,8 +20,10 @@ export function reactionEmoji(item: UserNotification): string | null {
 
 export async function fetchNotifications(
   token: string,
+  sinceIso?: string,
 ): Promise<{ notifications: UserNotification[]; unread_count: number }> {
-  const res = await fetch('/api/notifications?limit=40', {
+  const sinceParam = sinceIso ? `&since=${encodeURIComponent(sinceIso)}` : '';
+  const res = await fetch(`/api/notifications?limit=40${sinceParam}`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',

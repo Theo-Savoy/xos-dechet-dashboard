@@ -58,6 +58,10 @@ type NotificationsStoreValue = {
   removeBurst: (id: string) => void;
   reactedAt: Record<number, number>;
   markReacted: (id: number, at?: number) => void;
+  realtimeHealthy: boolean;
+  realtimeLastEventAt: number | null;
+  setRealtimeHealthy: (healthy: boolean) => void;
+  markRealtimeEvent: (at?: number) => void;
   controlCenterOpenRequest: number;
   requestOpenControlCenter: () => void;
 };
@@ -78,6 +82,10 @@ export function NotificationsProvider({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [bursts, setBursts] = useState<FloatingReactionBurst[]>([]);
   const [reactedAt, setReactedAt] = useState<Record<number, number>>({});
+  const [realtimeHealthy, setRealtimeHealthy] = useState(false);
+  const [realtimeLastEventAt, setRealtimeLastEventAt] = useState<number | null>(
+    null,
+  );
   const [controlCenterOpenRequest, setControlCenterOpenRequest] = useState(0);
 
   const addBurstToStore = useCallback((input: AddBurstInput) => {
@@ -102,6 +110,16 @@ export function NotificationsProvider({
     );
   }, []);
 
+  const setRealtimeHealthyState = useCallback((healthy: boolean) => {
+    setRealtimeHealthy(healthy);
+    if (!healthy) setRealtimeLastEventAt(null);
+  }, []);
+
+  const markRealtimeEvent = useCallback((at = Date.now()) => {
+    setRealtimeHealthy(true);
+    setRealtimeLastEventAt(at);
+  }, []);
+
   const requestOpenControlCenter = useCallback(() => {
     setControlCenterOpenRequest((request) => request + 1);
   }, []);
@@ -116,6 +134,10 @@ export function NotificationsProvider({
       removeBurst,
       reactedAt,
       markReacted,
+      realtimeHealthy,
+      realtimeLastEventAt,
+      setRealtimeHealthy: setRealtimeHealthyState,
+      markRealtimeEvent,
       controlCenterOpenRequest,
       requestOpenControlCenter,
     }),
@@ -127,6 +149,10 @@ export function NotificationsProvider({
       removeBurst,
       reactedAt,
       markReacted,
+      realtimeHealthy,
+      realtimeLastEventAt,
+      setRealtimeHealthyState,
+      markRealtimeEvent,
       controlCenterOpenRequest,
       requestOpenControlCenter,
     ],

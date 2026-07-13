@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlCenter } from './ControlCenter';
-import { NotificationsProvider } from './notificationsStore';
+import { NotificationsProvider, useNotificationsStore } from './notificationsStore';
 
 const goalHit = {
   id: 42,
@@ -12,7 +13,17 @@ const goalHit = {
   title: 'Objectif atteint !',
   body: 'Bravo, 10 RDV obtenus.',
   payload: {},
-  created_at: '2026-07-13T18:00:00.000Z',
+  created_at: new Date().toISOString(),
+  read_at: null,
+};
+
+const goalReaction = {
+  id: 43,
+  kind: 'goal_reaction',
+  title: 'Ada réagit',
+  body: '🎉',
+  payload: { emoji: '🎉' },
+  created_at: new Date().toISOString(),
   read_at: null,
 };
 
@@ -49,6 +60,7 @@ describe('ControlCenter', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -164,5 +176,70 @@ describe('ControlCenter', () => {
     });
 
     expect(screen.queryByText(goalHit.title)).toBeNull();
+  });
+
+  it('hides a fresh reaction after triggering its burst and marks it read after 0.5s', async () => {
+    const initialResponse = new Response(
+      JSON.stringify({ notifications: [], unread_count: 0 }),
+      { status: 200 },
+    );
+    const reactionResponse = new Response(
+      JSON.stringify({ notifications: [goalReaction], unread_count: 1 }),
+      { status: 200 },
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(reactionResponse)
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup();
+    render(
+      <NotificationsProvider>
+        <ControlCenter accessToken="token" />
+      </NotificationsProvider>,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await user.click(
+      screen.getByRole('button', { name: 'Centre de notifications' }),
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText(goalReaction.title)).toBeNull();
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+    expect(fetchMock.mock.calls.some(([, init]) => {
+      if (init?.method !== 'POST' || typeof init.body !== 'string') return false;
+      return init.body === JSON.stringify({ action: 'mark_read', ids: [goalReaction.id] });
+    })).toBe(true);
+  });
+
+  it('does not poll while realtime has received an event recently', async () => {
+    function MarkRealtimeHealthy() {
+      const { markRealtimeEvent } = useNotificationsStore();
+      useEffect(() => {
+        markRealtimeEvent();
+      }, [markRealtimeEvent]);
+      return null;
+    }
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ notifications: [], unread_count: 0 }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <NotificationsProvider>
+        <MarkRealtimeHealthy />
+        <ControlCenter accessToken="token" />
+      </NotificationsProvider>,
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

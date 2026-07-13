@@ -17,7 +17,21 @@ import {
 import { useRealtimeNotifications } from './useRealtimeNotifications';
 import './controlCenter.css';
 
+export const NOTIFICATION_CLIENT_TTL_MS = 6 * 60 * 1000;
+export const REALTIME_EVENT_TTL_MS = 60 * 1000;
 const REACTION_TTL_MS = 30 * 60 * 1000;
+
+export function shouldPollNotifications(
+  realtimeHealthy: boolean,
+  realtimeLastEventAt: number | null,
+  now = Date.now(),
+): boolean {
+  return (
+    !realtimeHealthy ||
+    realtimeLastEventAt === null ||
+    now - realtimeLastEventAt >= REALTIME_EVENT_TTL_MS
+  );
+}
 
 type ControlCenterProps = {
   accessToken: string;
@@ -41,16 +55,24 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   const [loading, setLoading] = useState(false);
   const [reactingId, setReactingId] = useState<number | null>(null);
   const [reactedAt, setReactedAt] = useState<Record<number, number>>({});
+  const [consumedReactionIds, setConsumedReactionIds] = useState<Set<number>>(
+    new Set(),
+  );
   const [pickerOpenId, setPickerOpenId] = useState<number | null>(null);
   const {
     addBurst,
     addLocalBurst,
     controlCenterOpenRequest,
+    markRealtimeEvent,
+    realtimeHealthy,
+    realtimeLastEventAt,
     reactedAt: sharedReactedAt,
     markReacted,
+    setRealtimeHealthy,
     setNotifications,
   } = useNotificationsStore();
   const seenReactionIds = useRef(new Set<number>());
+  const pendingReactionReadTimers = useRef(new Map<number, number>());
   const bootstrapped = useRef(false);
   const pickerRootRef = useRef<HTMLDivElement>(null);
   const pickerButtonRefs = useRef(new Map<number, HTMLButtonElement>());
@@ -61,6 +83,33 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
     setPickerOpenId(null);
     button?.focus();
   }, [pickerOpenId]);
+
+  const scheduleReactionRead = useCallback(
+    (id: number) => {
+      if (!accessToken || pendingReactionReadTimers.current.has(id)) return;
+      const timer = window.setTimeout(() => {
+        pendingReactionReadTimers.current.delete(id);
+        void markNotificationsRead(accessToken, { ids: [id] })
+          .then(() => {
+            const readAt = new Date().toISOString();
+            setItems((previous) =>
+              previous.map((row) =>
+                row.id === id ? { ...row, read_at: row.read_at ?? readAt } : row,
+              ),
+            );
+            setNotifications((previous) =>
+              previous.map((row) =>
+                row.id === id ? { ...row, read_at: row.read_at ?? readAt } : row,
+              ),
+            );
+            setUnread((count) => Math.max(0, count - 1));
+          })
+          .catch(() => {});
+      }, 500);
+      pendingReactionReadTimers.current.set(id, timer);
+    },
+    [accessToken, setNotifications],
+  );
 
   const processNotifications = useCallback(
     (notifications: UserNotification[], unreadCount: number) => {
@@ -76,16 +125,28 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
         bootstrapped.current = true;
       } else {
         const fresh: FloatingReactionBurst[] = [];
+        const freshReactionIds: number[] = [];
         for (const n of unreadReactions) {
           if (seenReactionIds.current.has(n.id)) continue;
           seenReactionIds.current.add(n.id);
           const emoji = reactionEmoji(n);
-          if (emoji) fresh.push({ id: `n-${n.id}`, emoji });
+          if (emoji) {
+            fresh.push({ id: `n-${n.id}`, emoji });
+            freshReactionIds.push(n.id);
+          }
         }
         for (const burst of fresh) addBurst(burst);
+        if (freshReactionIds.length > 0) {
+          setConsumedReactionIds((previous) => {
+            const next = new Set(previous);
+            for (const id of freshReactionIds) next.add(id);
+            return next;
+          });
+          for (const id of freshReactionIds) scheduleReactionRead(id);
+        }
       }
     },
-    [addBurst, setNotifications],
+    [addBurst, scheduleReactionRead, setNotifications],
   );
 
   const refresh = useCallback(async () => {
@@ -137,6 +198,8 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   useRealtimeNotifications({
     accessToken,
     onInsert: handleRealtimeInsert,
+    onEvent: markRealtimeEvent,
+    onStatus: (status) => setRealtimeHealthy(status === 'SUBSCRIBED'),
   });
 
   useEffect(() => {
@@ -172,9 +235,26 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 10_000);
-    return () => window.clearInterval(timer);
   }, [refresh]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (shouldPollNotifications(realtimeHealthy, realtimeLastEventAt)) {
+        void refresh();
+      }
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [refresh, realtimeHealthy, realtimeLastEventAt]);
+
+  useEffect(
+    () => () => {
+      for (const timer of pendingReactionReadTimers.current.values()) {
+        window.clearTimeout(timer);
+      }
+      pendingReactionReadTimers.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -239,6 +319,19 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   };
 
   const visibleItems = items.filter((item) => {
+    const createdAt = new Date(item.created_at).getTime();
+    if (
+      Number.isFinite(createdAt) &&
+      Date.now() - createdAt > NOTIFICATION_CLIENT_TTL_MS
+    ) {
+      return false;
+    }
+    if (
+      item.kind === 'goal_reaction' &&
+      consumedReactionIds.has(item.id)
+    ) {
+      return false;
+    }
     const timestamp = reactedAt[item.id] ?? sharedReactedAt[item.id];
     return timestamp === undefined || Date.now() - timestamp <= REACTION_TTL_MS;
   });

@@ -21,6 +21,16 @@ const goalHit = {
   read_at: null,
 };
 
+const goalReaction = {
+  id: 8,
+  kind: 'goal_reaction',
+  title: 'Ada réagit',
+  body: '🎉',
+  payload: { emoji: '🎉' },
+  created_at: '2026-07-13T18:00:00.000Z',
+  read_at: null,
+};
+
 describe('DesktopToasts', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -80,5 +90,27 @@ describe('DesktopToasts', () => {
 
     expect(screen.queryByRole('status')).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows reactions briefly and marks them read after the burst grace period', () => {
+    render(
+      <NotificationsProvider initialNotifications={[goalReaction]}>
+        <DesktopToasts accessToken="token" />
+      </NotificationsProvider>,
+    );
+
+    expect(screen.getByRole('status').textContent).toContain('Ada réagit');
+
+    act(() => vi.advanceTimersByTime(500));
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/notifications',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ action: 'mark_read', ids: [goalReaction.id] }),
+      }),
+    );
+
+    act(() => vi.advanceTimersByTime(1_180));
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

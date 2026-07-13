@@ -11,6 +11,8 @@ import { useNotificationsStore } from './notificationsStore';
 import './desktopToasts.css';
 
 const TOAST_DURATION_MS = 6_000;
+const REACTION_TOAST_DURATION_MS = 1_500;
+const REACTION_READ_GRACE_MS = 500;
 const TOAST_EXIT_MS = 180;
 const MAX_VISIBLE_TOASTS = 4;
 const REACTION_TTL_MS = 30 * 60 * 1000;
@@ -34,6 +36,7 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
   const [toasts, setToasts] = useState<ToastState[]>([]);
   const seenToastIds = useRef(new Set<number>());
   const exitTimers = useRef(new Map<number, number>());
+  const reactionReadTimers = useRef(new Map<number, number>());
 
   useEffect(() => {
     const fresh = notifications.filter(
@@ -44,7 +47,21 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
     );
     if (fresh.length === 0) return;
 
-    for (const notification of fresh) seenToastIds.current.add(notification.id);
+    for (const notification of fresh) {
+      seenToastIds.current.add(notification.id);
+      if (
+        notification.kind === 'goal_reaction' &&
+        !reactionReadTimers.current.has(notification.id)
+      ) {
+        const timer = window.setTimeout(() => {
+          reactionReadTimers.current.delete(notification.id);
+          void markNotificationsRead(accessToken, {
+            ids: [notification.id],
+          }).catch(() => {});
+        }, REACTION_READ_GRACE_MS);
+        reactionReadTimers.current.set(notification.id, timer);
+      }
+    }
     setToasts((previous) =>
       [
         ...previous,
@@ -54,10 +71,15 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
         })),
       ].slice(-MAX_VISIBLE_TOASTS),
     );
-  }, [notifications, reactedAt]);
+  }, [accessToken, notifications, reactedAt]);
 
   const dismissToast = useCallback(
     (id: number, markRead: boolean) => {
+      const reactionTimer = reactionReadTimers.current.get(id);
+      if (reactionTimer !== undefined) {
+        window.clearTimeout(reactionTimer);
+        reactionReadTimers.current.delete(id);
+      }
       if (markRead) {
         void markNotificationsRead(accessToken, { ids: [id] }).catch(() => {});
       }
@@ -85,7 +107,9 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
       .map((toast) =>
         window.setTimeout(
           () => dismissToast(toast.notification.id, false),
-          TOAST_DURATION_MS,
+          toast.notification.kind === 'goal_reaction'
+            ? REACTION_TOAST_DURATION_MS
+            : TOAST_DURATION_MS,
         ),
       );
     return () => {
@@ -98,6 +122,9 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
       for (const timer of exitTimers.current.values())
         window.clearTimeout(timer);
       exitTimers.current.clear();
+      for (const timer of reactionReadTimers.current.values())
+        window.clearTimeout(timer);
+      reactionReadTimers.current.clear();
     },
     [],
   );

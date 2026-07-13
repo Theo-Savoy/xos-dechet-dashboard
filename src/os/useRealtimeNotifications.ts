@@ -7,6 +7,8 @@ type RealtimeNotification = UserNotification & { recipient_id: string };
 type UseRealtimeNotificationsOptions = {
   accessToken: string;
   onInsert: (notification: UserNotification) => void | Promise<void>;
+  onStatus?: (status: string) => void;
+  onEvent?: () => void;
 };
 
 /**
@@ -16,9 +18,15 @@ type UseRealtimeNotificationsOptions = {
 export function useRealtimeNotifications({
   accessToken,
   onInsert,
+  onStatus,
+  onEvent,
 }: UseRealtimeNotificationsOptions) {
   const onInsertRef = useRef(onInsert);
   onInsertRef.current = onInsert;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
     if (!accessToken) return;
@@ -54,6 +62,10 @@ export function useRealtimeNotifications({
             filter: `recipient_id=eq.${userId}`,
           },
           (payload) => {
+            if (import.meta.env.DEV) {
+              console.debug('[notifications] Realtime postgres_changes INSERT');
+            }
+            onEventRef.current?.();
             const row = payload.new as RealtimeNotification;
             // Keep this guard even with the server-side filter: a malformed
             // or misconfigured Realtime binding must never leak another row.
@@ -63,7 +75,9 @@ export function useRealtimeNotifications({
         );
       // If Realtime is not enabled for this table, enable it in Supabase
       // Studio > Database > Replication for public.user_notifications.
-      channel.subscribe();
+      channel.subscribe((status) => {
+        onStatusRef.current?.(String(status));
+      });
     };
 
     void subscribe();
