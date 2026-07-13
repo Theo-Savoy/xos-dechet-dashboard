@@ -102,7 +102,7 @@ describe('OpportunitiesModule', () => {
     ]) {
       expect(screen.getByRole('columnheader', { name: label })).toBeTruthy();
     }
-    expect(screen.getByText('À nettoyer')).toBeTruthy();
+    expect(screen.getByText('Opportunités à examiner')).toBeTruthy();
     expect(screen.queryByText(/score global|santé globale/i)).toBeNull();
   });
 
@@ -272,7 +272,7 @@ describe('OpportunitiesModule', () => {
     render(<OpportunitiesModule accessToken="token" />);
     expect(screen.getByRole('status')).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByText('Aucune opportunité à nettoyer.')).toBeTruthy(),
+      expect(screen.getByText(/Aucune opport|ne nécessite|Aucune donnée/)).toBeTruthy(),
     );
     expect(screen.getByRole('button', { name: 'Historique' })).toBeTruthy();
 

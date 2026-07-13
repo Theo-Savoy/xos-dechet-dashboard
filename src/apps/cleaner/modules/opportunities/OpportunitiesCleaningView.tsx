@@ -254,10 +254,10 @@ export function OpportunitiesCleaningView({
   }> = [
     {
       severity: 'total',
-      label: 'À nettoyer',
+      label: 'Opportunités à examiner',
       count: filteredItems.length,
-      caption: 'afficher tout',
-      ariaLabel: `Opportunités à nettoyer (${filteredItems.length})`,
+      caption: 'voir toutes',
+      ariaLabel: `${filteredItems.length} opportunités à examiner`,
       onClick: () =>
         applyKpiFilter({
           ...state.filters,

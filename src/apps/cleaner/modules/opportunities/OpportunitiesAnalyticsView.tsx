@@ -341,20 +341,25 @@ export function OpportunitiesAnalyticsView({
         aria-label="Indicateurs de synthèse"
       >
         {[
-          ['Anomalies', totals.anomalies, ''],
+          [
+            'Anomalies détectées',
+            totals.anomalies,
+            'Vue d\'ensemble — plusieurs anomalies par opportunité possibles.',
+          ],
           [
             'Enregistrements concernés',
             totals.affectedItems ?? totals.totalItems,
-            '',
+            'Nombre d\'opportunités présentant au moins une anomalie.',
           ],
-          ['CA concerné', amount(totals.amount), ''],
+          ['CA concerné', amount(totals.amount), 'Somme des montants des opportunités concernées.'],
           ['En retard', totals.overdue, 'overdue'],
           ['Owners inactifs', totals.inactiveOwners, 'inactiveOwners'],
           ['Montants incohérents', totals.amountIncoherent, 'amountIncoherent'],
-        ].map(([name, value, kind]) => (
+        ].map(([name, value, kind, hint]) => (
           <button
             type="button"
             key={String(name)}
+            title={typeof hint === 'string' ? hint : undefined}
             onClick={() => onNavigateToCleaning(kpiNavigation(String(kind)))}
           >
             <strong>{String(value)}</strong>

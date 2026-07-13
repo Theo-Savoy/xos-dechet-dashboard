@@ -72,7 +72,7 @@ describe('OpportunitiesCleaningView', () => {
     renderView([item('critical', 'critical'), item('warning', 'warning'), item('healthy')]);
 
     expect(
-      screen.getByRole('button', { name: /Opportunités à nettoyer \(3\)/i }),
+      screen.getByRole('button', { name: /3 opportunités à examiner/i }),
     ).toBeTruthy();
     expect(
       screen.getByRole('button', { name: /Opportunités critiques \(1\)/i }),
