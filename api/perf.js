@@ -119,8 +119,38 @@ async function crmRecords(token, soql) {
 }
 
 async function teamProfiles(client) {
-  const { data, error } = await client.from("profiles").select("email, full_name, sf_user_id, role");
-  return error ? null : data || [];
+  const profilesResult = await client.from("profiles").select("email, full_name, sf_user_id, role");
+  if (profilesResult.error) return null;
+  let mapRows = [];
+  try {
+    const mapResult = await client.from("sf_user_map").select("email, sf_user_id");
+    if (!mapResult.error) mapRows = mapResult.data || [];
+  } catch {
+    mapRows = [];
+  }
+  const byKey = new Map();
+  for (const profile of profilesResult.data || []) {
+    if (!profile.sf_user_id) continue;
+    byKey.set(sfIdKey(profile.sf_user_id), profile);
+  }
+  for (const row of mapRows) {
+    if (!row.sf_user_id) continue;
+    const key = sfIdKey(row.sf_user_id);
+    if (byKey.has(key)) continue;
+    const local = String(row.email || "").split("@")[0] || row.sf_user_id;
+    const name = local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || row.sf_user_id;
+    byKey.set(key, {
+      email: row.email,
+      full_name: name,
+      sf_user_id: row.sf_user_id,
+      role: "commercial",
+    });
+  }
+  return [...byKey.values()];
 }
 
 async function settingsValue(client, key) {
@@ -132,6 +162,18 @@ async function settingsValue(client, key) {
 function findBySfId(entries, sfUserId) {
   const key = sfIdKey(sfUserId);
   return (entries || []).find((entry) => sfIdKey(entry.sf_user_id || entry.Id || entry.id) === key) || null;
+}
+
+/** Déduplique les SF User Id (15 vs 18 car.) — préfère l’id le plus long (checksum SF). */
+function uniqueOwnerIds(ids) {
+  const byKey = new Map();
+  for (const id of ids || []) {
+    if (!id) continue;
+    const key = sfIdKey(id);
+    const existing = byKey.get(key);
+    if (!existing || String(id).length > String(existing).length) byKey.set(key, id);
+  }
+  return [...byKey.values()];
 }
 
 function ownerMeta(profiles, sfUsers, sfUserId, fallback = {}, trackingOverrides = {}) {
@@ -1127,10 +1169,10 @@ export async function GET(request) {
         owners.clear();
         owners.add(profile.sfUserId);
       }
-      const ownerIds = [...owners].filter((id) => {
+      const ownerIds = uniqueOwnerIds([...owners].filter((id) => {
         const mapped = findBySfId(profiles, id);
         return !isWeeklyOwnerExcluded(null, mapped?.full_name || "", mapped?.email || "");
-      });
+      }));
       owners.clear();
       for (const id of ownerIds) owners.add(id);
       const allowedIds = new Set(ownerIds.map((id) => sfIdKey(id)));

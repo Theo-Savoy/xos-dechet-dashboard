@@ -321,9 +321,13 @@ const EMPTY_PIPELINE = (ownerId: string, start: string): Pipeline => ({
   closing_rate_count: null, closing_rate_amount: null,
 });
 
+function sfIdKey(id: string | null | undefined): string {
+  return String(id || "").slice(0, 15);
+}
+
 function seriesIndex<T extends { sf_user_id: string; week_start: string }>(rows: T[]) {
   const map = new Map<string, T>();
-  for (const row of rows) map.set(`${row.sf_user_id}:${row.week_start}`, row);
+  for (const row of rows) map.set(`${sfIdKey(row.sf_user_id)}:${row.week_start}`, row);
   return map;
 }
 
@@ -1789,15 +1793,22 @@ export default function WeeklyApp() {
     if (!result) return null;
     const { payload, email } = result;
     const owners = Array.isArray(payload.owners) ? payload.owners : [];
+    const ownersByKey = new Map<string, Owner>();
+    for (const owner of owners) {
+      const key = sfIdKey(owner.sf_user_id);
+      const existing = ownersByKey.get(key);
+      if (!existing || owner.sf_user_id.length > existing.sf_user_id.length) ownersByKey.set(key, owner);
+    }
+    const dedupedOwners = [...ownersByKey.values()];
     if (!payload.range?.from || !Number.isFinite(Number(payload.weeks)) || Number(payload.weeks) <= 0) return null;
     const weeks = makeWeeks(payload);
     if (!weeks.length) return null;
     const currentWeekStart = addDays(payload.range.to, -6);
     const currentIndex = Math.max(0, weeks.findIndex((week) => week.start === currentWeekStart));
-    const selfOwner = owners.find((owner) => owner.email?.toLowerCase() === email?.toLowerCase()) || owners[0];
+    const selfOwner = dedupedOwners.find((owner) => owner.email?.toLowerCase() === email?.toLowerCase()) || dedupedOwners[0];
     const roster = mode === "self"
       ? (selfOwner ? [selfOwner] : [])
-      : [...owners].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      : [...dedupedOwners].sort((a, b) => a.name.localeCompare(b.name, "fr"));
     const visibleOwners = mode === "team" && selectedOwnerId !== "all"
       ? roster.filter((owner) => owner.sf_user_id === selectedOwnerId || owner.sf_user_id?.slice(0, 15) === selectedOwnerId?.slice(0, 15))
       : roster;
@@ -1810,10 +1821,10 @@ export default function WeeklyApp() {
     const priorPulseByOwner = new Map<string, Pulse[]>();
     const priorPipelineByOwner = new Map<string, Pipeline[]>();
     for (const owner of roster) {
-      pulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
-      pipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
-      priorPulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPulseIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
-      priorPipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPipelineIndex.get(`${owner.sf_user_id}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
+      pulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pulseIndex.get(`${sfIdKey(owner.sf_user_id)}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
+      pipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => pipelineIndex.get(`${sfIdKey(owner.sf_user_id)}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
+      priorPulseByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPulseIndex.get(`${sfIdKey(owner.sf_user_id)}:${start}`) || EMPTY_PULSE(owner.sf_user_id, start)));
+      priorPipelineByOwner.set(owner.sf_user_id, weeks.map(({ start }) => priorPipelineIndex.get(`${sfIdKey(owner.sf_user_id)}:${start}`) || EMPTY_PIPELINE(owner.sf_user_id, start)));
     }
     const priorPulseFor = (owner: Owner) => priorPulseByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PULSE(owner.sf_user_id, start));
     const priorPipelineFor = (owner: Owner) => priorPipelineByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PIPELINE(owner.sf_user_id, start));
@@ -1823,22 +1834,22 @@ export default function WeeklyApp() {
     const pulseFor = (owner: Owner) => pulseByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PULSE(owner.sf_user_id, start));
     const pipelineFor = (owner: Owner) => pipelineByOwner.get(owner.sf_user_id) || weeks.map(({ start }) => EMPTY_PIPELINE(owner.sf_user_id, start));
     const sellers = visibleOwners.filter((owner) => trackingOf(owner) !== "sdr");
-    const sellerIds = new Set(sellers.map((owner) => owner.sf_user_id));
-    const quarterFor = (owner: Owner) => (payload.quarter || []).find((point) => point.sf_user_id === owner.sf_user_id);
+    const sellerIds = new Set(sellers.map((owner) => sfIdKey(owner.sf_user_id)));
+    const quarterFor = (owner: Owner) => (payload.quarter || []).find((point) => sfIdKey(point.sf_user_id) === sfIdKey(owner.sf_user_id));
     const rawPipe = payload.custom_pipe;
     const customPipe = rawPipe && Array.isArray(rawPipe.by_owner) && Array.isArray(rawPipe.opps) && Array.isArray(rawPipe.months)
       ? rawPipe
       : emptyCustomPipe();
-    const ownerRows = customPipe.by_owner.filter((row) => sellerIds.has(row.sf_user_id));
+    const ownerRows = customPipe.by_owner.filter((row) => sellerIds.has(sfIdKey(row.sf_user_id)));
     const scopedPipe: CustomPipe = {
       ...customPipe,
       by_owner: ownerRows,
-      opps: customPipe.opps.filter((opp) => sellerIds.has(opp.sf_user_id)),
+      opps: customPipe.opps.filter((opp) => sellerIds.has(sfIdKey(opp.sf_user_id))),
       total_amount: ownerRows.reduce((sum, row) => sum + row.amount, 0),
       total_expected: ownerRows.reduce((sum, row) => sum + row.expected, 0),
       count: ownerRows.reduce((sum, row) => sum + row.count, 0),
       months: customPipe.months.map((month) => {
-        const parts = Object.entries(month.by_owner || {}).filter(([id]) => sellerIds.has(id));
+        const parts = Object.entries(month.by_owner || {}).filter(([id]) => sellerIds.has(sfIdKey(id)));
         return {
           month: month.month,
           label: month.label,
@@ -1848,12 +1859,12 @@ export default function WeeklyApp() {
         };
       }),
     };
-    const visibleIds = new Set(visibleOwners.map((owner) => owner.sf_user_id));
-    const quarterRows = (payload.quarter || []).filter((row) => sellerIds.has(row.sf_user_id));
-    const pace = scopePace(quarterRows, payload.pace, visibleOwners.length === owners.length);
+    const visibleIds = new Set(visibleOwners.map((owner) => sfIdKey(owner.sf_user_id)));
+    const quarterRows = (payload.quarter || []).filter((row) => sellerIds.has(sfIdKey(row.sf_user_id)));
+    const pace = scopePace(quarterRows, payload.pace, visibleOwners.length === dedupedOwners.length);
     const target = pace?.target ?? null;
-    const followUps = (payload.follow_up_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
-    const stagnant = (payload.stagnant_opps || []).filter((opp) => visibleIds.has(opp.sf_user_id));
+    const followUps = (payload.follow_up_opps || []).filter((opp) => visibleIds.has(sfIdKey(opp.sf_user_id)));
+    const stagnant = (payload.stagnant_opps || []).filter((opp) => visibleIds.has(sfIdKey(opp.sf_user_id)));
     return {
       payload, weeks, currentIndex, visibleOwners, roster, pulseFor, pipelineFor, priorPulseFor, priorPipelineFor, quarterFor, sellerIds,
       forecastHistory: payload.forecast_history || [], customPipe: scopedPipe, pace, target, followUps, stagnant,

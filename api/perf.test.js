@@ -101,6 +101,7 @@ beforeEach(() => {
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
   mockFrom.mockImplementation((table) => {
     if (table === "profiles") return { select: () => Promise.resolve({ data: teamProfiles, error: null }) };
+    if (table === "sf_user_map") return { select: () => Promise.resolve({ data: [], error: null }) };
     if (table === "settings") {
       return {
         select: () => ({
@@ -247,6 +248,70 @@ describe("GET /api/perf", () => {
     expect(body.view).toBe("team");
     expect(body.owners.map((owner) => owner.sf_user_id)).toEqual(["005A", "005B"]);
     expect(body.pulse.some((row) => row.sf_user_id === "005B")).toBe(true);
+  });
+
+  it("includes sf_user_map members in the commercial team roster", async () => {
+    mockFrom.mockImplementation((table) => {
+      if (table === "profiles") {
+        return { select: () => Promise.resolve({ data: [teamProfiles[0]], error: null }) };
+      }
+      if (table === "sf_user_map") {
+        return { select: () => Promise.resolve({ data: [{ email: "paul.rathouin@xos-learning.fr", sf_user_id: "005C" }], error: null }) };
+      }
+      if (table === "settings") {
+        return {
+          select: () => ({
+            eq: (_col, key) => ({
+              maybeSingle: () => Promise.resolve({
+                data: key === "weekly_targets" ? { value: { "005A": { "FY27-Q1": 60000 }, "005C": { "FY27-Q1": 60000 } } } : { value: {} },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "perf_forecast_snapshots") {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                order: () => Promise.resolve({ data: [], error: null }),
+              }),
+            }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      if (table === "perf_week_snapshots") {
+        return {
+          select: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: [], error: null }),
+            }),
+            in: () => Promise.resolve({ data: [], error: null }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      if (table === "perf_seasonality_cache") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+          upsert: () => Promise.resolve({ error: null }),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    const records = recordSet();
+    records.tasks.push({ OwnerId: "005C", ActivityDate: "2026-07-07", TaskSubtype: "Call" });
+    queueSalesforce(records);
+    const body = await (await GET(request())).json();
+    expect(body.view).toBe("team");
+    expect(body.owners.map((owner) => owner.sf_user_id.slice(0, 15)).sort()).toEqual(["005A", "005C"]);
+    expect(body.pulse.some((row) => row.sf_user_id.slice(0, 15) === "005C")).toBe(true);
   });
 
   it("returns the team series to a manager", async () => {
