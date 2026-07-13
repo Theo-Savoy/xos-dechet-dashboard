@@ -42,6 +42,16 @@ export default function CleanerApp({ params }: CleanerAppProps) {
   useEffect(() => {
     let cancelled = false;
 
+    const authSubscription = supabase.auth.onAuthStateChange?.(
+      (_event, currentSession) => {
+        if (cancelled || !currentSession?.access_token) return;
+        setSession((current) => ({
+          accessToken: currentSession.access_token,
+          role: current?.role || 'commercial',
+        }));
+      },
+    );
+
     void supabase.auth
       .getSession()
       .then(async ({ data: { session: currentSession } }) => {
@@ -79,6 +89,7 @@ export default function CleanerApp({ params }: CleanerAppProps) {
 
     return () => {
       cancelled = true;
+      authSubscription?.data.subscription.unsubscribe();
     };
   }, []);
 

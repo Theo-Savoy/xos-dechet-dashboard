@@ -92,7 +92,7 @@ async function request<T>(
       ...init,
       cache: 'no-store',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: 'Bearer ' + accessToken,
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
         ...init.headers,
       },
