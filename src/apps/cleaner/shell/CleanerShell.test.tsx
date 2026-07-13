@@ -205,7 +205,7 @@ describe('CleanerShell navigation', () => {
     );
     expect(await screen.findByText('Alpha')).toBeTruthy();
     fireEvent.click(
-      screen.getByRole('button', { name: 'Confirmer ce preview' }),
+      screen.getByRole('button', { name: /Confirmer l'aperçu/ }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Appliquer Finance' }));
 

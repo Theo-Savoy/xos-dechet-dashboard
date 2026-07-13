@@ -156,7 +156,7 @@ describe('SectorsRecipeView', () => {
     });
     expect((applyButton as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(
-      screen.getByRole('button', { name: 'Confirmer ce preview' }),
+      screen.getByRole('button', { name: /Confirmer l'aperçu/ }),
     );
     expect((applyButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(applyButton);

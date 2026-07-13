@@ -296,9 +296,11 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
                     <Tag variant="warning">Obsolète</Tag>
                     <div>
                       <h3>{sector.label}</h3>
-                      <span>
-                        {sector.accountCount} compte
-                        {sector.accountCount > 1 ? 's' : ''}
+                      <span className="cleaner-sector-row__count">
+                        <span className="cleaner-sector-row__count-badge">
+                          {sector.accountCount}
+                        </span>
+                        compte{sector.accountCount > 1 ? 's' : ''}
                       </span>
                     </div>
                   </div>
@@ -355,16 +357,21 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
 
           <aside
             className="cleaner-sector-preview"
-            aria-label="Preview de fusion"
+            aria-label="Aperçu de la fusion"
           >
             {preview ? (
               <>
-                <p className="cleaner-eyebrow">Impact avant écriture</p>
-                <h3>
-                  {preview.obsoleteLabel} → {preview.activeLabel}
-                </h3>
-                <p>{preview.accountCount} comptes seront modifiés.</p>
-                <ul>
+                <div className="cleaner-sector-preview__head">
+                  <p className="cleaner-eyebrow">Aperçu</p>
+                  <h3>
+                    {preview.obsoleteLabel} → {preview.activeLabel}
+                  </h3>
+                  <p>
+                    {preview.accountCount} compte
+                    {preview.accountCount > 1 ? 's' : ''} seront modifiés.
+                  </p>
+                </div>
+                <ul className="cleaner-sector-preview__accounts">
                   {preview.accounts.map((account) => (
                     <li key={account.id}>
                       <strong>{account.name || account.id}</strong>
@@ -372,19 +379,21 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
                     </li>
                   ))}
                 </ul>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setPreviewConfirmed(true)}
-                  disabled={previewConfirmed}
-                >
-                  {previewConfirmed
-                    ? 'Preview confirmé'
-                    : 'Confirmer ce preview'}
-                </Button>
+                <div className="cleaner-sector-preview__confirm">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => setPreviewConfirmed(true)}
+                    disabled={previewConfirmed}
+                  >
+                    {previewConfirmed
+                      ? 'Aperçu confirmé'
+                      : "Confirmer l'aperçu"}
+                  </Button>
+                </div>
               </>
             ) : (
-              <div className="cleaner-sector-preview__placeholder">
+              <div className="cleaner-sector-preview__empty">
                 <span aria-hidden="true">⌁</span>
                 <p>Choisissez une cible puis lancez le preview.</p>
               </div>
