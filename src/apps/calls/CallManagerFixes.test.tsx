@@ -489,7 +489,6 @@ describe("RunnerView", () => {
   it("removes a pending contact from the session after confirm", async () => {
     const user = userEvent.setup();
     const onRemoveContacts = vi.fn();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const current = { ...bob, status: "pending" as const, outcome: null };
     render(
       <RunnerView
@@ -503,6 +502,8 @@ describe("RunnerView", () => {
 
     await user.click(screen.getByRole("button", { name: "Fiche" }));
     await user.click(screen.getByRole("button", { name: "Retirer" }));
+    const dialog = screen.getByRole("dialog", { name: "Retirer de la séance" });
+    await user.click(within(dialog).getByRole("button", { name: "Retirer" }));
     expect(onRemoveContacts).toHaveBeenCalledWith([current.id]);
   });
 
@@ -1178,7 +1179,13 @@ describe("call targeting copy and controls", () => {
   it("uses CRM-generic copy and exposes dedup toggle state", () => {
     render(
       <>
-        <FilterBuilder {...filterBuilderProps} />
+        <FilterBuilder
+          {...filterBuilderProps}
+          team={[
+            { user_id: "user-1", label: "Alice", sf_user_id: "005A" },
+            { user_id: "user-2", label: "Bob", sf_user_id: "005B" },
+          ]}
+        />
         <DedupBanner
           dedup={[{ sf_contact_id: "003000000000001", in_session_of: "Séance A" }]}
           mode="avertir"
@@ -1189,6 +1196,8 @@ describe("call targeting copy and controls", () => {
 
     expect(screen.getByText("Secteurs d'activité")).toBeTruthy();
     expect(screen.getByText("Tier")).toBeTruthy();
+    expect(screen.getByText("Propriétaire du compte")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByLabelText("Maximum de contacts par entreprise")).toBeTruthy();
