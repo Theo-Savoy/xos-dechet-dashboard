@@ -4,6 +4,7 @@ import {
   fetchSFToken,
   searchContacts,
   updateSObjects,
+  buildLightningUrl,
 } from '../../_crm/salesforce.js';
 import { journalCleanerAction } from '../core/audit.js';
 import { authorizeContext } from '../core/authorization.js';
@@ -164,8 +165,7 @@ async function loadScopedAccounts(context, { requireApply = true } = {}) {
   const rawAccounts = result.records.map(normalizeAccount);
   const accounts = rawAccounts.filter(
     (account) =>
-      typeof account.id === 'string' &&
-      typeof account.sector === 'string',
+      typeof account.id === 'string' && typeof account.sector === 'string',
   );
   return { accounts, token, capabilities: authorization.capabilities };
 }
@@ -212,6 +212,11 @@ export async function loadSectorRecipe(context = {}, query = {}) {
       id: group.id,
       label: group.label,
       accountCount: group.accounts.length,
+      sampleAccounts: group.accounts.slice(0, 3).map((account) => ({
+        id: account.id,
+        name: account.name,
+        recordUrl: buildLightningUrl('Account', account.id),
+      })),
     }))
     .sort(
       (left, right) =>
@@ -320,7 +325,8 @@ async function recordSectorJournal(context, entry) {
     return context.recordSectorJournal(entry);
   const table = context.supabase?.from?.('recette_journal');
   // Some unit-test contexts intentionally expose only the legacy audit mock.
-  if (!table || typeof table.insert !== 'function') return { data: null, error: null };
+  if (!table || typeof table.insert !== 'function')
+    return { data: null, error: null };
   const result = await table.insert({
     kind: entry.kind,
     payload: entry.payload,
@@ -433,6 +439,12 @@ export async function applySectorMerge(context = {}, input = {}) {
       accountCount: resolved.obsolete.accounts.length,
       updated,
       failed: results.length - updated,
+      // V18: store the original Industry label per account so the
+      // undo flow can restore the exact pre-merge state.
+      snapshot: resolved.obsolete.accounts.map((account) => ({
+        id: account.id,
+        industry: resolved.obsolete.label,
+      })),
     },
   });
   return {
@@ -442,6 +454,95 @@ export async function applySectorMerge(context = {}, input = {}) {
     accountIds: results
       .filter((result) => result.success)
       .map((result) => result.id),
+    results,
+  };
+}
+
+export async function undoSectorMerge(context = {}, input = {}) {
+  const authorization = authorizeContext(context);
+  if (!authorization.ok)
+    throw new CleanerError(
+      authorization.error,
+      authorization.error,
+      authorization.status,
+    );
+  if (!authorization.capabilities.canApplyRecipes)
+    throw new CleanerError(
+      'forbidden',
+      'Cette action nécessite un rôle manager ou admin.',
+      403,
+    );
+  if (
+    typeof input?.journalId !== 'number' &&
+    typeof input?.journalId !== 'string'
+  )
+    throw new CleanerError('invalid_command', 'journalId est requis.', 400);
+
+  // Load the journal entry to get the snapshot.
+  const table = context.supabase?.from?.('recette_journal');
+  if (!table)
+    throw new CleanerError('audit_error', 'Le journal est indisponible.', 502);
+  const { data: entry, error: entryError } = await table
+    .select('id, kind, payload, actor_id, created_at')
+    .eq('id', input.journalId)
+    .maybeSingle();
+  if (entryError || !entry)
+    throw new CleanerError('not_found', 'Entrée de journal introuvable.', 404);
+  if (entry.actor_id !== context.user.id)
+    throw new CleanerError(
+      'forbidden',
+      'Vous ne pouvez annuler que vos propres fusions.',
+      403,
+    );
+  if (
+    !Array.isArray(entry.payload?.snapshot) ||
+    entry.payload.snapshot.length === 0
+  )
+    throw new CleanerError(
+      'invalid_command',
+      'Cette entrée ne contient pas de snapshot restaurable.',
+      422,
+    );
+
+  // Restore each account's original Industry.
+  const fields = mapping.objects.account.fields;
+  const records = entry.payload.snapshot.map((item) => ({
+    id: item.id,
+    [fields.industry]: item.industry,
+  }));
+  const updater = context.updateSObjects || updateSObjects;
+  const batches = [];
+  for (let i = 0; i < records.length; i += MAX_WRITE_BATCH)
+    batches.push(records.slice(i, i + MAX_WRITE_BATCH));
+  const batchResponses = [];
+  const token = await tokenFor(context);
+  for (const batch of batches) {
+    batchResponses.push(
+      await updater(token, mapping.objects.account.name, batch),
+    );
+  }
+  const results = writeResults(
+    entry.payload.snapshot.map((item) => ({ id: item.id })),
+    batchResponses,
+  );
+  const restored = results.filter((r) => r.success).length;
+
+  // Journal the undo.
+  await recordSectorJournal(context, {
+    kind: 'recette_sectors_undo_merge',
+    payload: {
+      originalJournalId: entry.id,
+      obsoleteLabel: entry.payload.obsoleteLabel,
+      activeLabel: entry.payload.activeLabel,
+      accountCount: entry.payload.snapshot.length,
+      restored,
+      failed: results.length - restored,
+    },
+  });
+
+  return {
+    restored,
+    failed: results.length - restored,
     results,
   };
 }
@@ -466,8 +567,10 @@ function validateBulkInput(input) {
 }
 
 function newJobId() {
-  return globalThis.crypto?.randomUUID?.() ||
-    `sector-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ||
+    `sector-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 }
 
 async function runBulkSectorJob(context, input, job) {
@@ -485,7 +588,12 @@ async function runBulkSectorJob(context, input, job) {
         obsoleteId,
         activeId,
       });
-      job.results.push({ kind: 'dry_run', obsoleteId, ok: true, count: dryRun.accountCount });
+      job.results.push({
+        kind: 'dry_run',
+        obsoleteId,
+        ok: true,
+        count: dryRun.accountCount,
+      });
       job.processed += 1;
     } catch (error) {
       dryRunErrors.push({
@@ -521,7 +629,13 @@ async function runBulkSectorJob(context, input, job) {
           activeId,
           expectedAccountIds: preview.accountIds,
         });
-        job.results.push({ kind: 'apply', obsoleteId, ok: true, updated: result.updated, failed: result.failed });
+        job.results.push({
+          kind: 'apply',
+          obsoleteId,
+          ok: true,
+          updated: result.updated,
+          failed: result.failed,
+        });
       } catch (error) {
         job.errors.push({
           obsoleteId,
@@ -610,7 +724,8 @@ export async function fetchSectorJournal(context = {}, limit = 50) {
     kind: row.kind,
     obsoleteId: row.payload?.obsoleteId ?? row.payload?.obsolete_id ?? null,
     activeId: row.payload?.activeId ?? row.payload?.active_id ?? null,
-    obsoleteLabel: row.payload?.obsoleteLabel ?? row.payload?.obsolete_label ?? null,
+    obsoleteLabel:
+      row.payload?.obsoleteLabel ?? row.payload?.obsolete_label ?? null,
     activeLabel: row.payload?.activeLabel ?? row.payload?.active_label ?? null,
     accountCount: row.payload?.accountCount ?? row.payload?.account_count ?? 0,
     actorId: row.actor_id,
