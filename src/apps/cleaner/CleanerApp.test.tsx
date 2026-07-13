@@ -85,7 +85,7 @@ describe('CleanerApp component', () => {
     expect(screen.queryByTitle('Labo')).toBeNull();
     expect(
       screen
-        .getByRole('tab', { name: 'Opportunités' })
+        .getByRole('tab', { name: 'Recettes' })
         .getAttribute('aria-selected'),
     ).toBe('true');
     expect(
@@ -159,7 +159,7 @@ describe('CleanerApp component', () => {
     ).toBeNull();
   });
 
-  it('keeps the Recettes tile available when Opportunities has no items', async () => {
+  it('keeps one cockpit tile per recipe when Opportunities has no items', async () => {
     window.localStorage?.clear();
     vi.stubGlobal(
       'fetch',
@@ -174,11 +174,13 @@ describe('CleanerApp component', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Ouvrir Recettes' }),
+        screen.getByRole('button', { name: 'Ouvrir Secteurs obsolètes' }),
       ).toBeTruthy(),
     );
     expect(
-      screen.queryByRole('button', { name: 'Ouvrir Opportunités' }),
-    ).toBeNull();
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
+    ).toBeTruthy();
   });
 });

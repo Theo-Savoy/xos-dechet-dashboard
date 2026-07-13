@@ -4,6 +4,7 @@ export type CleanerCriticality = 'critical' | 'warning' | 'healthy';
 
 export type CleanerCockpitSummary = {
   moduleId: string;
+  recipeId?: string;
   label: string;
   criticality: CleanerCriticality;
   anomalyCount: number;
@@ -21,7 +22,7 @@ export type CleanerCockpitState = {
 
 type CleanerCockpitProps = {
   state: CleanerCockpitState;
-  onOpenModule: (moduleId: CleanerModuleId) => void;
+  onOpenModule: (moduleId: CleanerModuleId, recipeId?: string) => void;
 };
 
 const criticalityOrder: Record<CleanerCriticality, number> = {
@@ -114,7 +115,7 @@ export function CleanerCockpit({ state, onOpenModule }: CleanerCockpitProps) {
           <article
             className={`cleaner-cockpit-module cleaner-cockpit-module--${summary.criticality}`}
             data-testid="cleaner-cockpit-module"
-            key={summary.moduleId}
+            key={`${summary.moduleId}:${summary.recipeId || summary.label}`}
           >
             <div>
               <p className="cleaner-eyebrow">
@@ -136,7 +137,7 @@ export function CleanerCockpit({ state, onOpenModule }: CleanerCockpitProps) {
               aria-label={`Ouvrir ${summary.label}`}
               onClick={() => {
                 if (isCleanerModuleId(summary.moduleId))
-                  onOpenModule(summary.moduleId);
+                  onOpenModule(summary.moduleId, summary.recipeId);
               }}
             >
               Ouvrir

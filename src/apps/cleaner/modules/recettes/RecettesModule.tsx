@@ -1,31 +1,76 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import type { CleanerModuleProps } from '../../shell/moduleRegistry';
 import { recipeRegistry } from './manifest';
 
 export function RecettesModule(props: CleanerModuleProps) {
-  const [activeRecipeId, setActiveRecipeId] = useState(recipeRegistry[0]?.id);
-  const activeRecipe =
-    recipeRegistry.find((recipe) => recipe.id === activeRecipeId) ||
-    recipeRegistry[0];
+  const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>(
+    props.recipeId,
+  );
+  const activeRecipe = recipeRegistry.find(
+    (recipe) => recipe.id === activeRecipeId,
+  );
 
-  if (!activeRecipe) return <div role="status">Aucune recette disponible.</div>;
+  useEffect(() => {
+    setActiveRecipeId(props.recipeId);
+  }, [props.recipeId]);
+
+  if (!activeRecipe) {
+    return (
+      <section
+        className="cleaner-recipes"
+        data-testid="cleaner-module-recettes"
+      >
+        <div className="cleaner-recipes__intro">
+          <p className="cleaner-eyebrow">Labo</p>
+          <h2>Recettes du Labo</h2>
+          <p>
+            Choisissez un rapport métier pour diagnostiquer puis traiter les
+            données CRM concernées.
+          </p>
+        </div>
+        <div className="cleaner-recipes__grid" aria-label="Toutes les recettes">
+          {recipeRegistry.map((recipe) => (
+            <button
+              className="cleaner-recipe-tile"
+              key={recipe.id}
+              type="button"
+              onClick={() => {
+                setActiveRecipeId(recipe.id);
+                props.onRecipeChange?.(recipe.id);
+              }}
+            >
+              <span className="cleaner-recipe-tile__icon" aria-hidden="true">
+                {recipe.icon}
+              </span>
+              <span>
+                <strong>{recipe.label}</strong>
+                <small>{recipe.objectType}</small>
+              </span>
+              <span>{recipe.description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   const Recipe = activeRecipe.component;
 
   return (
     <section className="cleaner-recipes" data-testid="cleaner-module-recettes">
-      <nav className="cleaner-recipes__tabs" aria-label="Recettes du Labo">
-        {recipeRegistry.map((recipe) => (
-          <button
-            key={recipe.id}
-            type="button"
-            aria-pressed={recipe.id === activeRecipe.id}
-            className={recipe.id === activeRecipe.id ? 'is-active' : ''}
-            onClick={() => setActiveRecipeId(recipe.id)}
-          >
-            {recipe.label}
-          </button>
-        ))}
-      </nav>
+      <div className="cleaner-recipes__header">
+        <button
+          className="xos-btn xos-btn--secondary"
+          type="button"
+          onClick={() => {
+            setActiveRecipeId(undefined);
+            props.onRecipeChange?.(undefined);
+          }}
+        >
+          ← Toutes les recettes
+        </button>
+        <strong>{activeRecipe.label}</strong>
+      </div>
       <Suspense fallback={<div role="status">Ouverture de la recette…</div>}>
         <Recipe {...props} />
       </Suspense>

@@ -118,22 +118,64 @@ async function loadScopedAccounts(context) {
     );
   const token = await tokenFor(context);
   const search = context.searchContacts || searchContacts;
-  const result = await search(token, accountQuery());
-  if (result?.error || !Array.isArray(result?.records))
+  const query = accountQuery();
+  let result;
+  try {
+    result = await search(token, query);
+  } catch (error) {
+    // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+    console.log('[recette-sectors] Salesforce Account query threw', {
+      query,
+      error,
+    });
+    throw error;
+  }
+  // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+  console.log('[recette-sectors] raw Salesforce Account count', {
+    count: Array.isArray(result?.records) ? result.records.length : null,
+  });
+  if (result?.error || !Array.isArray(result?.records)) {
+    // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+    console.log('[recette-sectors] Salesforce Account query failed', {
+      query,
+      error: result?.message || result?.error || result,
+    });
     throw new CleanerError(
       'salesforce_error',
       result?.message || result?.error || 'Salesforce Account query failed.',
       502,
     );
+  }
+  const rawAccounts = result.records.map(normalizeAccount);
+  const rawSectorSamples = new Map();
+  for (const account of rawAccounts) {
+    if (
+      typeof account.id === 'string' &&
+      typeof account.sector === 'string' &&
+      !rawSectorSamples.has(account.sector)
+    )
+      rawSectorSamples.set(account.sector, account.id);
+  }
+  const activeLabels = new Set(ACTIVE_SECTORS);
+  // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+  console.log('[recette-sectors] distinct Salesforce Account sectors', {
+    count: rawSectorSamples.size,
+  });
+  for (const [sector, sampleAccountId] of rawSectorSamples) {
+    // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+    console.log('[recette-sectors] raw sector classification', {
+      sector,
+      isActive: activeLabels.has(sector),
+      sampleAccountId,
+    });
+  }
   const owners = new Set(allowedOwnerIds(context));
-  const accounts = result.records
-    .map(normalizeAccount)
-    .filter(
-      (account) =>
-        typeof account.id === 'string' &&
-        typeof account.sector === 'string' &&
-        owners.has(account.ownerId),
-    );
+  const accounts = rawAccounts.filter(
+    (account) =>
+      typeof account.id === 'string' &&
+      typeof account.sector === 'string' &&
+      owners.has(account.ownerId),
+  );
   return { accounts, token, capabilities: authorization.capabilities };
 }
 
@@ -157,9 +199,26 @@ function publicCapabilities(capabilities) {
 }
 
 export async function loadSectorRecipe(context = {}, query = {}) {
+  // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+  console.log('[recette-sectors] canonical sectors', {
+    count: ACTIVE_SECTORS.length,
+    firstThree: ACTIVE_SECTORS.slice(0, 3),
+  });
   const { accounts, capabilities } = await loadScopedAccounts(context);
   const groups = groupAccounts(accounts);
   const activeLabels = new Set(ACTIVE_SECTORS);
+  // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+  console.log('[recette-sectors] distinct scoped Account sectors', {
+    count: groups.size,
+  });
+  for (const group of groups.values()) {
+    // TEMP DIAGNOSIS — to be removed once root cause is confirmed
+    console.log('[recette-sectors] sector classification', {
+      sector: group.label,
+      isActive: activeLabels.has(group.label),
+      sampleAccountId: group.accounts[0]?.id || null,
+    });
+  }
   const activeLimit = Math.min(Math.max(Number(query.limit) || 50, 1), 50);
   const activeSectors = ACTIVE_SECTORS.map((label) => ({
     id: sectorId(label),

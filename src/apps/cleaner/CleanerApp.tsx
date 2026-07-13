@@ -90,9 +90,10 @@ export default function CleanerApp({ params }: CleanerAppProps) {
     void fetchOpportunityWorkspace(session.accessToken)
       .then((workspace) => {
         if (cancelled) return;
-        const recettesSummary = {
+        const sectorsSummary = {
           moduleId: 'recettes',
-          label: 'Recettes',
+          recipeId: 'sectors',
+          label: 'Secteurs obsolètes',
           criticality: 'warning' as const,
           anomalyCount: 0,
           affectedRecordCount: 0,
@@ -101,7 +102,23 @@ export default function CleanerApp({ params }: CleanerAppProps) {
           lastRefreshedAt: null,
         };
         if (workspace.items.length === 0) {
-          setCockpit({ status: 'ready', summaries: [recettesSummary] });
+          setCockpit({
+            status: 'ready',
+            summaries: [
+              {
+                moduleId: 'recettes',
+                recipeId: 'opportunities',
+                label: 'Opportunités suspectes ou abandonnées',
+                criticality: 'healthy',
+                anomalyCount: 0,
+                affectedRecordCount: 0,
+                resolvedPeriodCount: 0,
+                previousPeriodDelta: null,
+                lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
+              },
+              sectorsSummary,
+            ],
+          });
           return;
         }
 
@@ -116,8 +133,9 @@ export default function CleanerApp({ params }: CleanerAppProps) {
           status: 'ready',
           summaries: [
             {
-              moduleId: 'opportunities',
-              label: 'Opportunités',
+              moduleId: 'recettes',
+              recipeId: 'opportunities',
+              label: 'Opportunités suspectes ou abandonnées',
               criticality,
               anomalyCount: totalAnomalies,
               affectedRecordCount: workspace.items.length,
@@ -125,7 +143,7 @@ export default function CleanerApp({ params }: CleanerAppProps) {
               previousPeriodDelta: null,
               lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
             },
-            recettesSummary,
+            sectorsSummary,
           ],
         });
       })

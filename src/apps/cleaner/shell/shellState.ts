@@ -1,9 +1,9 @@
 import type { AppRole } from '../../../os/registry';
 
-export type CleanerModuleId = 'opportunities' | 'recettes';
+export type CleanerModuleId = 'recettes';
 
 export function isCleanerModuleId(value: unknown): value is CleanerModuleId {
-  return value === 'opportunities' || value === 'recettes';
+  return value === 'recettes';
 }
 
 export type CleanerTabState = {

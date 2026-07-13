@@ -60,13 +60,16 @@ export function CleanerShell({
           ? 'home'
           : stored.active,
     };
-    if (params?.q && visibleIds.has('opportunities')) {
-      return openModule(nextState, 'opportunities');
+    if (params?.q && visibleIds.has('recettes')) {
+      return openModule(nextState, 'recettes');
     }
     return nextState;
   });
   const [renderedModules, setRenderedModules] = useState<CleanerModuleId[]>(
     () => state.open,
+  );
+  const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>(
+    () => (params?.q ? 'opportunities' : undefined),
   );
 
   useEffect(() => {
@@ -91,8 +94,9 @@ export function CleanerShell({
     setState((current) => ({ ...current, active }));
   };
 
-  const open = (moduleId: CleanerModuleId) => {
+  const open = (moduleId: CleanerModuleId, recipeId?: string) => {
     if (!visibleIds.has(moduleId)) return;
+    setActiveRecipeId(recipeId);
     setRenderedModules((current) =>
       current.includes(moduleId) ? current : [...current, moduleId],
     );
@@ -143,7 +147,12 @@ export function CleanerShell({
                     </div>
                   }
                 >
-                  <Module accessToken={accessToken} params={params} />
+                  <Module
+                    accessToken={accessToken}
+                    params={params}
+                    recipeId={activeRecipeId}
+                    onRecipeChange={setActiveRecipeId}
+                  />
                 </Suspense>
               </div>
             );

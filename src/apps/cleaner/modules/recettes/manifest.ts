@@ -2,10 +2,11 @@ import { lazy, type FC, type LazyExoticComponent, type ReactNode } from 'react';
 import type { AppRole } from '../../../../os/registry';
 import type { CleanerModuleProps } from '../../shell/moduleRegistry';
 
-export type RecipeAction = 'preview_merge' | 'apply_merge';
+export type RecipeAction =
+  'bulk_edit' | 'bulk_close' | 'preview_merge' | 'apply_merge';
 
 export type RecipeFilter = {
-  id: 'sector_source' | 'sector_target' | 'account_owner';
+  id: string;
   label: string;
 };
 
@@ -26,6 +27,24 @@ const lazySectorsRecipe = lazy(() =>
   })),
 );
 
+const lazyOpportunitiesRecipe = lazy(() =>
+  import('../opportunities/OpportunitiesRecipe').then(
+    ({ OpportunitiesRecipe }) => ({ default: OpportunitiesRecipe }),
+  ),
+);
+
+export const opportunitiesRecipe = {
+  id: 'opportunities',
+  label: 'Opportunités suspectes ou abandonnées',
+  objectType: 'Opportunity',
+  description:
+    'Identifier, analyser et traiter les opportunités qui demandent une décision commerciale.',
+  icon: '◇',
+  filters: [],
+  actions: ['bulk_edit', 'bulk_close'],
+  component: lazyOpportunitiesRecipe,
+} satisfies RecipeManifest;
+
 export const sectorsRecipe = {
   id: 'sectors',
   label: 'Secteurs obsolètes',
@@ -44,6 +63,7 @@ export const sectorsRecipe = {
 
 // Adding a recipe only extends this registry; the module shell stays unchanged.
 export const recipeRegistry = [
+  opportunitiesRecipe,
   sectorsRecipe,
 ] satisfies readonly RecipeManifest[];
 

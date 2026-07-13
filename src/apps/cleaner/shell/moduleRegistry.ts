@@ -1,12 +1,13 @@
 import type { FC, LazyExoticComponent } from 'react';
 import type { AppRole } from '../../../os/registry';
-import { opportunitiesManifest } from '../modules/opportunities/manifest';
 import { recettesManifest } from '../modules/recettes/manifest';
 import { moduleAllowedForRole, type CleanerModuleId } from './shellState';
 
 export type CleanerModuleProps = {
   accessToken?: string;
   params?: Record<string, string>;
+  recipeId?: string;
+  onRecipeChange?: (recipeId?: string) => void;
 };
 
 export type CleanerModuleDefinition = {
@@ -18,11 +19,6 @@ export type CleanerModuleDefinition = {
 };
 
 export const moduleRegistry = [
-  {
-    ...opportunitiesManifest,
-    // The shell tab keeps the module name; Nettoyage is the active internal view.
-    label: 'Opportunités',
-  },
   recettesManifest,
 ] satisfies readonly CleanerModuleDefinition[];
 

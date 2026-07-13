@@ -52,8 +52,9 @@ const readyCockpit: CleanerCockpitState = {
   status: 'ready',
   summaries: [
     {
-      moduleId: 'opportunities',
-      label: 'Opportunités',
+      moduleId: 'recettes',
+      recipeId: 'opportunities',
+      label: 'Opportunités suspectes ou abandonnées',
       criticality: 'critical',
       anomalyCount: 12,
       affectedRecordCount: 8,
@@ -83,7 +84,7 @@ function renderShell(
 }
 
 describe('CleanerShell navigation', () => {
-  it('opens the Recettes tile and renders the sectors recipe tab', async () => {
+  it('opens the Secteurs cockpit tile inside the Recettes top-level tab', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -103,10 +104,10 @@ describe('CleanerShell navigation', () => {
       cockpit: {
         status: 'ready',
         summaries: [
-          ...readyCockpit.summaries,
           {
             moduleId: 'recettes',
-            label: 'Recettes',
+            recipeId: 'sectors',
+            label: 'Secteurs obsolètes',
             criticality: 'warning',
             anomalyCount: 0,
             affectedRecordCount: 0,
@@ -118,11 +119,13 @@ describe('CleanerShell navigation', () => {
       },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir Recettes' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ouvrir Secteurs obsolètes' }),
+    );
 
     expect(screen.getByRole('tab', { name: 'Recettes' })).toBeTruthy();
     expect(
-      await screen.findByRole('button', { name: 'Secteurs obsolètes' }),
+      await screen.findByRole('heading', { name: 'Secteurs obsolètes' }),
     ).toBeTruthy();
   });
 
@@ -178,7 +181,8 @@ describe('CleanerShell navigation', () => {
         summaries: [
           {
             moduleId: 'recettes',
-            label: 'Recettes',
+            recipeId: 'sectors',
+            label: 'Secteurs obsolètes',
             criticality: 'warning',
             anomalyCount: 1,
             affectedRecordCount: 1,
@@ -190,7 +194,9 @@ describe('CleanerShell navigation', () => {
       },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir Recettes' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ouvrir Secteurs obsolètes' }),
+    );
     await screen.findByText('Finance');
     fireEvent.click(screen.getByRole('button', { name: 'Cible pour Finance' }));
     fireEvent.click(screen.getByRole('option', { name: 'Transports' }));
@@ -247,7 +253,7 @@ describe('CleanerShell navigation', () => {
     );
     expect(
       screen
-        .getByRole('tab', { name: 'Opportunités' })
+        .getByRole('tab', { name: 'Recettes' })
         .getAttribute('aria-selected'),
     ).toBe('true');
     expect(
@@ -263,25 +269,27 @@ describe('CleanerShell navigation', () => {
     renderShell();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ouvrir Opportunités' }),
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
     );
     fireEvent.click(screen.getByRole('tab', { name: 'Accueil' }));
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ouvrir Opportunités' }),
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
     );
 
-    expect(screen.getAllByRole('tab', { name: 'Opportunités' })).toHaveLength(
-      1,
-    );
+    expect(screen.getAllByRole('tab', { name: 'Recettes' })).toHaveLength(1);
     await waitFor(() =>
-      expect(screen.getByTestId('cleaner-module-opportunities')).toBeTruthy(),
+      expect(screen.getByTestId('cleaner-recipe-opportunities')).toBeTruthy(),
     );
     expect(
-      screen.getByTestId('cleaner-module-opportunities').closest('[hidden]'),
+      screen.getByTestId('cleaner-recipe-opportunities').closest('[hidden]'),
     ).toBeNull();
     expect(
       screen
-        .getByRole('tab', { name: 'Opportunités' })
+        .getByRole('tab', { name: 'Recettes' })
         .getAttribute('aria-selected'),
     ).toBe('true');
   });
@@ -290,10 +298,12 @@ describe('CleanerShell navigation', () => {
     renderShell();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ouvrir Opportunités' }),
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
     );
-    const module = screen.getByTestId('cleaner-module-opportunities');
-    fireEvent.click(screen.getByLabelText('Fermer Opportunités'));
+    const module = screen.getByTestId('cleaner-recipe-opportunities');
+    fireEvent.click(screen.getByLabelText('Fermer Recettes'));
 
     expect(
       screen
@@ -303,34 +313,38 @@ describe('CleanerShell navigation', () => {
     expect(module).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ouvrir Opportunités' }),
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
     );
-    expect(screen.getByTestId('cleaner-module-opportunities')).toBe(module);
+    expect(screen.getByTestId('cleaner-recipe-opportunities')).toBe(module);
   });
 
   it('persists the session tab state using the X OS storage convention', () => {
     const first = renderShell();
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ouvrir Opportunités' }),
+      screen.getByRole('button', {
+        name: 'Ouvrir Opportunités suspectes ou abandonnées',
+      }),
     );
     first.unmount();
 
     expect(window.localStorage.getItem(CLEANER_SHELL_STORAGE_KEY)).toContain(
-      'opportunities',
+      'recettes',
     );
 
     renderShell();
     expect(
       screen
-        .getByRole('tab', { name: 'Opportunités' })
+        .getByRole('tab', { name: 'Recettes' })
         .getAttribute('aria-selected'),
     ).toBe('true');
   });
 
   it('hides modules forbidden by role', () => {
     const state: CleanerTabState = {
-      open: ['opportunities'],
-      active: 'opportunities',
+      open: ['recettes'],
+      active: 'recettes',
     };
     renderShell({
       role: 'commercial',
@@ -350,15 +364,12 @@ describe('CleanerShell navigation', () => {
 describe('CleanerShell state helpers', () => {
   it('opens once and closes without mutating unrelated state', () => {
     const initial = createInitialTabState();
-    const opened = openModule(
-      openModule(initial, 'opportunities'),
-      'opportunities',
-    );
+    const opened = openModule(openModule(initial, 'recettes'), 'recettes');
     expect(opened).toEqual({
-      open: ['opportunities'],
-      active: 'opportunities',
+      open: ['recettes'],
+      active: 'recettes',
     });
-    expect(closeModule(opened, 'opportunities')).toEqual({
+    expect(closeModule(opened, 'recettes')).toEqual({
       open: [],
       active: 'home',
     });
@@ -383,7 +394,7 @@ describe('CleanerCockpit', () => {
               ...readyCockpit.summaries[0],
               criticality: 'warning',
               label: 'B',
-              moduleId: 'opportunities',
+              moduleId: 'recettes',
             },
             {
               ...readyCockpit.summaries[0],

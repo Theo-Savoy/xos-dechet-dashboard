@@ -247,25 +247,71 @@
   min-width: 0;
   gap: 1rem;
 }
-.cleaner-recipes__tabs {
+.cleaner-recipes__header {
   display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--xos-border);
 }
-.cleaner-recipes__tabs button {
-  padding: 0.65rem 0.85rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--xos-text-muted);
-  background: transparent;
-  cursor: pointer;
+.cleaner-recipes__header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cleaner-recipes__tabs button:hover,
-.cleaner-recipes__tabs button.is-active {
-  border-bottom-color: var(--xos-accent);
+.cleaner-recipes__intro > p:last-child {
+  max-width: 46rem;
+  margin: 0.55rem 0 0;
+  color: var(--xos-text-muted);
+}
+.cleaner-recipes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.75rem;
+}
+.cleaner-recipe-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  min-height: 10rem;
+  padding: 1rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.75rem;
   color: var(--xos-text);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+.cleaner-recipe-tile:hover {
+  border-color: color-mix(in srgb, var(--xos-accent) 55%, var(--xos-border));
+  background: rgba(255, 255, 255, 0.07);
+}
+.cleaner-recipe-tile__icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  color: var(--xos-accent);
+  background: color-mix(in srgb, var(--xos-accent) 14%, transparent);
+}
+.cleaner-recipe-tile > span:nth-child(2) {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+}
+.cleaner-recipe-tile strong {
+  font-size: 1rem;
+}
+.cleaner-recipe-tile small,
+.cleaner-recipe-tile > span:last-child {
+  color: var(--xos-text-muted);
+}
+.cleaner-recipe-tile > span:last-child {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  line-height: 1.45;
 }
 .cleaner-sector-recipe__intro {
   display: flex;
@@ -606,10 +652,7 @@
   bottom: 0.75rem;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, 14rem), 1fr)
-  );
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
