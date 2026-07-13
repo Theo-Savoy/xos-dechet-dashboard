@@ -9,7 +9,7 @@ type FloatingReactionsProps = {
   onDone: (id: string) => void;
 };
 
-const PARTICLE_COUNT = 14;
+const PARTICLE_COUNT = 30;
 const PARTICLE_LIFETIME_MS = 4_300;
 
 type Particle = {
@@ -20,6 +20,7 @@ type Particle = {
   duration: string;
   drift: string;
   size: string;
+  scale: string;
   rotate: string;
 };
 
@@ -32,6 +33,7 @@ export function particlesFor(emoji: string): Particle[] {
     duration: `${2.8 + Math.random()}s`,
     drift: `${(Math.random() - 0.5) * 180}px`,
     size: `${1.2 + Math.random() * 1.6}rem`,
+    scale: `${1 + Math.random()}`,
     rotate: `${(Math.random() - 0.5) * 80}deg`,
   }));
 }
@@ -89,6 +91,7 @@ export function FloatingReactions({ bursts, onDone }: FloatingReactionsProps) {
               animationDelay: p.delay,
               animationDuration: p.duration,
               ['--xos-float-drift' as string]: p.drift,
+              ['--xos-float-scale' as string]: p.scale,
               ['--xos-float-rotate' as string]: p.rotate,
             }}
           >

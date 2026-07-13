@@ -52,6 +52,94 @@ describe('ControlCenter', () => {
     vi.unstubAllGlobals();
   });
 
+  function postedEmojis(): string[] {
+    return vi
+      .mocked(fetch)
+      .mock.calls.map(([, init]) => {
+        if (typeof init?.body !== 'string') return null;
+        try {
+          const body = JSON.parse(init.body) as { emoji?: unknown };
+          return typeof body.emoji === 'string' ? body.emoji : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((emoji): emoji is string => emoji !== null);
+  }
+
+  async function openGoalHit() {
+    const user = userEvent.setup();
+    render(
+      <NotificationsProvider>
+        <ControlCenter accessToken="token" />
+      </NotificationsProvider>,
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Centre de notifications' }),
+    );
+    await waitFor(() => expect(screen.getByText(goalHit.title)).toBeTruthy());
+    return user;
+  }
+
+  it('dispatches the selected quick reaction emoji', async () => {
+    const user = await openGoalHit();
+
+    await user.click(screen.getByRole('button', { name: 'Réagir 🔥' }));
+
+    await waitFor(() => expect(postedEmojis()).toContain('🔥'));
+  });
+
+  it('opens the picker from the more reactions button', async () => {
+    const user = await openGoalHit();
+    const moreButton = screen.getByRole('button', {
+      name: 'Plus de réactions',
+    });
+
+    await user.click(moreButton);
+
+    expect(screen.getByRole('menu')).toBeTruthy();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(5);
+    expect(moreButton.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('dispatches a picker reaction and closes the picker', async () => {
+    const user = await openGoalHit();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Plus de réactions' }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Réagir 🎉' }));
+
+    await waitFor(() => expect(postedEmojis()).toContain('🎉'));
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('closes the picker on Escape and returns focus to its trigger', async () => {
+    const user = await openGoalHit();
+    const moreButton = screen.getByRole('button', {
+      name: 'Plus de réactions',
+    });
+
+    await user.click(moreButton);
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(moreButton);
+  });
+
+  it('closes the picker when clicking outside and returns focus to its trigger', async () => {
+    const user = await openGoalHit();
+    const moreButton = screen.getByRole('button', {
+      name: 'Plus de réactions',
+    });
+
+    await user.click(moreButton);
+    await user.click(screen.getByRole('heading', { name: 'Notifications' }));
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(moreButton);
+  });
+
   it('hides a reacted item after the thirty-minute TTL', async () => {
     render(
       <NotificationsProvider>

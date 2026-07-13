@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import logoXos from '../assets/logo-xos.png';
 import {
   fetchNotifications,
-  GOAL_REACTION_EMOJIS,
   markNotificationsRead,
+  PICKER_REACTION_EMOJIS,
+  QUICK_REACTION_EMOJIS,
   reactionEmoji,
   reactToNotification,
   type GoalReactionEmoji,
@@ -40,6 +41,7 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   const [loading, setLoading] = useState(false);
   const [reactingId, setReactingId] = useState<number | null>(null);
   const [reactedAt, setReactedAt] = useState<Record<number, number>>({});
+  const [pickerOpenId, setPickerOpenId] = useState<number | null>(null);
   const {
     addBurst,
     addLocalBurst,
@@ -50,6 +52,15 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   } = useNotificationsStore();
   const seenReactionIds = useRef(new Set<number>());
   const bootstrapped = useRef(false);
+  const pickerRootRef = useRef<HTMLDivElement>(null);
+  const pickerButtonRefs = useRef(new Map<number, HTMLButtonElement>());
+
+  const closePicker = useCallback(() => {
+    if (pickerOpenId === null) return;
+    const button = pickerButtonRefs.current.get(pickerOpenId);
+    setPickerOpenId(null);
+    button?.focus();
+  }, [pickerOpenId]);
 
   const processNotifications = useCallback(
     (notifications: UserNotification[], unreadCount: number) => {
@@ -131,6 +142,33 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   useEffect(() => {
     if (controlCenterOpenRequest > 0) setOpen(true);
   }, [controlCenterOpenRequest]);
+
+  useEffect(() => {
+    if (open) return;
+    setPickerOpenId(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (pickerOpenId === null) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!pickerRootRef.current?.contains(event.target as Node)) {
+        event.preventDefault();
+        closePicker();
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closePicker();
+      }
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [closePicker, pickerOpenId]);
 
   useEffect(() => {
     void refresh();
@@ -268,7 +306,9 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
               </div>
             </header>
 
-            <div className="xos-cc__list">
+            <div
+              className={`xos-cc__list${pickerOpenId !== null ? ' xos-cc__list--picker-open' : ''}`}
+            >
               {loading && items.length === 0 && (
                 <p className="xos-cc__empty">Chargement…</p>
               )}
@@ -326,18 +366,78 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                           role="group"
                           aria-label="Réagir"
                         >
-                          {GOAL_REACTION_EMOJIS.map((emoji) => (
+                          {QUICK_REACTION_EMOJIS.map((emoji) => (
                             <button
                               key={emoji}
                               type="button"
                               className="xos-cc__react"
                               disabled={reactingId === item.id}
+                              aria-label={`Réagir ${emoji}`}
                               title={`Réagir ${emoji}`}
                               onClick={() => void handleReact(item, emoji)}
                             >
                               {emoji}
                             </button>
                           ))}
+                          <div
+                            ref={
+                              pickerOpenId === item.id
+                                ? pickerRootRef
+                                : undefined
+                            }
+                            className="xos-cc__react-picker"
+                          >
+                            <button
+                              ref={(button) => {
+                                if (button) {
+                                  pickerButtonRefs.current.set(item.id, button);
+                                } else {
+                                  pickerButtonRefs.current.delete(item.id);
+                                }
+                              }}
+                              type="button"
+                              className={`xos-cc__react xos-cc__react--more${pickerOpenId === item.id ? ' xos-cc__react--open' : ''}`}
+                              disabled={reactingId === item.id}
+                              aria-label="Plus de réactions"
+                              aria-haspopup="menu"
+                              aria-expanded={pickerOpenId === item.id}
+                              aria-controls={`xos-reaction-picker-${item.id}`}
+                              title="Plus de réactions"
+                              onClick={() =>
+                                setPickerOpenId((current) =>
+                                  current === item.id ? null : item.id,
+                                )
+                              }
+                            >
+                              <span aria-hidden="true">+</span>
+                            </button>
+                            {pickerOpenId === item.id && (
+                              <div
+                                id={`xos-reaction-picker-${item.id}`}
+                                className="xos-cc__react-picker-menu"
+                                role="menu"
+                                aria-label="Autres réactions"
+                              >
+                                {PICKER_REACTION_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    role="menuitem"
+                                    className="xos-cc__react-picker-item"
+                                    disabled={reactingId === item.id}
+                                    aria-label={`Réagir ${emoji}`}
+                                    title={`Réagir ${emoji}`}
+                                    onClick={() => {
+                                      void handleReact(item, emoji);
+                                      closePicker();
+                                    }}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                       {eventUrl && (

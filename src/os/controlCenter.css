@@ -136,6 +136,10 @@
   padding-right: 0.15rem;
 }
 
+.xos-cc__list--picker-open {
+  overflow: visible;
+}
+
 .xos-cc__empty {
   margin: 0.75rem 0;
   color: var(--xos-text-muted);
@@ -238,6 +242,10 @@
   margin-right: auto;
 }
 
+.xos-cc__react-picker {
+  position: relative;
+}
+
 .xos-cc__react {
   width: 1.85rem;
   height: 1.85rem;
@@ -255,7 +263,61 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.xos-cc__react--more {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.xos-cc__react--open,
+.xos-cc__react--open:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--xos-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+}
+
+.xos-cc__react-picker-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 12003;
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--xos-window-content-bg) 92%, black);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: var(--xos-blur);
+  -webkit-backdrop-filter: var(--xos-blur);
+}
+
+.xos-cc__react-picker-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--xos-text);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.xos-cc__react-picker-item:hover:not(:disabled),
+.xos-cc__react-picker-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
 .xos-cc__react:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.xos-cc__react-picker-item:disabled {
   opacity: 0.55;
   cursor: wait;
 }

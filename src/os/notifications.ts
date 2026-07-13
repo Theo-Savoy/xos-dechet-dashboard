@@ -52,22 +52,18 @@ export async function markNotificationsRead(
   if (!res.ok) throw new Error(`notifications_mark_${res.status}`);
 }
 
+const QUICK_REACTION_EMOJIS = ['👏', '🔥', '💪'] as const;
+const PICKER_REACTION_EMOJIS = ['🎉', '🥳', '🙌', '💯', '⭐'] as const;
 const GOAL_REACTION_EMOJIS = [
-  '👏',
-  '🔥',
-  '💪',
-  '🎉',
-  '🥳',
-  '🙌',
-  '💯',
-  '⭐',
-  '❤️',
-  '🚀',
-  '🤝',
-  '💼',
+  ...QUICK_REACTION_EMOJIS,
+  ...PICKER_REACTION_EMOJIS,
 ] as const;
 export type GoalReactionEmoji = (typeof GOAL_REACTION_EMOJIS)[number];
-export { GOAL_REACTION_EMOJIS };
+export {
+  GOAL_REACTION_EMOJIS,
+  PICKER_REACTION_EMOJIS,
+  QUICK_REACTION_EMOJIS,
+};
 
 export async function reactToNotification(
   token: string,

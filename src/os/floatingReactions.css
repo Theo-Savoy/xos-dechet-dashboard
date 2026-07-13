@@ -28,7 +28,8 @@
   100% {
     opacity: 0;
     transform: translate3d(var(--xos-float-drift, 0), -110vh, 0)
-      rotate(var(--xos-float-rotate, 0deg)) scale(1.05);
+      rotate(var(--xos-float-rotate, 0deg))
+      scale(var(--xos-float-scale, 1.05));
   }
 }
 

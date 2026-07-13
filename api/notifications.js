@@ -77,7 +77,7 @@ export async function POST(request) {
   }
 
   if (body.action === "react") {
-    const ALLOWED_EMOJIS = new Set(["👏", "🔥", "💪", "🎉", "🥳", "🙌", "💯", "⭐", "❤️", "🚀", "🤝", "💼"]);
+    const ALLOWED_EMOJIS = new Set(["👏", "🔥", "💪", "🎉", "🥳", "🙌", "💯", "⭐"]);
     const notificationId = body.notification_id;
     const emoji = body.emoji;
     if (!Number.isInteger(notificationId) || notificationId < 1) {
