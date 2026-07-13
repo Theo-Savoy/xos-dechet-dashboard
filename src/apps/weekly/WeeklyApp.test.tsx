@@ -43,7 +43,7 @@ const selfPayload = {
   period: "week" as const,
   timezone: "Europe/Paris",
   range: { from: "2026-06-29", to: "2026-07-12" },
-  view: "self" as const,
+  view: "team" as const,
   context: baseContext,
   week_meta: [
     { week_start: "2026-06-29", iso_week: "2026-W27" },
@@ -194,7 +194,7 @@ describe("Weekly Perf", () => {
     expect(screen.getByText("Non décroché")).toBeTruthy();
   });
 
-  it("renders a commercial's week metrics without a team toggle", async () => {
+  it("renders a commercial's week metrics with the team toggle", async () => {
     render(<WeeklyApp />);
 
     expect(await screen.findByText("Ada Lovelace")).toBeTruthy();
@@ -204,7 +204,8 @@ describe("Weekly Perf", () => {
     expect(screen.getByText(/2 RDV sur 5/)).toBeTruthy();
     expect(screen.getByText(/bon rythme trimestre/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /snapshot de la période/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Équipe" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Équipe" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Moi" })).toBeTruthy();
   });
 
   it("requests the current week by default", async () => {

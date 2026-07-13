@@ -233,19 +233,20 @@ describe("GET /api/perf", () => {
     const response = await GET(request());
     const body = await response.json();
     const week = "2026-W28";
-    expect(body.view).toBe("self");
+    expect(body.view).toBe("team");
     expect(body.pulse.find((row) => row.week === week)).toMatchObject({ sf_user_id: "005A", calls: 1, meetings: 1, proposals: 1 });
     expect(body.pipeline.find((row) => row.week === week)).toMatchObject({ generated_count: 1, generated_amount: 100, won_count: 3, won_amount: 100, closing_rate_count: 3, closing_rate_amount: 1 });
     expect(body.effort.find((row) => row.week === week)).toMatchObject({ progressions: 1, open_opps_at_start: 3, effort_rate: 1 / 3 });
   });
 
-  it("limits a commercial to their own Salesforce owner series", async () => {
+  it("returns the team roster to a commercial for the Moi/Équipe toggle", async () => {
     const records = recordSet();
     records.tasks.push({ OwnerId: "005B", ActivityDate: "2026-07-07", TaskSubtype: "Call" });
     queueSalesforce(records);
     const body = await (await GET(request())).json();
-    expect(body.owners.map((owner) => owner.sf_user_id)).toEqual(["005A"]);
-    expect(body.pulse.every((row) => row.sf_user_id === "005A")).toBe(true);
+    expect(body.view).toBe("team");
+    expect(body.owners.map((owner) => owner.sf_user_id)).toEqual(["005A", "005B"]);
+    expect(body.pulse.some((row) => row.sf_user_id === "005B")).toBe(true);
   });
 
   it("returns the team series to a manager", async () => {
@@ -368,9 +369,11 @@ describe("GET /api/perf", () => {
   });
 
   it("returns forecast history points for the effort chart", async () => {
+    mockGetProfile.mockResolvedValue({ sfUserId: "005A", fullName: "Ada", role: "commercial" });
     const body = await (await GET(request())).json();
     expect(body.forecast_history.length).toBeGreaterThan(0);
-    expect(body.forecast_history.at(-1)).toMatchObject({
+    const ada = body.forecast_history.find((row) => row.sf_user_id === "005A" && row.week === "2026-W28");
+    expect(ada).toMatchObject({
       sf_user_id: "005A",
       forecast: 5025,
       signed_to_date: 100,

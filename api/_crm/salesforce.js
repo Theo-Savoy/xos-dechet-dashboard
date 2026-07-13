@@ -691,6 +691,7 @@ export async function fetchContactContext(
     email: contactRow?.[cf.email] ?? null,
     title: contactRow?.[cf.title] ?? null,
     account_name: accountRow?.[af.name] ?? null,
+    account_customer_type: accountRow?.[af.customerType] ?? null,
     account_owner_sf_user_id: accountRow?.[af.ownerId] || null,
     industry,
     peer_clients: peerClients,

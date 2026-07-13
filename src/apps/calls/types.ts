@@ -128,6 +128,8 @@ export type ContactContext = {
   email?: string | null;
   title?: string | null;
   account_name?: string | null;
+  /** Valeur picklist Type_de_client__c du compte lié. */
+  account_customer_type?: string | null;
   /** Salesforce User Id propriétaire du compte (Account.OwnerId). */
   account_owner_sf_user_id?: string | null;
   industry?: string | null;

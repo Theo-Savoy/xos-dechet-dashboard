@@ -69,8 +69,34 @@ export function rdvSubjectsForSession(sessionType: SessionType | string | null |
     .filter((s): s is RdvSubjectDef => Boolean(s));
 }
 
-export function defaultRdvSubjectId(sessionType: SessionType | string | null | undefined): RdvSubjectId {
-  return rdvSubjectsForSession(sessionType)[0]?.id ?? "decouverte_prospect";
+/** Type_de_client__c Salesforce (Account). */
+export type AccountCustomerType = "Prospect" | "Client" | "Client inactif";
+
+function isClientAccountType(type: string | null | undefined): boolean {
+  return type === "Client" || type === "Client inactif";
+}
+
+/**
+ * Motif par défaut : selon le type de séance, puis le type de compte pour les RDV « médaille ».
+ * Prospect → découverte ; Client / Client inactif → détection enjeux.
+ */
+export function defaultRdvSubjectId(
+  sessionType: SessionType | string | null | undefined,
+  accountCustomerType?: string | null,
+): RdvSubjectId {
+  const subjects = rdvSubjectsForSession(sessionType);
+  const lundiIds = subjects.filter((s) => s.countsForLundi).map((s) => s.id);
+
+  if (lundiIds.length >= 2 && accountCustomerType) {
+    if (isClientAccountType(accountCustomerType) && lundiIds.includes("detection_enjeux")) {
+      return "detection_enjeux";
+    }
+    if (!isClientAccountType(accountCustomerType) && lundiIds.includes("decouverte_prospect")) {
+      return "decouverte_prospect";
+    }
+  }
+
+  return subjects[0]?.id ?? "decouverte_prospect";
 }
 
 export function rdvSubjectById(id: RdvSubjectId): RdvSubjectDef {

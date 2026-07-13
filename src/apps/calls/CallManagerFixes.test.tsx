@@ -88,6 +88,7 @@ describe("EventPanel", () => {
         loading={false}
         onSubmit={onSubmit}
         sessionType="prospection"
+        accountCustomerType="Prospect"
       />,
     );
 
@@ -99,6 +100,46 @@ describe("EventPanel", () => {
       60,
       { subject: "Rdv découverte prospect", ownerSfUserId: null },
     );
+  });
+
+  it("defaults to detection enjeux for a Client account in prospection", () => {
+    render(
+      <EventPanel
+        contactName="Alice"
+        loading={false}
+        onSubmit={vi.fn()}
+        sessionType="prospection"
+        accountCustomerType="Client"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Rdv détection enjeux client/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("resets RDV subject when switching to another contact account type", async () => {
+    const { rerender } = render(
+      <EventPanel
+        contactName="Alice"
+        loading={false}
+        onSubmit={vi.fn()}
+        sessionType="prospection"
+        accountCustomerType="Client"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Rdv détection enjeux client/i }).getAttribute("aria-pressed")).toBe("true");
+
+    rerender(
+      <EventPanel
+        contactName="Bob"
+        loading={false}
+        onSubmit={vi.fn()}
+        sessionType="prospection"
+        accountCustomerType="Prospect"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Rdv découverte prospect/i }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("defaults SDR attribution to a commercial colleague", async () => {

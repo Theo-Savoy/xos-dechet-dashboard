@@ -56,24 +56,27 @@
 }
 
 .weekly-controls {
-  position: sticky;
-  top: 0;
-  z-index: 12;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: .65rem .85rem;
   margin: 0;
-  padding: .45rem 0 .7rem;
-  background:
-    linear-gradient(180deg, var(--xos-window-content-bg) 55%, color-mix(in srgb, var(--xos-window-content-bg) 70%, transparent));
-  backdrop-filter: var(--xos-blur);
-  -webkit-backdrop-filter: var(--xos-blur);
+  padding: 0;
+}
+
+.weekly-controls__cluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .65rem .85rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .weekly-controls--refreshing {
-  padding-bottom: .85rem;
+  position: relative;
+  padding-bottom: .35rem;
 }
 
 .weekly-refresh-bar {
@@ -103,7 +106,7 @@
 }
 
 .weekly-controls .xos-select { align-self: center; }
-.weekly-display-toggle { margin-left: auto; }
+.weekly-display-toggle { margin-left: 0; flex-shrink: 0; }
 
 .weekly-seg {
   display: inline-flex;
@@ -1306,12 +1309,13 @@
   .weekly-period .xos-btn,
   .weekly-seg .xos-btn { flex: 1; }
   .weekly-controls {
-    position: static;
-    align-items: stretch;
     flex-direction: column;
-    backdrop-filter: none;
-    background: transparent;
-    padding: 0;
+    align-items: stretch;
+  }
+  .weekly-controls__cluster {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
   }
   .weekly-controls .xos-select,
   .weekly-controls .xos-select__trigger { width: 100%; }

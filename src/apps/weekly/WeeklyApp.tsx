@@ -1939,25 +1939,27 @@ export default function WeeklyApp() {
     {payload.warning === "sf_user_unmapped" && <div className="weekly-warning" role="status">Compte Salesforce non relié — connectez-vous via le Hub.</div>}
     {error && <div className="weekly-warning" role="status">Impossible de rafraîchir ces données — dernière vue conservée.</div>}
     <div className={`weekly-controls${contentRefreshing ? " weekly-controls--refreshing" : ""}`}>
-      {payload.view === "team" && <div className="weekly-toggle weekly-seg" aria-label="Vue">
-        <Button variant={mode === "self" ? "primary" : "secondary"} onClick={() => { setMode("self"); setSelectedOwnerId("all"); }}>Moi</Button>
-        <Button variant={mode === "team" ? "primary" : "secondary"} onClick={() => setMode("team")}>Équipe</Button>
-      </div>}
-      {payload.view === "team" && mode === "team" && (
-        <Select label="Commercial" aria-label="Filtrer un commercial" value={selectedOwnerId} options={ownerOptions} onChange={setSelectedOwnerId} />
-      )}
-      {showWeekSelector && (
-        <Select
-          label="Semaine"
-          aria-label="Choisir une semaine"
-          value={selectedWeekStart}
-          options={historyOptions}
-          onChange={(value) => setAnchorWeekStart(value === liveWeekStart ? null : value)}
-        />
-      )}
-      {showWeekSelector && selectedWeekStart !== liveWeekStart && (
-        <Button variant="secondary" onClick={() => setAnchorWeekStart(null)}>Semaine en cours</Button>
-      )}
+      <div className="weekly-controls__cluster">
+        {payload.view === "team" && <div className="weekly-toggle weekly-seg" aria-label="Vue">
+          <Button variant={mode === "self" ? "primary" : "secondary"} onClick={() => { setMode("self"); setSelectedOwnerId("all"); }}>Moi</Button>
+          <Button variant={mode === "team" ? "primary" : "secondary"} onClick={() => setMode("team")}>Équipe</Button>
+        </div>}
+        {payload.view === "team" && mode === "team" && (
+          <Select label="Commercial" aria-label="Filtrer un commercial" value={selectedOwnerId} options={ownerOptions} onChange={setSelectedOwnerId} />
+        )}
+        {showWeekSelector && (
+          <Select
+            label="Semaine"
+            aria-label="Choisir une semaine"
+            value={selectedWeekStart}
+            options={historyOptions}
+            onChange={(value) => setAnchorWeekStart(value === liveWeekStart ? null : value)}
+          />
+        )}
+        {showWeekSelector && selectedWeekStart !== liveWeekStart && (
+          <Button variant="secondary" onClick={() => setAnchorWeekStart(null)}>Semaine en cours</Button>
+        )}
+      </div>
       <div className="weekly-toggle weekly-seg weekly-display-toggle" aria-label="Affichage">
         <Button variant={displayMode === "cards" ? "primary" : "secondary"} onClick={() => setDisplayMode("cards")}>Cards</Button>
         <Button variant={displayMode === "table" ? "primary" : "secondary"} onClick={() => setDisplayMode("table")}>Tableau</Button>

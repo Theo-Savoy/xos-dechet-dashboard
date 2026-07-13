@@ -36,6 +36,8 @@ type EventPanelProps = {
   className?: string;
   team?: TeamMember[];
   sessionType?: SessionType | string | null;
+  /** Type_de_client__c du compte — affine le motif par défaut (Prospect vs Client). */
+  accountCustomerType?: string | null;
   /** SF user id of the current caller (for “moi” vs attribution SDR). */
   currentSfUserId?: string | null;
   /** Show ⌘↵ badge on the submit button (inline RDV log). */
@@ -61,6 +63,7 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
     className,
     team = [],
     sessionType = "prospection",
+    accountCustomerType = null,
     currentSfUserId = null,
     showSubmitShortcut = false,
     defaultOwnerSfUserId = null,
@@ -86,15 +89,17 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
     return "";
   };
 
-  const [subjectId, setSubjectId] = useState<RdvSubjectId>(() => defaultRdvSubjectId(sessionType));
+  const [subjectId, setSubjectId] = useState<RdvSubjectId>(() =>
+    defaultRdvSubjectId(sessionType, accountCustomerType),
+  );
   const [start, setStart] = useState(defaultStart());
   const [durationMin, setDurationMin] = useState(RDV_DURATION_DEFAULT);
   const [ownerSfUserId, setOwnerSfUserId] = useState<string>(() => resolveDefaultOwner());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSubjectId(defaultRdvSubjectId(sessionType));
-  }, [sessionType]);
+    setSubjectId(defaultRdvSubjectId(sessionType, accountCustomerType));
+  }, [sessionType, accountCustomerType, contactName]);
 
   useEffect(() => {
     setOwnerSfUserId(resolveDefaultOwner());

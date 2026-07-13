@@ -1,7 +1,7 @@
 import { verifyJWT } from "./_auth.js";
 import { getServiceClient } from "./_calls/http.js";
 import { getProfile } from "./_calls/profileCache.js";
-import { canViewTeamPerf, isWeeklyOwnerExcluded, sfIdKey, trackingModeFor } from "./_config/access.js";
+import { canViewWeeklyTeam, isWeeklyOwnerExcluded, sfIdKey, trackingModeFor } from "./_config/access.js";
 import mapping from "./_crm/mapping.js";
 import { escapeSOQL, fetchSFToken, searchContacts, buildLightningUrl } from "./_crm/salesforce.js";
 import { quarterlyToMonthlyIndicative } from "./_weekly/targets.js";
@@ -972,7 +972,7 @@ export async function GET(request) {
   if (!client) return json(500, { error: "service_unavailable" });
   const profile = await getProfile(client, user.id);
   if (profile.error) return json(500, { error: profile.error });
-  const teamView = canViewTeamPerf(profile.role);
+  const teamView = canViewWeeklyTeam(profile.role);
   const anchorWeekStart = url.searchParams.get("week_start");
   const today = dateKey();
   const effectiveDate = anchorWeekStart && /^\d{4}-\d{2}-\d{2}$/.test(anchorWeekStart)

@@ -3,6 +3,7 @@ import {
   canManageRoles,
   canManageSettings,
   canViewTeamPerf,
+  canViewWeeklyTeam,
   isWeeklyOwnerExcluded,
   roleAtLeast,
   roleFromEmail,
@@ -43,5 +44,7 @@ describe("role hierarchy", () => {
     expect(canManageRoles("manager")).toBe(false);
     expect(canViewTeamPerf("manager")).toBe(true);
     expect(canViewTeamPerf("commercial")).toBe(false);
+    expect(canViewWeeklyTeam("commercial")).toBe(true);
+    expect(canViewWeeklyTeam("manager")).toBe(true);
   });
 });

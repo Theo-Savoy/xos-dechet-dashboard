@@ -1500,6 +1500,7 @@ export function RunnerView({
               </details>
               {bulkResultat === "RDV planifié" && singleSelectedContact ? (
                 <EventPanel
+                  key={singleSelectedContact.id}
                   contactName={singleSelectedContact.contact_name}
                   loading={loading}
                   onSubmit={handleBulkRdvSubmit}
@@ -1509,6 +1510,11 @@ export function RunnerView({
                   team={team}
                   sessionType={session.session_type}
                   currentSfUserId={currentSfUserId}
+                  accountCustomerType={
+                    contextApplies && contextContactId === singleSelectedContact.id
+                      ? contactContext?.account_customer_type ?? null
+                      : null
+                  }
                   defaultOwnerSfUserId={
                     contextApplies && contextContactId === singleSelectedContact.id
                       ? contactContext?.account_owner_sf_user_id ?? null
@@ -2045,6 +2051,7 @@ export function RunnerView({
 
           {awaitingEvent ? (
             <EventPanel
+              key={awaitingEvent.id}
               contactName={awaitingEvent.contact_name}
               loading={loading}
               onSubmit={handleFinalizeEvent}
@@ -2052,6 +2059,11 @@ export function RunnerView({
               team={team}
               sessionType={session.session_type}
               currentSfUserId={currentSfUserId}
+              accountCustomerType={
+                contextApplies && contextContactId === awaitingEvent.id
+                  ? contactContext?.account_customer_type ?? null
+                  : null
+              }
               defaultOwnerSfUserId={
                 contextApplies && contextContactId === awaitingEvent.id
                   ? contactContext?.account_owner_sf_user_id ?? null
@@ -2108,6 +2120,7 @@ export function RunnerView({
 
               {resultat === "RDV planifié" ? (
                 <EventPanel
+                  key={focusedContact.id}
                   ref={eventPanelRef}
                   contactName={focusedContact.contact_name}
                   loading={loading}
@@ -2119,6 +2132,9 @@ export function RunnerView({
                   sessionType={session.session_type}
                   currentSfUserId={currentSfUserId}
                   showSubmitShortcut
+                  accountCustomerType={
+                    contextApplies ? contactContext?.account_customer_type ?? null : null
+                  }
                   defaultOwnerSfUserId={
                     contextApplies ? contactContext?.account_owner_sf_user_id ?? null : null
                   }

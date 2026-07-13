@@ -94,3 +94,8 @@ export function canManageRoles(role) {
 export function canViewTeamPerf(role) {
   return roleAtLeast(role, "manager");
 }
+
+/** Lundi : tout commercial mappé peut basculer Moi / Équipe (lecture seule). */
+export function canViewWeeklyTeam(role) {
+  return roleAtLeast(role, "commercial");
+}
