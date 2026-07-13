@@ -8,38 +8,49 @@ export type UserNotification = {
   read_at: string | null;
 };
 
+export function reactionEmoji(item: UserNotification): string | null {
+  if (item.kind !== 'goal_reaction') return null;
+  const fromPayload =
+    typeof item.payload?.emoji === 'string' ? item.payload.emoji : null;
+  if (fromPayload) return fromPayload;
+  return item.body?.trim() || null;
+}
+
 export async function fetchNotifications(
   token: string,
 ): Promise<{ notifications: UserNotification[]; unread_count: number }> {
-  const res = await fetch("/api/notifications?limit=40", {
+  const res = await fetch('/api/notifications?limit=40', {
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
   });
   if (!res.ok) throw new Error(`notifications_${res.status}`);
-  return res.json() as Promise<{ notifications: UserNotification[]; unread_count: number }>;
+  return res.json() as Promise<{
+    notifications: UserNotification[];
+    unread_count: number;
+  }>;
 }
 
 export async function markNotificationsRead(
   token: string,
   opts: { ids?: number[]; all?: boolean },
 ): Promise<void> {
-  const res = await fetch("/api/notifications", {
-    method: "POST",
+  const res = await fetch('/api/notifications', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      action: "mark_read",
+      action: 'mark_read',
       ...(opts.all ? { all: true } : { ids: opts.ids ?? [] }),
     }),
   });
   if (!res.ok) throw new Error(`notifications_mark_${res.status}`);
 }
 
-const GOAL_REACTION_EMOJIS = ["👏", "🔥", "💪"] as const;
+const GOAL_REACTION_EMOJIS = ['👏', '🔥', '💪'] as const;
 export type GoalReactionEmoji = (typeof GOAL_REACTION_EMOJIS)[number];
 export { GOAL_REACTION_EMOJIS };
 
@@ -48,14 +59,14 @@ export async function reactToNotification(
   notificationId: number,
   emoji: GoalReactionEmoji,
 ): Promise<void> {
-  const res = await fetch("/api/notifications", {
-    method: "POST",
+  const res = await fetch('/api/notifications', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      action: "react",
+      action: 'react',
       notification_id: notificationId,
       emoji,
     }),
