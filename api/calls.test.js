@@ -213,12 +213,18 @@ describe("GET /api/calls", () => {
           { id: "user-1", full_name: "Alice Martin", email: "alice@example.com", sf_user_id: "005000000000001" },
           { id: "user-2", full_name: null, email: "bob@example.com", sf_user_id: "005000000000002" },
           { id: "user-3", full_name: "Sans Salesforce", email: "none@example.com", sf_user_id: null },
+          {
+            id: "user-chris",
+            full_name: null,
+            email: "christophe.hirtz@xos-learning.fr",
+            sf_user_id: "0055I000002lY9QQAU",
+          },
         ],
         error: null,
       })
       .mockResolvedValueOnce({
         data: [
-          { email: "christophe.hirtz@xos-learning.fr", sf_user_id: "005000000000003" },
+          { email: "christophe.hirtz@xos-learning.fr", sf_user_id: "0055I000002lY9QQAU" },
           { email: "alice@example.com", sf_user_id: "005000000000001" },
         ],
         error: null,
@@ -230,8 +236,8 @@ describe("GET /api/calls", () => {
     expect(await res.json()).toEqual({
       team: [
         { user_id: "user-1", label: "Alice Martin", sf_user_id: "005000000000001" },
-        { user_id: "user-2", label: "bob@example.com", sf_user_id: "005000000000002" },
-        { user_id: "map:christophe.hirtz@xos-learning.fr", label: "Christophe Hirtz", sf_user_id: "005000000000003" },
+        { user_id: "user-2", label: "Bob", sf_user_id: "005000000000002" },
+        { user_id: "user-chris", label: "Christophe Hirtz", sf_user_id: "0055I000002lY9QQAU" },
       ],
     });
     expect(mockFrom).toHaveBeenCalledWith("profiles");

@@ -4,7 +4,9 @@ import {
   canManageSettings,
   canViewTeamPerf,
   canViewWeeklyTeam,
+  isCallsAccountOwnerCandidate,
   isWeeklyOwnerExcluded,
+  resolveCallsTeamLabel,
   roleAtLeast,
   roleFromEmail,
 } from "./access.js";
@@ -29,6 +31,25 @@ describe("weekly owner exclusions", () => {
     expect(isWeeklyOwnerExcluded({ Name: "Someone", Email: "theo.savoy@xos-learning.fr", IsActive: true })).toBe(true);
     expect(isWeeklyOwnerExcluded(null, "Théo Savoy", "")).toBe(true);
     expect(isWeeklyOwnerExcluded({ Name: "Ada Lovelace", Email: "ada@xos-learning.fr", IsActive: true })).toBe(false);
+  });
+});
+
+describe("Combo account owner filter", () => {
+  it("uses display name for Christophe even when profile label is an email", () => {
+    expect(
+      resolveCallsTeamLabel(
+        "0055I000002lY9QQAU",
+        "christophe.hirtz@xos-learning.fr",
+        "christophe.hirtz@xos-learning.fr",
+      ),
+    ).toBe("Christophe Hirtz");
+  });
+
+  it("excludes Théo and Yanis from account owner candidates", () => {
+    expect(isCallsAccountOwnerCandidate("005AZ000000X5nDYAS")).toBe(false);
+    expect(isCallsAccountOwnerCandidate("005Sb000007b6dWIAQ")).toBe(false);
+    expect(isCallsAccountOwnerCandidate("0055I000002lY9QQAU")).toBe(true);
+    expect(isCallsAccountOwnerCandidate("005AZ000000fLYkYAM")).toBe(true);
   });
 });
 
