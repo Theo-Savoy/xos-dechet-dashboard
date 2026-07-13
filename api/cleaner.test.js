@@ -321,8 +321,10 @@ describe('POST /api/cleaner recipes', () => {
   });
 
   it('starts a bulk recipe job and returns its job id', async () => {
+    // V17d: only 'bulk_apply' is accepted; the dry-run sweep runs inside
+    // the job before any Salesforce write.
     const response = await POST(postRequest({
-      module: 'recettes', resource: 'sectors', action: 'bulk_preview',
+      module: 'recettes', resource: 'sectors', action: 'bulk_apply',
       obsoleteIds: ['finance'], mapping: { finance: 'banque-finance' },
     }));
     expect(response.status).toBe(200);

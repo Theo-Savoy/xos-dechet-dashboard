@@ -472,7 +472,43 @@ function newJobId() {
 
 async function runBulkSectorJob(context, input, job) {
   job.status = 'running';
-  try {
+  // V17d: V17d dry-run is the default — the user only wants to know if
+  // the merge is feasible, not which accounts are affected. We try
+  // every mapping as a dry run first; if any dry run errors, we abort
+  // before any write. On 'bulk_apply' we re-apply sequentially after
+  // the dry-run sweep passes.
+  const dryRunErrors = [];
+  for (const obsoleteId of input.obsoleteIds) {
+    try {
+      const activeId = input.mapping[obsoleteId];
+      const dryRun = await previewSectorMerge(context, {
+        obsoleteId,
+        activeId,
+      });
+      job.results.push({ kind: 'dry_run', obsoleteId, ok: true, count: dryRun.accountCount });
+      job.processed += 1;
+    } catch (error) {
+      dryRunErrors.push({
+        obsoleteId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      job.errors.push({
+        obsoleteId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      job.processed += 1;
+    }
+  }
+  if (dryRunErrors.length > 0) {
+    job.status = 'done';
+    job.results = [];
+    job.finishedAt = new Date().toISOString();
+    return;
+  }
+  if (input.action === 'bulk_apply') {
+    job.processed = 0;
+    job.results = [];
+    job.errors = [];
     for (const obsoleteId of input.obsoleteIds) {
       try {
         const activeId = input.mapping[obsoleteId];
@@ -480,14 +516,12 @@ async function runBulkSectorJob(context, input, job) {
           obsoleteId,
           activeId,
         });
-        const result = input.action === 'bulk_apply'
-          ? await applySectorMerge(context, {
-              obsoleteId,
-              activeId,
-              expectedAccountIds: preview.accountIds,
-            })
-          : preview;
-        job.results.push(result);
+        const result = await applySectorMerge(context, {
+          obsoleteId,
+          activeId,
+          expectedAccountIds: preview.accountIds,
+        });
+        job.results.push({ kind: 'apply', obsoleteId, ok: true, updated: result.updated, failed: result.failed });
       } catch (error) {
         job.errors.push({
           obsoleteId,
@@ -497,27 +531,21 @@ async function runBulkSectorJob(context, input, job) {
         job.processed += 1;
       }
     }
-    job.status = 'done';
-  } catch (error) {
-    job.status = 'error';
-    job.error = error instanceof Error ? error.message : String(error);
-  } finally {
-    job.finishedAt = new Date().toISOString();
   }
+  job.status = 'done';
+  job.finishedAt = new Date().toISOString();
 }
 
 export function startBulkSectorJob(context = {}, input = {}) {
   validateBulkInput(input);
   const authorization = authorizeReadContext(context);
-  if (
-    input.action !== 'bulk_preview' &&
-    input.action !== 'bulk_apply'
-  )
+  // V17d: only 'bulk_apply' remains — the dry-run sweep runs internally
+  // before any write (see runBulkSectorJob). The client only ever calls
+  // bulk_apply; if the dry-run fails, the server returns errors without
+  // touching Salesforce.
+  if (input.action !== 'bulk_apply')
     throw new CleanerError('invalid_action', 'Cleaner action is invalid.', 400);
-  if (
-    input.action === 'bulk_apply' &&
-    !authorization.capabilities.canApplyRecipes
-  )
+  if (!authorization.capabilities.canApplyRecipes)
     throw new CleanerError(
       'forbidden',
       'Cette action nécessite un rôle manager ou admin.',

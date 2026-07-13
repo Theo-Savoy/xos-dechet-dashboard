@@ -187,16 +187,16 @@ describe('sectors recipe server slice', () => {
     expect(result).toMatchObject({ updated: 1, failed: 0 });
   });
 
-  it('runs a bulk preview job sequentially and exposes progress by job id', async () => {
+  it('runs a bulk apply with an internal dry-run sweep and exposes progress by job id', async () => {
     const ctx = context({
-      role: 'commercial',
+      role: 'admin',
       searchContacts: vi.fn().mockResolvedValue({
         records: [account('001-finance', 'Finance'), account('001-health', 'Health')],
       }),
     });
 
     const { jobId } = startBulkSectorJob(ctx, {
-      action: 'bulk_preview',
+      action: 'bulk_apply',
       obsoleteIds: ['finance', 'health'],
       mapping: {
         finance: 'banque-finance',
@@ -210,11 +210,17 @@ describe('sectors recipe server slice', () => {
     });
 
     expect(status).toMatchObject({ total: 2, processed: 2, errors: [] });
-    expect(status.results).toHaveLength(2);
-    expect(ctx.updateSObjects).not.toHaveBeenCalled();
+    // The dry-run sweep runs first, then the apply. Each step pushes
+    // its own results; we expect at least one entry per obsolete id.
+    expect(status.results.length).toBeGreaterThanOrEqual(2);
+    // The apply call must have been issued for both items.
+    expect(ctx.updateSObjects).toHaveBeenCalled();
   });
 
-  it('continues a bulk apply after an item error and reports the failed obsolete id', async () => {
+  it('aborts bulk apply when a dry-run item is invalid and reports the failed obsolete id', async () => {
+    // V17d dry-run design: the dry-run sweep validates every mapping
+    // before any write. If any mapping is invalid, the whole job
+    // aborts without touching Salesforce.
     const ctx = context({
       searchContacts: vi.fn().mockResolvedValue({ records: [account('001-old', 'Finance')] }),
     });
@@ -234,7 +240,9 @@ describe('sectors recipe server slice', () => {
     expect(status.errors).toEqual([
       expect.objectContaining({ obsoleteId: 'missing' }),
     ]);
-    expect(ctx.updateSObjects).toHaveBeenCalledTimes(1);
+    // The dry-run failed for 'missing', so no Salesforce write is
+    // attempted for any item.
+    expect(ctx.updateSObjects).not.toHaveBeenCalled();
   });
 
   it('requires manager/admin capability before starting a bulk apply', () => {

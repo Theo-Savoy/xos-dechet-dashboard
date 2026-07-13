@@ -224,7 +224,6 @@ export async function POST(request) {
     body.resource === 'sectors' &&
     (body.action === 'preview_merge' ||
       body.action === 'apply_merge' ||
-      body.action === 'bulk_preview' ||
       body.action === 'bulk_apply');
   if (!opportunityAction && !recipeAction)
     return response(400, {
