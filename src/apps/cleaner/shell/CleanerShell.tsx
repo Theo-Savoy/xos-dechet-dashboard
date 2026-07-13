@@ -3,6 +3,7 @@ import type { AppRole } from '../../../os/registry';
 import { CleanerCockpit, type CleanerCockpitState } from '../CleanerCockpit';
 import { CleanerTabs } from '../CleanerTabs';
 import { getModuleDefinition, getVisibleModules } from './moduleRegistry';
+import { RecettesModule } from '../modules/recettes/RecettesModule';
 import {
   closeModule,
   openModule,
@@ -124,9 +125,23 @@ export function CleanerShell({
         visibleModules={visibleModules}
       />
       <main className="cleaner-shell__body" data-active-module={state.active}>
-        {state.active === 'home' && (
-          <CleanerCockpit state={cockpit} onOpenModule={open} />
-        )}
+        {state.active === 'home' ? (
+          <>
+            <CleanerCockpit state={cockpit} onOpenModule={open} />
+            {/* V17b: surface the Recettes grid on the home so users see
+                every available recipe (including Secteurs obsolètes)
+                without having to navigate to a dedicated tab. */}
+            <section
+              className="cleaner-shell__home-recettes"
+              aria-label="Toutes les recettes"
+            >
+              <RecettesModule
+                accessToken={accessToken}
+                params={params}
+              />
+            </section>
+          </>
+        ) : null}
         <div className="cleaner-shell__modules" aria-live="polite">
           {renderedModules.map((moduleId) => {
             const module = getModuleDefinition(moduleId);
