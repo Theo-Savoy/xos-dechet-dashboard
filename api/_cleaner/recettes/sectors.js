@@ -5,7 +5,7 @@ import {
   updateSObjects,
 } from '../../_crm/salesforce.js';
 import { journalCleanerAction } from '../core/audit.js';
-import { allowedOwnerIds, authorizeContext } from '../core/authorization.js';
+import { authorizeContext } from '../core/authorization.js';
 import { CleanerError } from '../core/errors.js';
 
 // Canonical values are centralized in the CRM mapping today. Follow-up: move
@@ -108,7 +108,7 @@ function normalizeAccount(record) {
   };
 }
 
-async function loadScopedAccounts(context) {
+function authorizeRecipeContext(context) {
   const authorization = authorizeContext(context);
   if (!authorization.ok)
     throw new CleanerError(
@@ -116,6 +116,17 @@ async function loadScopedAccounts(context) {
       authorization.error,
       authorization.status,
     );
+  if (!authorization.capabilities.canApplyRecipes)
+    throw new CleanerError(
+      'forbidden',
+      'Cette recette nécessite un accès manager ou admin. Veuillez contacter votre administrateur.',
+      403,
+    );
+  return authorization;
+}
+
+async function loadScopedAccounts(context) {
+  const authorization = authorizeRecipeContext(context);
   const token = await tokenFor(context);
   const search = context.searchContacts || searchContacts;
   const query = accountQuery();
@@ -128,12 +139,10 @@ async function loadScopedAccounts(context) {
     );
   }
   const rawAccounts = result.records.map(normalizeAccount);
-  const owners = new Set(allowedOwnerIds(context));
   const accounts = rawAccounts.filter(
     (account) =>
       typeof account.id === 'string' &&
-      typeof account.sector === 'string' &&
-      owners.has(account.ownerId),
+      typeof account.sector === 'string',
   );
   return { accounts, token, capabilities: authorization.capabilities };
 }
@@ -158,6 +167,7 @@ function publicCapabilities(capabilities) {
 }
 
 export async function loadSectorRecipe(context = {}, query = {}) {
+  authorizeRecipeContext(context);
   const { accounts, capabilities } = await loadScopedAccounts(context);
   const groups = groupAccounts(accounts);
   const activeLabels = new Set(ACTIVE_SECTORS);

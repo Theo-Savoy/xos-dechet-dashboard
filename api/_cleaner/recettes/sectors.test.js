@@ -43,7 +43,7 @@ function context(overrides = {}) {
 }
 
 describe('sectors recipe server slice', () => {
-  it('queries Account sectors and separates obsolete values from the canonical 50', async () => {
+  it('allows a manager to read Account sectors and separates obsolete values from the canonical 50', async () => {
     const ctx = context();
 
     const result = await loadSectorRecipe(ctx, { limit: 50 });
@@ -63,7 +63,48 @@ describe('sectors recipe server slice', () => {
     expect(result.accountsPerSector[sectorId('Finance')]).toEqual(['001-old']);
   });
 
-  it('previews only account ids in the caller scope', async () => {
+  it('rejects commercial users from reading the organization-wide recipe', async () => {
+    const ctx = context({ role: 'commercial' });
+
+    await expect(loadSectorRecipe(ctx)).rejects.toMatchObject({
+      code: 'forbidden',
+      status: 403,
+      message:
+        'Cette recette nécessite un accès manager ou admin. Veuillez contacter votre administrateur.',
+    });
+    expect(ctx.fetchSFToken).not.toHaveBeenCalled();
+    expect(ctx.searchContacts).not.toHaveBeenCalled();
+  });
+
+  it('includes obsolete accounts owned by every commercial in the organization', async () => {
+    const ctx = context({
+      searchContacts: vi.fn().mockResolvedValue({
+        records: [
+          account('001-owner-a', 'Finance', 'sf-owner-a'),
+          account('001-owner-b', 'Finance', 'sf-owner-b'),
+          account('001-owner-c', 'Finance', 'sf-owner-c'),
+        ],
+      }),
+    });
+
+    const result = await loadSectorRecipe(ctx);
+
+    expect(result.obsoleteSectors).toContainEqual({
+      id: sectorId('Finance'),
+      label: 'Finance',
+      accountCount: 3,
+    });
+    expect(result.accountsPerSector[sectorId('Finance')]).toEqual([
+      '001-owner-a',
+      '001-owner-b',
+      '001-owner-c',
+    ]);
+    expect(ctx.searchContacts.mock.calls[0][1]).not.toMatch(
+      /OwnerId\s*(?:=|IN\b)/i,
+    );
+  });
+
+  it('previews only account ids in the obsolete organization sector', async () => {
     const ctx = context();
 
     const result = await previewSectorMerge(ctx, {
