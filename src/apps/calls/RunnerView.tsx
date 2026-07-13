@@ -1316,9 +1316,7 @@ export function RunnerView({
 
       {!isRecallQueue && (
         <>
-          <div className={mode === "detail" ? "calls-progress-sticky" : undefined}>
-            <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
-          </div>
+          <ProgressBar called={called} total={contacts.length} label="Progression de la séance" />
           <div className="calls-cockpit-kpis" aria-label="Indicateurs de séance">
             <GlassCard className="calls-stat">
               <span>Contacts</span>

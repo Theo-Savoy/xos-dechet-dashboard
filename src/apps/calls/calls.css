@@ -704,18 +704,6 @@
   text-align: right;
 }
 
-.calls-progress-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 12;
-  padding: 0.35rem 0.55rem;
-  margin: -0.25rem -0.2rem 0;
-  border: 1px solid color-mix(in srgb, var(--xos-border) 70%, transparent);
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, rgba(4, 8, 28, 0.96) 90%, transparent);
-  backdrop-filter: blur(14px);
-}
-
 .calls-filters,
 .calls-preview,
 .calls-name-form,
