@@ -5,11 +5,20 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRegistry, getAppManifest } from "../../os/registry";
+import { useSession } from "../../auth/useSession";
 
 const mockSession = {
   user: { id: "user-1", email: "theo@xos-learning.fr" },
   access_token: "test-token-abc",
 };
+
+function mockSessionState(state: {
+  session: typeof mockSession | null;
+  loading: boolean;
+  bridgeError: boolean;
+}) {
+  vi.mocked(useSession).mockReturnValue(state as ReturnType<typeof useSession>);
+}
 
 vi.mock("../../auth/useSession", () => ({
   useSession: vi.fn(() => ({
@@ -104,6 +113,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  mockSessionState({ session: mockSession, loading: false, bridgeError: false });
   invalidateComboHubCache();
   vi.stubGlobal(
     "fetch",
@@ -152,6 +162,24 @@ describe("Combo app manifest", () => {
 });
 
 describe("CallManagerApp component", () => {
+  it("shows the Combo boot screen while the session bridge is loading", () => {
+    mockSessionState({ session: null, loading: true, bridgeError: false });
+
+    render(<CallManagerApp />);
+
+    expect(screen.queryByText("Connexion requise…")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Ouverture de Combo…");
+  });
+
+  it("shows an actionable error when the session bridge fails", () => {
+    mockSessionState({ session: null, loading: false, bridgeError: true });
+
+    render(<CallManagerApp />);
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Reconnexion requise");
+  });
+
   it("renders sessions list on load", async () => {
     render(<CallManagerApp />);
 

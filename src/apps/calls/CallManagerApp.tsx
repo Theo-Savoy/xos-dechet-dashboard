@@ -134,7 +134,7 @@ function errorMessage(err: unknown): string {
 }
 
 export default function CallManagerApp({ params, onParamsChange }: CallManagerAppProps) {
-  const { session } = useSession();
+  const { session, loading, bridgeError } = useSession();
   const token = session?.access_token ?? "";
 
   // Si on arrive avec un session_id dans les params (ex. raccourci bureau), on
@@ -1244,6 +1244,24 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     setFocusedContactId(null);
     void loadSessions();
   };
+
+  if (bridgeError && !session) {
+    return (
+      <div className="calls-app">
+        <p className="calls-state" role="alert">
+          Reconnexion requise — vérifiez votre liaison Salesforce.
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="calls-app">
+        <WindowBootScreen label="Ouverture de Combo…" />
+      </div>
+    );
+  }
 
   if (!session) {
     return (
