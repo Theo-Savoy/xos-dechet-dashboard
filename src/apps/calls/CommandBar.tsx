@@ -191,7 +191,7 @@ export function ShortcutHelp({ open, onClose, onOpenCommandBar }: ShortcutHelpPr
     ["⌘↵", "Logguer & suivant"],
   ] as const;
   const right = [
-    ["J / K", "Suivant / précédent"],
+    ["K / J", "Suivant / précédent"],
     ["L / F", "Liste / Fiche"],
     ["⌘K", "Command bar"],
     ["?", "Cette aide"],

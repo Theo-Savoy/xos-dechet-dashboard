@@ -1160,12 +1160,12 @@ export function RunnerView({
       }
       if (key === "j") {
         event.preventDefault();
-        runComboAction("nav-next");
+        runComboAction("nav-prev");
         return;
       }
       if (key === "k") {
         event.preventDefault();
-        runComboAction("nav-prev");
+        runComboAction("nav-next");
         return;
       }
       if (key === "l") {

@@ -164,14 +164,14 @@ export const COMBO_ACTIONS: ComboActionDef[] = [
     id: "nav-next",
     label: "Contact suivant",
     section: "Navigation",
-    shortcutLabel: "J",
+    shortcutLabel: "K",
     keywords: ["suivant", "next"],
   },
   {
     id: "nav-prev",
     label: "Contact précédent",
     section: "Navigation",
-    shortcutLabel: "K",
+    shortcutLabel: "J",
     keywords: ["précédent", "prev"],
   },
   {

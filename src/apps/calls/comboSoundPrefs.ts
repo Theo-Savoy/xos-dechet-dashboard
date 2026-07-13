@@ -20,7 +20,7 @@ export const COMBO_SOUND_GROUP_HINTS: Record<ComboSoundGroup, string> = {
   log: "Validation d’appel, avec ou sans rappel",
   rdv: "Célébration quand un RDV est enregistré",
   result: "Touches 1–5 et sélection du résultat",
-  navigation: "J/K, modes, command bar, aide…",
+  navigation: "K/J, modes, command bar, aide…",
   warn: "NPA et avertissements",
   demo: "Tutoriel d’introduction",
 };
