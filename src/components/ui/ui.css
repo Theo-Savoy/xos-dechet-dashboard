@@ -192,8 +192,28 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.xos-select__option--multi {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.xos-select__option--multi input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--xos-accent);
+}
+
 .xos-select__option--active {
   background: color-mix(in srgb, var(--xos-accent) 18%, transparent);
   color: var(--xos-accent);
 }
 
+.xos-select__group {
+  padding: 0.45rem 0.7rem 0.2rem;
+  color: var(--xos-text-muted);
+  font-family: var(--xos-font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

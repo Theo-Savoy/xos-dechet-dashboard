@@ -128,27 +128,25 @@ describe('OpportunitiesModule', () => {
       'Beta',
     );
 
-    fireEvent.change(screen.getByLabelText('Owner'), {
-      target: { value: 'Bob' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Owner' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Bob' }));
     expect(screen.getByText('Gamma')).toBeTruthy();
     expect(screen.queryByText('Alpha')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Catégorie'), {
-      target: { value: 'amount' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Catégorie' }));
+    fireEvent.click(screen.getByRole('option', { name: 'amount' }));
     expect(screen.queryByText('Gamma')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Catégorie'), {
-      target: { value: '' },
-    });
-    fireEvent.change(screen.getByLabelText('Type de vente'), {
-      target: { value: 'Renewal' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Catégorie' }));
+    fireEvent.click(
+      screen.getByRole('option', { name: 'Toutes les catégories' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Type de vente' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Renewal' }));
     expect(screen.getByText('Gamma')).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Type de vente'), {
-      target: { value: '' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Owner' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Tous les owners' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Type de vente' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Tous les types' }));
     expect(
       screen
         .getByRole('button', { name: 'Page suivante' })

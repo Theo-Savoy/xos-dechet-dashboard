@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { Select, type SelectOption } from '../../../../components/ui';
 import type { OpportunityWorkspaceItem } from './api';
 import {
   reasonFamilyKeyForRule,
@@ -6,6 +7,11 @@ import {
   REASON_FAMILY_ORDER,
   type OpportunityFilters,
 } from './filterState';
+import {
+  categoryLabelForValue,
+  normalizeFilterValue,
+  reasonLabelForRule,
+} from './labels';
 
 type OpportunitiesFiltersProps = {
   items: OpportunityWorkspaceItem[];
@@ -22,11 +28,23 @@ function options(
 ): string[] {
   return [
     ...new Set(
-      items
-        .map((item) => item[key])
-        .filter((value): value is string => Boolean(value)),
+      items.map((item) => normalizeFilterValue(item[key])).filter(Boolean),
     ),
   ].sort((a, b) => a.localeCompare(b, 'fr-FR'));
+}
+
+function selectOptions(
+  values: string[],
+  emptyLabel: string,
+  labelForValue: (value: string) => string = (value) => value,
+): SelectOption<string>[] {
+  return [
+    { value: '', label: emptyLabel },
+    ...values.map((value) => ({
+      value,
+      label: labelForValue(value),
+    })),
+  ];
 }
 
 export function OpportunitiesFilters({
@@ -37,20 +55,44 @@ export function OpportunitiesFilters({
   showTreated = false,
   onToggleTreated,
 }: OpportunitiesFiltersProps) {
-  const [reasonsOpen, setReasonsOpen] = useState(false);
   const reasons = useMemo(() => {
     const grouped = new Map<string, Map<string, string>>();
     items.forEach((item) =>
       item.anomalies.forEach((anomaly) => {
         const family = reasonFamilyKeyForRule(anomaly.ruleId);
         if (!grouped.has(family)) grouped.set(family, new Map());
-        grouped.get(family)?.set(anomaly.ruleId, anomaly.label);
+        grouped
+          .get(family)
+          ?.set(
+            anomaly.ruleId,
+            reasonLabelForRule(anomaly.ruleId, anomaly.label),
+          );
       }),
     );
     return grouped;
   }, [items]);
 
-  const selectedReasonIds = Object.values(filters.reasonFamilies).flat();
+  const ownerOptions = useMemo(
+    () => selectOptions(options(items, 'owner'), 'Tous les owners'),
+    [items],
+  );
+  const categoryOptions = useMemo(
+    () =>
+      selectOptions(
+        options(items, 'category'),
+        'Toutes les catégories',
+        categoryLabelForValue,
+      ),
+    [items],
+  );
+  const saleTypeOptions = useMemo(
+    () => selectOptions(options(items, 'type_vente'), 'Tous les types'),
+    [items],
+  );
+
+  const selectedReasonIds = [
+    ...new Set(Object.values(filters.reasonFamilies).flat()),
+  ];
   const reasonLabel =
     selectedReasonIds.length === 0
       ? 'Toutes les raisons'
@@ -65,16 +107,6 @@ export function OpportunitiesFilters({
     key: 'owners' | 'categories' | 'saleTypes',
     value: string,
   ) => onChange({ ...filters, [key]: value ? [value] : [] });
-  const toggleReason = (family: string, ruleId: string) => {
-    const current = filters.reasonFamilies[family] || [];
-    const next = current.includes(ruleId)
-      ? current.filter((value) => value !== ruleId)
-      : [...current, ruleId];
-    const reasonFamilies = { ...filters.reasonFamilies };
-    if (next.length) reasonFamilies[family] = next;
-    else delete reasonFamilies[family];
-    onChange({ ...filters, reasonFamilies });
-  };
 
   const groupedReasons = [
     ...REASON_FAMILY_ORDER,
@@ -85,6 +117,36 @@ export function OpportunitiesFilters({
         ),
     ),
   ];
+
+  const reasonOptions = groupedReasons.flatMap((family) => {
+    const familyReasons = reasons.get(family);
+    if (!familyReasons?.size) return [];
+    const group =
+      REASON_FAMILY_LABELS[family as keyof typeof REASON_FAMILY_LABELS] ||
+      'Autres anomalies';
+    return [...familyReasons.entries()]
+      .sort((left, right) => left[1].localeCompare(right[1], 'fr-FR'))
+      .map(([value, label]) => ({ value, label, group }));
+  });
+
+  const reasonFamilyByRule = new Map<string, string>();
+  reasons.forEach((familyReasons, family) => {
+    familyReasons.forEach((_label, ruleId) => {
+      reasonFamilyByRule.set(ruleId, family);
+    });
+  });
+  const selectReasons = (ruleIds: string[]) => {
+    const reasonFamilies = ruleIds.reduce<Record<string, string[]>>(
+      (families, ruleId) => {
+        const family =
+          reasonFamilyByRule.get(ruleId) || reasonFamilyKeyForRule(ruleId);
+        families[family] = [...(families[family] || []), ruleId];
+        return families;
+      },
+      {},
+    );
+    onChange({ ...filters, reasonFamilies });
+  };
 
   return (
     <section
@@ -104,103 +166,49 @@ export function OpportunitiesFilters({
           placeholder="Nom, compte, owner…"
         />
       </label>
-      <label className="cleaner-opportunities__filter-field">
+      <div className="cleaner-opportunities__filter-field">
         <span>Owner</span>
-        <select
+        <Select
           aria-label="Owner"
           value={filters.owners[0] || ''}
-          onChange={(event) => selectSingle('owners', event.target.value)}
-        >
-          <option value="">Tous les owners</option>
-          {options(items, 'owner').map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="cleaner-opportunities__filter-field">
+          options={ownerOptions}
+          onChange={(value) => selectSingle('owners', value)}
+          className="cleaner-opportunities__filter-select"
+        />
+      </div>
+      <div className="cleaner-opportunities__filter-field">
         <span>Catégorie</span>
-        <select
+        <Select
           aria-label="Catégorie"
           value={filters.categories[0] || ''}
-          onChange={(event) => selectSingle('categories', event.target.value)}
-        >
-          <option value="">Toutes les catégories</option>
-          {options(items, 'category').map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="cleaner-opportunities__filter-field">
+          options={categoryOptions}
+          onChange={(value) => selectSingle('categories', value)}
+          className="cleaner-opportunities__filter-select"
+        />
+      </div>
+      <div className="cleaner-opportunities__filter-field">
         <span>Type de vente</span>
-        <select
+        <Select
           aria-label="Type de vente"
           value={filters.saleTypes[0] || ''}
-          onChange={(event) => selectSingle('saleTypes', event.target.value)}
-        >
-          <option value="">Tous les types</option>
-          {options(items, 'type_vente').map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={saleTypeOptions}
+          onChange={(value) => selectSingle('saleTypes', value)}
+          className="cleaner-opportunities__filter-select"
+        />
+      </div>
       <div className="cleaner-opportunities__filter-field cleaner-opportunities__reasons-filter">
         <span>Raisons</span>
-        <button
-          className="cleaner-opportunities__filter-trigger"
-          type="button"
+        <Select
+          multi
           aria-label="Raisons"
           aria-haspopup="true"
-          aria-expanded={reasonsOpen}
           aria-controls="opportunity-reasons-menu"
-          onClick={() => setReasonsOpen((open) => !open)}
-        >
-          <span>{reasonLabel}</span>
-          <span aria-hidden="true">⌄</span>
-        </button>
-        {reasonsOpen ? (
-          <div
-            className="cleaner-opportunities__reasons-menu"
-            id="opportunity-reasons-menu"
-            role="menu"
-          >
-            {groupedReasons.map((family) => {
-              const familyReasons = reasons.get(family);
-              if (!familyReasons?.size) return null;
-              const label =
-                REASON_FAMILY_LABELS[
-                  family as keyof typeof REASON_FAMILY_LABELS
-                ] || 'Autres anomalies';
-              return (
-                <fieldset key={family}>
-                  <legend>{label}</legend>
-                  {[...familyReasons.entries()]
-                    .sort((left, right) =>
-                      left[1].localeCompare(right[1], 'fr-FR'),
-                    )
-                    .map(([ruleId, label]) => (
-                      <label key={ruleId}>
-                        <input
-                          type="checkbox"
-                          checked={
-                            filters.reasonFamilies[family]?.includes(ruleId) ||
-                            false
-                          }
-                          onChange={() => toggleReason(family, ruleId)}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    ))}
-                </fieldset>
-              );
-            })}
-          </div>
-        ) : null}
+          value={selectedReasonIds}
+          options={reasonOptions}
+          onChange={selectReasons}
+          renderValue={() => reasonLabel}
+          className="cleaner-opportunities__filter-select"
+        />
       </div>
       <button
         className={`cleaner-opportunities__treated-toggle${showTreated ? ' is-active' : ''}`}
@@ -214,10 +222,7 @@ export function OpportunitiesFilters({
       <button
         className="cleaner-opportunities__filters-reset"
         type="button"
-        onClick={() => {
-          setReasonsOpen(false);
-          onReset();
-        }}
+        onClick={onReset}
       >
         Réinitialiser
       </button>

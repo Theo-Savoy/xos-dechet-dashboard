@@ -1095,6 +1095,29 @@
   background: var(--xos-window-shell-bg);
   font: inherit;
 }
+.cleaner-opportunities__filter-select {
+  width: 100%;
+}
+.cleaner-opportunities__filter-select .xos-select__trigger {
+  width: 100%;
+  min-width: 0;
+  height: 2.15rem;
+}
+.cleaner-opportunities__filter-select .xos-select__option--multi {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--xos-text);
+  font-family: var(--xos-font-display);
+  font-size: 0.875rem;
+}
+.cleaner-opportunities__filter-select
+  .xos-select__option--multi.xos-select__option--active {
+  color: var(--xos-accent);
+}
+.cleaner-opportunities__reasons-filter .xos-select__menu {
+  width: min(24rem, calc(100vw - 2rem));
+}
 .cleaner-opportunities__filter-field input[type='search'] {
   min-width: 10rem;
 }

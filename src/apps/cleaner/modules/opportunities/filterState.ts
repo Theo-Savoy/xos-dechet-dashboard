@@ -75,6 +75,14 @@ function text(value: unknown): string {
   return value == null ? '' : String(value).toLocaleLowerCase('fr-FR');
 }
 
+function matchesNormalizedValue(
+  values: string[],
+  value: string | null | undefined,
+): boolean {
+  const normalized = value?.trim() || '';
+  return values.some((candidate) => candidate.trim() === normalized);
+}
+
 export function reasonFamilyKeyForRule(ruleId: string): string {
   if (ruleId.includes('close_date') || ruleId.includes('closedate'))
     return 'closedate';
@@ -136,16 +144,19 @@ export function matchesOpportunityFilters(
     )
   )
     return false;
-  if (filters.owners.length && !filters.owners.includes(item.owner || ''))
+  if (
+    filters.owners.length &&
+    !matchesNormalizedValue(filters.owners, item.owner)
+  )
     return false;
   if (
     filters.categories.length &&
-    !filters.categories.includes(item.category || '')
+    !matchesNormalizedValue(filters.categories, item.category)
   )
     return false;
   if (
     filters.saleTypes.length &&
-    !filters.saleTypes.includes(item.type_vente || '')
+    !matchesNormalizedValue(filters.saleTypes, item.type_vente)
   )
     return false;
 
