@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { AppRole } from '../../os/registry';
+import { fetchOpportunityWorkspace } from './modules/opportunities/api';
+import { type CleanerCockpitState } from './CleanerCockpit';
 import { CleanerShell } from './shell/CleanerShell';
 import './cleaner.css';
 
@@ -32,6 +34,10 @@ type ProfileClient = {
 
 export default function CleanerApp({ params }: CleanerAppProps) {
   const [session, setSession] = useState<CleanerSession | null>(null);
+  const [cockpit, setCockpit] = useState<CleanerCockpitState>({
+    status: 'loading',
+    summaries: [],
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +82,58 @@ export default function CleanerApp({ params }: CleanerAppProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session || params?.q) return;
+    let cancelled = false;
+    setCockpit({ status: 'loading', summaries: [] });
+
+    void fetchOpportunityWorkspace(session.accessToken)
+      .then((workspace) => {
+        if (cancelled) return;
+        if (workspace.items.length === 0) {
+          setCockpit({ status: 'empty', summaries: [] });
+          return;
+        }
+
+        const totalAnomalies = workspace.items.reduce(
+          (total, item) => total + item.anomalies.length,
+          0,
+        );
+        // One to four records need attention; five or more are critical. Zero stays the dedicated empty state.
+        const criticality = workspace.items.length >= 5 ? 'critical' : 'warning';
+        setCockpit({
+          status: 'ready',
+          summaries: [
+            {
+              moduleId: 'opportunities',
+              label: 'Opportunités',
+              criticality,
+              anomalyCount: totalAnomalies,
+              affectedRecordCount: workspace.items.length,
+              resolvedPeriodCount: 0,
+              previousPeriodDelta: null,
+              lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
+            },
+          ],
+        });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setCockpit({
+          status: 'error',
+          summaries: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Les faits du Labo sont indisponibles.',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params?.q, session]);
+
   if (!session) {
     return (
       <div
@@ -93,6 +151,7 @@ export default function CleanerApp({ params }: CleanerAppProps) {
       accessToken={session.accessToken}
       role={session.role}
       params={params}
+      cockpit={cockpit}
     />
   );
 }

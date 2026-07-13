@@ -109,4 +109,69 @@ describe('CleanerApp component', () => {
       ).toBe('cleaner-jwt'),
     );
   });
+
+  it('loads cockpit modules on the home tab without a deep-link query', async () => {
+    window.localStorage?.clear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'opp-1',
+                name: 'stale',
+                account: '',
+                owner: '',
+                stage: '',
+                anomalies: [{ code: 'stale_stage' }],
+              },
+              {
+                id: 'opp-2',
+                name: 'blocked',
+                account: '',
+                owner: '',
+                stage: '',
+                anomalies: [],
+              },
+            ],
+            total: 2,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    render(<CleanerApp />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('cleaner-cockpit-module')).toBeTruthy(),
+    );
+    expect(screen.getByTestId('cleaner-cockpit-module').textContent).toContain(
+      '2 enregistrements concernés',
+    );
+    expect(
+      screen.queryByText('Aucune donnée de nettoyage disponible.'),
+    ).toBeNull();
+  });
+
+  it('keeps the empty cockpit state when the workspace has no items', async () => {
+    window.localStorage?.clear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items: [], total: 0 }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    render(<CleanerApp />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Aucune donnée de nettoyage disponible.'),
+      ).toBeTruthy(),
+    );
+  });
 });
