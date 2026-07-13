@@ -1,0 +1,139 @@
+.xos-desktop-toasts {
+  position: fixed;
+  top: 3.35rem;
+  right: 0.9rem;
+  z-index: 14000;
+  display: grid;
+  gap: 0.6rem;
+  width: min(24rem, calc(100vw - 1.8rem));
+  pointer-events: none;
+}
+
+.xos-desktop-toast {
+  pointer-events: auto;
+  padding: 0.8rem 0.9rem;
+  border-color: color-mix(in srgb, var(--xos-accent) 32%, var(--xos-border));
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      color-mix(in srgb, var(--xos-accent) 20%, transparent),
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--xos-window-content-bg) 88%, #09101f);
+  box-shadow: 0 1.1rem 2.2rem rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+  outline: none;
+  animation: xos-desktop-toast-in 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.xos-desktop-toast:focus-visible {
+  border-color: color-mix(in srgb, var(--xos-accent) 70%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--xos-accent) 35%, transparent),
+    0 1.1rem 2.2rem rgba(0, 0, 0, 0.32);
+}
+
+.xos-desktop-toast--leaving {
+  pointer-events: none;
+  animation: xos-desktop-toast-out 0.18s ease-in both;
+}
+
+.xos-desktop-toast__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.xos-desktop-toast__kind {
+  color: var(--xos-text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.xos-desktop-toast__close {
+  width: 1.5rem;
+  min-height: 1.5rem;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border-radius: 0.4rem;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.xos-desktop-toast__title {
+  margin: 0.55rem 0 0;
+  color: var(--xos-text);
+  font-size: 0.94rem;
+  letter-spacing: -0.015em;
+}
+
+.xos-desktop-toast__body {
+  margin: 0.28rem 0 0;
+  color: var(--xos-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.xos-desktop-toast__emoji {
+  margin: 0.3rem 0 0;
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.xos-desktop-toast__hint {
+  margin: 0.6rem 0 0;
+  color: var(--xos-text-muted);
+  font-size: 0.68rem;
+}
+
+@keyframes xos-desktop-toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(1.5rem, -0.3rem, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes xos-desktop-toast-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(1.2rem, -0.2rem, 0) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xos-desktop-toast {
+    animation: xos-desktop-toast-fade-in 0.12s ease both;
+  }
+
+  .xos-desktop-toast--leaving {
+    animation: xos-desktop-toast-fade-out 0.12s ease both;
+  }
+}
+
+@keyframes xos-desktop-toast-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes xos-desktop-toast-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

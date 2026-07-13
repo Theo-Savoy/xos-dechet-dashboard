@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import logoXos from "../assets/logo-xos.png";
-import {
-  FloatingReactions,
-  type FloatingReactionBurst,
-} from "./FloatingReactions";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import logoXos from '../assets/logo-xos.png';
 import {
   fetchNotifications,
   GOAL_REACTION_EMOJIS,
   markNotificationsRead,
+  reactionEmoji,
   reactToNotification,
   type GoalReactionEmoji,
   type UserNotification,
-} from "./notifications";
-import "./controlCenter.css";
+} from './notifications';
+import {
+  useNotificationsStore,
+  type FloatingReactionBurst,
+} from './notificationsStore';
+import './controlCenter.css';
 
 type ControlCenterProps = {
   accessToken: string;
@@ -29,20 +30,14 @@ function formatRelative(iso: string): string {
   return `il y a ${days} j`;
 }
 
-function reactionEmoji(item: UserNotification): string | null {
-  if (item.kind !== "goal_reaction") return null;
-  const fromPayload = typeof item.payload?.emoji === "string" ? item.payload.emoji : null;
-  if (fromPayload) return fromPayload;
-  return item.body?.trim() || null;
-}
-
 export function ControlCenter({ accessToken }: ControlCenterProps) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<UserNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
   const [reactingId, setReactingId] = useState<number | null>(null);
-  const [bursts, setBursts] = useState<FloatingReactionBurst[]>([]);
+  const { addBurst, controlCenterOpenRequest, setNotifications } =
+    useNotificationsStore();
   const seenReactionIds = useRef(new Set<number>());
   const bootstrapped = useRef(false);
 
@@ -50,11 +45,15 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
     if (!accessToken) return;
     try {
       const data = await fetchNotifications(accessToken);
-      setItems(data.notifications);
-      setUnread(data.unread_count);
+      const notifications = Array.isArray(data.notifications)
+        ? data.notifications
+        : [];
+      setItems(notifications);
+      setNotifications(notifications);
+      setUnread(typeof data.unread_count === 'number' ? data.unread_count : 0);
 
-      const unreadReactions = data.notifications.filter(
-        (n) => n.kind === "goal_reaction" && !n.read_at,
+      const unreadReactions = notifications.filter(
+        (n) => n.kind === 'goal_reaction' && !n.read_at,
       );
       if (!bootstrapped.current) {
         for (const n of unreadReactions) seenReactionIds.current.add(n.id);
@@ -67,14 +66,16 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
           const emoji = reactionEmoji(n);
           if (emoji) fresh.push({ id: `n-${n.id}`, emoji });
         }
-        if (fresh.length > 0) {
-          setBursts((prev) => [...prev, ...fresh]);
-        }
+        for (const burst of fresh) addBurst(burst);
       }
     } catch {
       /* ignore poll errors */
     }
-  }, [accessToken]);
+  }, [accessToken, addBurst, setNotifications]);
+
+  useEffect(() => {
+    if (controlCenterOpenRequest > 0) setOpen(true);
+  }, [controlCenterOpenRequest]);
 
   useEffect(() => {
     void refresh();
@@ -90,7 +91,11 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
 
   const markOne = async (id: number) => {
     setItems((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, read_at: row.read_at ?? new Date().toISOString() } : row)),
+      prev.map((row) =>
+        row.id === id
+          ? { ...row, read_at: row.read_at ?? new Date().toISOString() }
+          : row,
+      ),
     );
     setUnread((n) => Math.max(0, n - 1));
     try {
@@ -101,7 +106,12 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
   };
 
   const markAll = async () => {
-    setItems((prev) => prev.map((row) => ({ ...row, read_at: row.read_at ?? new Date().toISOString() })));
+    setItems((prev) =>
+      prev.map((row) => ({
+        ...row,
+        read_at: row.read_at ?? new Date().toISOString(),
+      })),
+    );
     setUnread(0);
     try {
       await markNotificationsRead(accessToken, { all: true });
@@ -110,9 +120,13 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
     }
   };
 
-  const handleReact = async (item: UserNotification, emoji: GoalReactionEmoji) => {
+  const handleReact = async (
+    item: UserNotification,
+    emoji: GoalReactionEmoji,
+  ) => {
     if (reactingId === item.id) return;
     setReactingId(item.id);
+    addBurst({ emoji });
     try {
       await reactToNotification(accessToken, item.id, emoji);
       if (!item.read_at) await markOne(item.id);
@@ -126,22 +140,26 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
 
   return (
     <div className="xos-cc">
-      <FloatingReactions
-        bursts={bursts}
-        onDone={(id) => setBursts((prev) => prev.filter((b) => b.id !== id))}
-      />
       <button
         type="button"
-        className={`xos-cc__trigger${unread > 0 ? " xos-cc__trigger--badge" : ""}`}
+        className={`xos-cc__trigger${unread > 0 ? ' xos-cc__trigger--badge' : ''}`}
         aria-expanded={open}
         aria-controls="xos-control-center"
         title="Centre de notifications"
         onClick={() => setOpen((v) => !v)}
       >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="currentColor"
+          aria-hidden="true"
+        >
           <path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm7-5.5V11a7 7 0 1 0-14 0v5.5L3 18.5V20h18v-1.5l-2-2Z" />
         </svg>
-        {unread > 0 && <span className="xos-cc__badge">{unread > 9 ? "9+" : unread}</span>}
+        {unread > 0 && (
+          <span className="xos-cc__badge">{unread > 9 ? '9+' : unread}</span>
+        )}
       </button>
 
       {open && (
@@ -152,7 +170,11 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
             aria-label="Fermer le centre de notifications"
             onClick={() => setOpen(false)}
           />
-          <aside id="xos-control-center" className="xos-cc__panel" aria-label="Notifications">
+          <aside
+            id="xos-control-center"
+            className="xos-cc__panel"
+            aria-label="Notifications"
+          >
             <header className="xos-cc__head">
               <div>
                 <p className="xos-cc__eyebrow">Control Center</p>
@@ -160,44 +182,71 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
               </div>
               <div className="xos-cc__head-actions">
                 {unread > 0 && (
-                  <button type="button" className="xos-cc__linkbtn" onClick={() => void markAll()}>
+                  <button
+                    type="button"
+                    className="xos-cc__linkbtn"
+                    onClick={() => void markAll()}
+                  >
                     Tout marquer lu
                   </button>
                 )}
-                <button type="button" className="xos-cc__close" aria-label="Fermer" onClick={() => setOpen(false)}>
+                <button
+                  type="button"
+                  className="xos-cc__close"
+                  aria-label="Fermer"
+                  onClick={() => setOpen(false)}
+                >
                   &times;
                 </button>
               </div>
             </header>
 
             <div className="xos-cc__list">
-              {loading && items.length === 0 && <p className="xos-cc__empty">Chargement…</p>}
+              {loading && items.length === 0 && (
+                <p className="xos-cc__empty">Chargement…</p>
+              )}
               {!loading && items.length === 0 && (
-                <p className="xos-cc__empty">Aucune notification pour le moment.</p>
+                <p className="xos-cc__empty">
+                  Aucune notification pour le moment.
+                </p>
               )}
               {items.map((item) => {
                 const eventUrl =
-                  typeof item.payload?.sf_event_url === "string" ? item.payload.sf_event_url : null;
+                  typeof item.payload?.sf_event_url === 'string'
+                    ? item.payload.sf_event_url
+                    : null;
                 const unreadItem = !item.read_at;
-                const goalHit = item.kind === "session_goal_hit";
+                const goalHit = item.kind === 'session_goal_hit';
                 const bigEmoji = reactionEmoji(item);
                 return (
                   <article
                     key={item.id}
-                    className={`xos-cc__item${unreadItem ? " xos-cc__item--unread" : ""}${
-                      bigEmoji ? " xos-cc__item--reaction" : ""
+                    className={`xos-cc__item${unreadItem ? ' xos-cc__item--unread' : ''}${
+                      bigEmoji ? ' xos-cc__item--reaction' : ''
                     }`}
                   >
                     <div className="xos-cc__item-top">
-                      <img src={logoXos} alt="" className="xos-cc__item-logo" width={20} height={8} />
+                      <img
+                        src={logoXos}
+                        alt=""
+                        className="xos-cc__item-logo"
+                        width={20}
+                        height={8}
+                      />
                       <span className="xos-cc__item-app">Combo</span>
-                      <time className="xos-cc__item-time" dateTime={item.created_at}>
+                      <time
+                        className="xos-cc__item-time"
+                        dateTime={item.created_at}
+                      >
                         {formatRelative(item.created_at)}
                       </time>
                     </div>
                     <h3 className="xos-cc__item-title">{item.title}</h3>
                     {bigEmoji ? (
-                      <p className="xos-cc__item-emoji" aria-label={`Réaction ${bigEmoji}`}>
+                      <p
+                        className="xos-cc__item-emoji"
+                        aria-label={`Réaction ${bigEmoji}`}
+                      >
                         {bigEmoji}
                       </p>
                     ) : (
@@ -205,7 +254,11 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                     )}
                     <div className="xos-cc__item-actions">
                       {goalHit && (
-                        <div className="xos-cc__reacts" role="group" aria-label="Réagir">
+                        <div
+                          className="xos-cc__reacts"
+                          role="group"
+                          aria-label="Réagir"
+                        >
                           {GOAL_REACTION_EMOJIS.map((emoji) => (
                             <button
                               key={emoji}
@@ -231,7 +284,12 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                             if (unreadItem) void markOne(item.id);
                           }}
                         >
-                          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="14"
+                            height="14"
+                            aria-hidden="true"
+                          >
                             <circle cx="12" cy="12" r="12" fill="#00A1E0" />
                             <path
                               fill="#fff"
@@ -242,7 +300,11 @@ export function ControlCenter({ accessToken }: ControlCenterProps) {
                         </a>
                       )}
                       {unreadItem && (
-                        <button type="button" className="xos-cc__linkbtn" onClick={() => void markOne(item.id)}>
+                        <button
+                          type="button"
+                          className="xos-cc__linkbtn"
+                          onClick={() => void markOne(item.id)}
+                        >
                           Marquer lu
                         </button>
                       )}

@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import "./floatingReactions.css";
+import { useEffect, useRef, useState } from 'react';
+import type { FloatingReactionBurst } from './notificationsStore';
+import './floatingReactions.css';
 
-export type FloatingReactionBurst = {
-  id: string;
-  emoji: string;
-};
+export type { FloatingReactionBurst } from './notificationsStore';
 
 type FloatingReactionsProps = {
   bursts: FloatingReactionBurst[];
@@ -48,7 +46,10 @@ export function FloatingReactions({ bursts, onDone }: FloatingReactionsProps) {
     for (const burst of bursts) {
       if (startedRef.current.has(burst.id)) continue;
       startedRef.current.add(burst.id);
-      setParticles((prev) => ({ ...prev, [burst.id]: particlesFor(burst.emoji) }));
+      setParticles((prev) => ({
+        ...prev,
+        [burst.id]: particlesFor(burst.emoji),
+      }));
       const timer = window.setTimeout(() => {
         timersRef.current.delete(burst.id);
         setParticles((prev) => {
@@ -65,7 +66,8 @@ export function FloatingReactions({ bursts, onDone }: FloatingReactionsProps) {
 
   useEffect(
     () => () => {
-      for (const timer of timersRef.current.values()) window.clearTimeout(timer);
+      for (const timer of timersRef.current.values())
+        window.clearTimeout(timer);
       timersRef.current.clear();
     },
     [],
@@ -85,8 +87,8 @@ export function FloatingReactions({ bursts, onDone }: FloatingReactionsProps) {
               fontSize: p.size,
               animationDelay: p.delay,
               animationDuration: p.duration,
-              ["--xos-float-drift" as string]: p.drift,
-              ["--xos-float-rotate" as string]: p.rotate,
+              ['--xos-float-drift' as string]: p.drift,
+              ['--xos-float-rotate' as string]: p.rotate,
             }}
           >
             {p.emoji}
