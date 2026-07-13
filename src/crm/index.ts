@@ -89,6 +89,8 @@ export type FilterTree = {
     opp_ouverte: boolean | null;
     opp_perdue: boolean | null;
     compte_principal: string | null;
+    /** Salesforce User Id (Account.OwnerId) — logique OU entre les valeurs. */
+    proprietaires: string[];
   };
   contact: {
     a_telephone: boolean;
@@ -115,6 +117,7 @@ export function emptyFilterTree(): FilterTree {
       opp_ouverte: null,
       opp_perdue: null,
       compte_principal: null,
+      proprietaires: [],
     },
     contact: {
       a_telephone: true,
@@ -184,6 +187,7 @@ export function normalizeFilterTree(raw: unknown): FilterTree {
       opp_ouverte: triStateOr(defaults.entreprise.opp_ouverte, entreprise.opp_ouverte),
       opp_perdue: triStateOr(defaults.entreprise.opp_perdue, entreprise.opp_perdue),
       compte_principal: nullableString(entreprise.compte_principal),
+      proprietaires: stringArray(entreprise.proprietaires),
     },
     contact: {
       a_telephone: booleanOr(defaults.contact.a_telephone, contact.a_telephone),

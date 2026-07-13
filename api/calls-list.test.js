@@ -122,6 +122,28 @@ describe("adapter exports", () => {
     expect(soql).toContain(`Account.${mapping.objects.account.fields.tier} IN ('A', 'B')`);
   });
 
+  it("buildTargetQuery adds Account owner filter", () => {
+    const soql = buildTargetQuery(
+      {
+        ...baseFilters,
+        entreprise: {
+          ...baseFilters.entreprise,
+          proprietaires: ["005000000000001AAA", "005000000000002AAA"],
+        },
+      },
+      mapping,
+      null,
+    );
+    expect(soql).toContain(
+      `Account.${mapping.objects.account.fields.ownerId} IN ('005000000000001AAA', '005000000000002AAA')`,
+    );
+  });
+
+  it("buildTargetQuery still supports legacy ownerOnly flag", () => {
+    const soql = buildTargetQuery({ ...baseFilters, ownerOnly: true }, mapping, "005000000000003AAA");
+    expect(soql).toContain(`Account.${mapping.objects.account.fields.ownerId} = '005000000000003AAA'`);
+  });
+
   it("mapping exposes Account tier picklist A–D", () => {
     expect(mapping.objects.account.tiers).toEqual(["A", "B", "C", "D"]);
     expect(mapping.objects.account.fields.tier).toBe("Tier__c");

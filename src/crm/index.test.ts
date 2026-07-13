@@ -15,6 +15,7 @@ describe("emptyFilterTree", () => {
     expect(tree.entreprise.secteurs).toEqual([]);
     expect(tree.entreprise.effectifs).toEqual([]);
     expect(tree.entreprise.tiers).toEqual([]);
+    expect(tree.entreprise.proprietaires).toEqual([]);
     expect(tree.contact.fonctions).toEqual([]);
     expect(tree.relance.dernier_resultat).toEqual([]);
   });
@@ -59,6 +60,13 @@ describe("normalizeFilterTree", () => {
       entreprise: { tiers: ["A", "C"] },
     });
     expect(normalized.entreprise.tiers).toEqual(["A", "C"]);
+  });
+
+  it("preserves account owner filters", () => {
+    const normalized = normalizeFilterTree({
+      entreprise: { proprietaires: ["005A", "005B"] },
+    });
+    expect(normalized.entreprise.proprietaires).toEqual(["005A", "005B"]);
   });
 });
 

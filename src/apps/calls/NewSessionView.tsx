@@ -236,6 +236,7 @@ export function NewSessionView({
         onLoadPreset={onLoadPreset}
         onSavePreset={onSavePreset}
         onDeletePreset={onDeletePreset}
+        team={team}
       />
 
       {error && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   CONTACT_LIMIT_OPTIONS,
@@ -19,6 +19,7 @@ import {
 } from "../../crm";
 import { getOpportunityFilterGuidance } from "../../crm/opportunityFilters";
 import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
+import type { TeamMember } from "./types";
 
 type FilterBuilderProps = {
   filters: FilterTree;
@@ -41,6 +42,7 @@ type FilterBuilderProps = {
   onLoadPreset: (preset: CallTargetPreset) => void;
   onSavePreset: (name: string, shared: boolean) => void;
   onDeletePreset: (id: number) => void;
+  team?: TeamMember[];
 };
 
 function limitLabel(limit: ContactLimit): string {
@@ -56,6 +58,7 @@ function countEntrepriseFilters(entreprise: FilterTree["entreprise"]): number {
   if (entreprise.opp_ouverte !== null) count += 1;
   if (entreprise.opp_perdue !== null) count += 1;
   if (entreprise.compte_principal) count += 1;
+  if (entreprise.proprietaires.length) count += 1;
   return count;
 }
 
@@ -115,6 +118,7 @@ export function FilterBuilder({
   onLoadPreset,
   onSavePreset,
   onDeletePreset,
+  team = [],
 }: FilterBuilderProps) {
   const [presetName, setPresetName] = useState("");
   const [presetShared, setPresetShared] = useState(false);
@@ -139,6 +143,16 @@ export function FilterBuilder({
   const contactCount = countContactFilters(filters.contact);
   const relanceCount = countRelanceFilters(filters.relance);
   const oppGuidance = getOpportunityFilterGuidance(filters.entreprise);
+  const ownerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: { value: string; label: string }[] = [];
+    for (const member of team) {
+      if (!member.sf_user_id || seen.has(member.sf_user_id)) continue;
+      seen.add(member.sf_user_id);
+      options.push({ value: member.sf_user_id, label: member.label });
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [team]);
 
   return (
     <GlassCard className="calls-filterbuilder">
@@ -234,6 +248,21 @@ export function FilterBuilder({
             value={filters.entreprise.tiers}
             onChange={(tiers) => setEntreprise({ tiers })}
           />
+          {ownerOptions.length > 0 ? (
+            <ChipGroup
+              label="Propriétaire du compte"
+              hint="Commercial propriétaire du compte Salesforce"
+              options={ownerOptions}
+              value={filters.entreprise.proprietaires}
+              onChange={(proprietaires) => setEntreprise({ proprietaires })}
+            />
+          ) : team.length === 0 ? (
+            <p className="calls-muted calls-fb-hint">Propriétaire du compte — chargement de l&apos;équipe…</p>
+          ) : (
+            <p className="calls-muted calls-fb-hint">
+              Propriétaire du compte — aucun identifiant Salesforce disponible pour l&apos;équipe.
+            </p>
+          )}
           <div className="calls-fb-row">
             <TriState
               label="Opportunité ouverte"

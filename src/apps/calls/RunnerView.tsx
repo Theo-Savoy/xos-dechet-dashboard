@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   DEFAULT_RECALL_DAYS,
@@ -12,6 +12,7 @@ import { ShareSessionPanel } from "./ShareSessionPanel";
 import { EmptyState } from "./EmptyState";
 import { CommandBar, ShortcutHelp } from "./CommandBar";
 import { ComboOnboardingDemo } from "./ComboOnboardingDemo";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
   digitFromKeyboardCode,
   hasSeenComboDemo,
@@ -415,6 +416,12 @@ export function RunnerView({
   const [demoOpen, setDemoOpen] = useState(() => !hasSeenComboDemo());
   const [soundsEnabled, setSoundsEnabled] = useState(readSoundsEnabled);
   const [soundPrefs, setSoundPrefs] = useState(readSoundPrefs);
+  const [pendingRemove, setPendingRemove] = useState<{
+    ids: number[];
+    title: string;
+    description: ReactNode;
+    confirmLabel: string;
+  } | null>(null);
   const [sessionRdvCount, setSessionRdvCount] = useState(() => countSessionRdvs(contacts));
   const [rdvGoal, setRdvGoal] = useState<number | null>(() =>
     isRecallQueue ? null : readRdvGoal(session.id),
@@ -877,14 +884,42 @@ export function RunnerView({
         const contact = contacts.find((row) => row.id === id);
         return contact?.status === "called" && Boolean(contact.recall_at);
       });
-    const message = clearingRecall
-      ? ids.length === 1
-        ? `Retirer ${label} des rappels ? L'historique d'appel est conservé.`
-        : `Retirer ${ids.length} contacts des rappels ? L'historique d'appel est conservé.`
-      : ids.length === 1
-        ? `Retirer ${label} de la séance ?`
-        : `Retirer ${ids.length} contacts de la séance ?`;
-    if (!window.confirm(message)) return;
+    setPendingRemove({
+      ids,
+      title: clearingRecall
+        ? ids.length === 1
+          ? "Retirer des rappels"
+          : `Retirer ${ids.length} contacts des rappels`
+        : ids.length === 1
+          ? "Retirer de la séance"
+          : `Retirer ${ids.length} contacts de la séance`,
+      description: clearingRecall
+        ? ids.length === 1
+          ? (
+              <>
+                Retirer <strong>{label}</strong> des rappels ? L&apos;historique d&apos;appel est conservé.
+              </>
+            )
+          : (
+              <>
+                Retirer {ids.length} contacts des rappels ? L&apos;historique d&apos;appel est conservé.
+              </>
+            )
+        : ids.length === 1
+          ? (
+              <>
+                Retirer <strong>{label}</strong> de la séance ?
+              </>
+            )
+          : <>Retirer {ids.length} contacts de la séance ?</>,
+      confirmLabel: clearingRecall ? "Retirer des rappels" : "Retirer",
+    });
+  };
+
+  const executeRemove = () => {
+    if (!pendingRemove) return;
+    const ids = pendingRemove.ids;
+    setPendingRemove(null);
 
     if (isRecallQueue) {
       onRemoveContacts(ids);
@@ -2272,10 +2307,7 @@ export function RunnerView({
                 <div className="calls-runner-actions">
                   <Button
                     variant="secondary"
-                    onClick={() => {
-                      if (!window.confirm("Retirer ce rappel ? L'historique d'appel est conservé.")) return;
-                      onUpdateRecall([focusedContact.id], null);
-                    }}
+                    onClick={() => confirmRemove([focusedContact.id], focusedContact.contact_name)}
                     disabled={loading}
                   >
                     Retirer le rappel
@@ -2308,6 +2340,16 @@ export function RunnerView({
         onOpenCommandBar={() => setCommandBarOpen(true)}
       />
       <ComboOnboardingDemo open={demoOpen} onClose={() => setDemoOpen(false)} />
+      <ConfirmDialog
+        open={pendingRemove != null}
+        title={pendingRemove?.title ?? ""}
+        description={pendingRemove?.description ?? ""}
+        confirmLabel={pendingRemove?.confirmLabel ?? "Confirmer"}
+        onConfirm={executeRemove}
+        onCancel={() => setPendingRemove(null)}
+        loading={loading}
+        titleId="calls-remove-contact-title"
+      />
     </div>
   );
 }

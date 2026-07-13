@@ -117,6 +117,8 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
   if (customerTypes.length) conditions.push(`Account.${account.fields.customerType} IN (${escapedList(customerTypes)})`);
   const tiers = stringList(enterprise.tiers);
   if (tiers.length) conditions.push(`Account.${account.fields.tier} IN (${escapedList(tiers)})`);
+  const owners = stringList(enterprise.proprietaires);
+  if (owners.length) conditions.push(`Account.${account.fields.ownerId} IN (${escapedList(owners)})`);
   if (typeof enterprise.compte_principal === "string" && enterprise.compte_principal) {
     conditions.push(`Account.${account.fields.parentId} = '${escapeSOQL(enterprise.compte_principal)}'`);
   }
