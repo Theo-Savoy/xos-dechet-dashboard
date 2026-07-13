@@ -93,6 +93,7 @@ describe("EventPanel", () => {
     );
 
     expect(screen.getByRole("button", { name: /Rdv découverte prospect/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: /Rdv détection enjeux client/i })).toBeNull();
     expect(screen.getByRole("button", { name: /60\s*min/i }).getAttribute("aria-pressed")).toBe("true");
     await user.click(screen.getByRole("button", { name: /enregistrer le rdv/i }));
     expect(onSubmit).toHaveBeenCalledWith(
@@ -114,6 +115,7 @@ describe("EventPanel", () => {
     );
 
     expect(screen.getByRole("button", { name: /Rdv détection enjeux client/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: /Rdv découverte prospect/i })).toBeNull();
   });
 
   it("resets RDV subject when switching to another contact account type", async () => {

@@ -58,12 +58,53 @@ const BY_SESSION: Record<SessionType, RdvSubjectId[]> = {
   relance: ["decouverte_prospect", "detection_enjeux", "suivi_client"],
 };
 
+/** Options affichées selon séance × type de compte (Prospect vs Client / Client inactif). */
+const BY_SESSION_AND_ACCOUNT: Record<
+  SessionType,
+  { prospect: RdvSubjectId[]; client: RdvSubjectId[] }
+> = {
+  prospection: {
+    prospect: ["decouverte_prospect"],
+    client: ["detection_enjeux"],
+  },
+  relance: {
+    prospect: ["decouverte_prospect"],
+    client: ["detection_enjeux", "suivi_client"],
+  },
+  suivi_clients: {
+    prospect: ["decouverte_prospect"],
+    client: ["suivi_client", "detection_enjeux", "soutenance"],
+  },
+  suivi_opportunites: {
+    prospect: ["suivi_opportunite", "soutenance"],
+    client: ["suivi_opportunite", "soutenance", "detection_enjeux"],
+  },
+};
+
 export const RDV_DURATION_PRESETS = [15, 30, 45, 60, 90] as const;
 export const RDV_DURATION_DEFAULT = 60;
 
-export function rdvSubjectsForSession(sessionType: SessionType | string | null | undefined): RdvSubjectDef[] {
-  const key = (sessionType && sessionType in BY_SESSION ? sessionType : "prospection") as SessionType;
-  const ids = BY_SESSION[key];
+function sessionKey(sessionType: SessionType | string | null | undefined): SessionType {
+  return (sessionType && sessionType in BY_SESSION ? sessionType : "prospection") as SessionType;
+}
+
+function subjectIdsForSessionAndAccount(
+  sessionType: SessionType | string | null | undefined,
+  accountCustomerType?: string | null,
+): RdvSubjectId[] {
+  const key = sessionKey(sessionType);
+  if (accountCustomerType) {
+    const scoped = BY_SESSION_AND_ACCOUNT[key];
+    return isClientAccountType(accountCustomerType) ? scoped.client : scoped.prospect;
+  }
+  return BY_SESSION[key];
+}
+
+export function rdvSubjectsForSession(
+  sessionType: SessionType | string | null | undefined,
+  accountCustomerType?: string | null,
+): RdvSubjectDef[] {
+  const ids = subjectIdsForSessionAndAccount(sessionType, accountCustomerType);
   return ids
     .map((id) => RDV_SUBJECTS.find((s) => s.id === id))
     .filter((s): s is RdvSubjectDef => Boolean(s));
@@ -77,25 +118,13 @@ function isClientAccountType(type: string | null | undefined): boolean {
 }
 
 /**
- * Motif par défaut : selon le type de séance, puis le type de compte pour les RDV « médaille ».
- * Prospect → découverte ; Client / Client inactif → détection enjeux.
+ * Motif par défaut : premier type disponible pour la séance et le type de compte.
  */
 export function defaultRdvSubjectId(
   sessionType: SessionType | string | null | undefined,
   accountCustomerType?: string | null,
 ): RdvSubjectId {
-  const subjects = rdvSubjectsForSession(sessionType);
-  const lundiIds = subjects.filter((s) => s.countsForLundi).map((s) => s.id);
-
-  if (lundiIds.length >= 2 && accountCustomerType) {
-    if (isClientAccountType(accountCustomerType) && lundiIds.includes("detection_enjeux")) {
-      return "detection_enjeux";
-    }
-    if (!isClientAccountType(accountCustomerType) && lundiIds.includes("decouverte_prospect")) {
-      return "decouverte_prospect";
-    }
-  }
-
+  const subjects = rdvSubjectsForSession(sessionType, accountCustomerType);
   return subjects[0]?.id ?? "decouverte_prospect";
 }
 

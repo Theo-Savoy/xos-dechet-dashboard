@@ -70,7 +70,10 @@ export const EventPanel = forwardRef<EventPanelHandle, EventPanelProps>(function
   },
   ref,
 ) {
-  const subjects = useMemo(() => rdvSubjectsForSession(sessionType), [sessionType]);
+  const subjects = useMemo(
+    () => rdvSubjectsForSession(sessionType, accountCustomerType),
+    [sessionType, accountCustomerType],
+  );
   const sdr = isSdrCaller(currentSfUserId);
   const assignees = useMemo(() => {
     const others = team.filter((member) => member.sf_user_id && member.sf_user_id !== currentSfUserId);
