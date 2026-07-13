@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Checkbox } from './Checkbox';
 import './ui.css';
 
 export type SelectOption<T extends string = string> = {
@@ -140,17 +141,13 @@ export function Select<T extends string = string>({
                   aria-selected={selectionProps.multi ? active : undefined}
                 >
                   {selectionProps.multi ? (
-                    <label
+                    <Checkbox
+                      checked={active}
+                      aria-label={option.label}
+                      onChange={() => selectOption(option.value)}
+                      label={option.label}
                       className={`xos-select__option xos-select__option--multi${active ? ' xos-select__option--active' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={active}
-                        aria-label={option.label}
-                        onChange={() => selectOption(option.value)}
-                      />
-                      <span>{option.label}</span>
-                    </label>
+                    />
                   ) : (
                     <button
                       type="button"

@@ -59,11 +59,17 @@ const initialState = (): OpportunityWorkspaceState => ({
   activeView: 'cleaning',
 });
 
-function renderHarness(items = [item('opp-a'), item('opp-b')]) {
+function renderHarness(
+  items = [item('opp-a'), item('opp-b')],
+  selectedIds = new Set<string>(),
+) {
   const onOpenDetail = vi.fn();
 
   function Harness() {
-    const [state, setState] = useState(initialState);
+    const [state, setState] = useState(() => ({
+      ...initialState(),
+      selectedIds,
+    }));
     const sorted = sortOpportunityItems(items, state.sort);
     return (
       <OpportunitiesTable
@@ -150,6 +156,39 @@ describe('OpportunitiesTable', () => {
     expect(
       screen.getByRole('link', { name: /Salesforce/i }).getAttribute('rel'),
     ).toBe('noopener noreferrer');
+  });
+
+  it('marks the page selector indeterminate when only some rows are selected', () => {
+    renderHarness([item('opp-a'), item('opp-b')], new Set(['opp-a']));
+
+    const pageSelector = screen.getByRole('checkbox', {
+      name: 'Sélectionner la page',
+    }) as HTMLInputElement;
+    expect(pageSelector.indeterminate).toBe(true);
+    expect(pageSelector.getAttribute('aria-checked')).toBe('mixed');
+  });
+
+  it('collapses extra reasons behind an expandable compact pill', () => {
+    renderHarness([
+      item('opp-a', {
+        anomalies: [
+          'close_date_overdue_over_1_year',
+          'amount_missing',
+          'probability_zero',
+          'owner_inactive',
+        ].map((ruleId) => ({
+          ruleId,
+          severity: 'critical' as const,
+          score: 1,
+          label: '',
+          evidence: [],
+        })),
+      }),
+    ]);
+
+    expect(screen.getByText('+2 autres')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /autres raisons/i }));
+    expect(screen.getByText('Propriétaire inactif')).toBeTruthy();
   });
 
   it('groups more than three reasons under legacy family headings', () => {

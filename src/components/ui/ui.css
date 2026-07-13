@@ -59,6 +59,88 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.xos-checkbox {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+  color: var(--xos-text);
+  font-family: var(--xos-font-display);
+  cursor: pointer;
+  user-select: none;
+}
+
+.xos-checkbox__input {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  place-content: center;
+  margin: 0.12rem 0 0;
+  border: 2px solid var(--xos-text-muted);
+  border-radius: 6px;
+  background: color-mix(
+    in srgb,
+    var(--xos-window-content-bg) 88%,
+    var(--xos-text)
+  );
+  cursor: inherit;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.xos-checkbox__input::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  transform: scale(0);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+  background: var(--xos-bg);
+  transition: transform 0.12s ease;
+}
+
+.xos-checkbox__input:checked,
+.xos-checkbox__input:indeterminate {
+  border-color: var(--xos-bg);
+  background: var(--xos-accent);
+}
+
+.xos-checkbox__input:checked::before {
+  transform: scale(1);
+}
+
+.xos-checkbox__input:indeterminate::before {
+  width: 0.55rem;
+  height: 2px;
+  transform: scale(1);
+  clip-path: none;
+  border-radius: 1px;
+}
+
+.xos-checkbox__input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--xos-accent) 65%, white);
+  outline-offset: 2px;
+}
+
+.xos-checkbox__input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.xos-checkbox:has(.xos-checkbox__input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.xos-checkbox__label {
+  min-width: 0;
+  line-height: 1.35;
+}
+
 .xos-tag {
   display: inline-flex;
   align-items: center;
@@ -196,12 +278,6 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
-}
-
-.xos-select__option--multi input[type='checkbox'] {
-  flex: 0 0 auto;
-  margin: 0;
-  accent-color: var(--xos-accent);
 }
 
 .xos-select__option--active {

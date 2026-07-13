@@ -1,4 +1,6 @@
 export { Button } from './Button';
+export { Checkbox } from './Checkbox';
+export type { CheckboxProps } from './Checkbox';
 export { GlassCard } from './GlassCard';
 export { Select } from './Select';
 export type {

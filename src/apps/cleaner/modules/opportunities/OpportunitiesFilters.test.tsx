@@ -89,11 +89,11 @@ describe('OpportunitiesFilters', () => {
     const { onChange, filters } = renderFilters();
 
     fireEvent.click(screen.getByRole('button', { name: 'Raisons' }));
-    fireEvent.click(
-      screen.getByRole('checkbox', {
-        name: "Date de clôture dépassée de plus d'un an",
-      }),
-    );
+    const reasonCheckbox = screen.getByRole('checkbox', {
+      name: "Date de clôture dépassée de plus d'un an",
+    });
+    expect(reasonCheckbox.classList.contains('xos-checkbox__input')).toBe(true);
+    fireEvent.click(reasonCheckbox);
 
     expect(onChange).toHaveBeenCalledWith({
       ...filters,

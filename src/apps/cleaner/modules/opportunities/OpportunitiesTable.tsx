@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Checkbox } from '../../../../components/ui';
 import type { OpportunityWorkspaceItem } from './api';
 import {
   daysSinceOpportunityDate,
@@ -159,6 +160,7 @@ function ReasonChips({
 }: {
   items: OpportunityWorkspaceItem['anomalies'];
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!items.length) return <span>—</span>;
 
   const grouped = new Map<string, OpportunityWorkspaceItem['anomalies']>();
@@ -171,34 +173,80 @@ function ReasonChips({
     ([left], [right]) =>
       REASON_FAMILY_ORDER.indexOf(left) - REASON_FAMILY_ORDER.indexOf(right),
   );
+  const chip = (anomaly: OpportunityWorkspaceItem['anomalies'][number]) => (
+    <span
+      className="cleaner-opportunities__reason-chip"
+      key={anomaly.ruleId}
+      title={reasonLabel(anomaly.ruleId, anomaly.label)}
+    >
+      {reasonLabel(anomaly.ruleId, anomaly.label)}
+    </span>
+  );
   const chips = (anomalies: OpportunityWorkspaceItem['anomalies']) => (
     <div className="cleaner-opportunities__reason-chips">
-      {anomalies.map((anomaly) => (
-        <span
-          className="cleaner-opportunities__reason-chip"
-          key={anomaly.ruleId}
-          title={reasonLabel(anomaly.ruleId, anomaly.label)}
-        >
-          {reasonLabel(anomaly.ruleId, anomaly.label)}
-        </span>
-      ))}
+      {anomalies.map(chip)}
     </div>
   );
 
   if (items.length <= 3) return chips(items);
+  const collapsedItems = items.slice(0, 2);
+  const hiddenCount = items.length - collapsedItems.length;
   return (
-    <div className="cleaner-opportunities__reason-groups">
-      {groups.map(([family, anomalies]) => (
-        <div
-          className="cleaner-opportunities__reason-family-group"
-          key={family}
-        >
-          <span className="cleaner-opportunities__reason-family">
-            {REASON_FAMILY_LABELS[family] || REASON_FAMILY_LABELS.autres}
-          </span>
-          {chips(anomalies)}
-        </div>
-      ))}
+    <div
+      className={`cleaner-opportunities__reason-groups${expanded ? ' cleaner-opportunities__reason-groups--expanded' : ' cleaner-opportunities__reason-groups--collapsed'}`}
+    >
+      {!expanded ? (
+        <>
+          <div
+            className="cleaner-opportunities__reason-family-summary"
+            aria-label="Familles de raisons"
+          >
+            {groups.map(([family]) => (
+              <span
+                className="cleaner-opportunities__reason-family"
+                key={family}
+              >
+                {REASON_FAMILY_LABELS[family] || REASON_FAMILY_LABELS.autres}
+              </span>
+            ))}
+          </div>
+          <div className="cleaner-opportunities__reason-chips">
+            {collapsedItems.map(chip)}
+            <button
+              type="button"
+              className="cleaner-opportunities__reason-more"
+              aria-label={`Afficher ${hiddenCount} autres raisons`}
+              aria-expanded={false}
+              onClick={() => setExpanded(true)}
+            >
+              +{hiddenCount} autres
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {groups.map(([family, anomalies]) => (
+            <div
+              className="cleaner-opportunities__reason-family-group"
+              key={family}
+            >
+              <span className="cleaner-opportunities__reason-family">
+                {REASON_FAMILY_LABELS[family] || REASON_FAMILY_LABELS.autres}
+              </span>
+              {chips(anomalies)}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="cleaner-opportunities__reason-more"
+            aria-label="Réduire les raisons"
+            aria-expanded={true}
+            onClick={() => setExpanded(false)}
+          >
+            Réduire
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -313,6 +361,8 @@ export function OpportunitiesTable({
   const [scoreHelpOpen, setScoreHelpOpen] = useState(false);
   const allSelected =
     items.length > 0 && items.every((item) => state.selectedIds.has(item.id));
+  const someSelected =
+    !allSelected && items.some((item) => state.selectedIds.has(item.id));
   const severityFor = (item: OpportunityWorkspaceItem) =>
     item.anomalies.some((anomaly) => anomaly.severity === 'critical')
       ? 'critical'
@@ -324,12 +374,11 @@ export function OpportunitiesTable({
         <thead>
           <tr>
             <th scope="col" aria-label="Sélection">
-              <input
+              <Checkbox
                 aria-label="Sélectionner la page"
-                type="checkbox"
                 checked={allSelected}
                 onChange={onTogglePage}
-                onClick={(event) => event.stopPropagation()}
+                indeterminate={someSelected}
               />
             </th>
             {columns.map(([key, label]) => {
@@ -348,7 +397,7 @@ export function OpportunitiesTable({
                   }
                   key={key}
                 >
-<div className="cleaner-opportunities__table-header">
+                  <div className="cleaner-opportunities__table-header">
                     <button
                       type="button"
                       aria-label={`Trier par ${label}`}
@@ -389,12 +438,10 @@ export function OpportunitiesTable({
             return (
               <tr key={item.id}>
                 <td>
-                  <input
+                  <Checkbox
                     aria-label={`Sélectionner ${item.name || item.id}`}
-                    type="checkbox"
                     checked={state.selectedIds.has(item.id)}
                     onChange={() => onToggleSelection(item.id)}
-                    onClick={(event) => event.stopPropagation()}
                   />
                 </td>
                 <td>

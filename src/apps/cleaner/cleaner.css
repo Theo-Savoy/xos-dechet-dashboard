@@ -489,15 +489,16 @@
 }
 .cleaner-opportunities__table th,
 .cleaner-opportunities__table td {
-  padding: 0.65rem 0.7rem;
+  padding: 6px 8px;
   border-bottom: 1px solid
     color-mix(in srgb, var(--xos-border) 70%, transparent);
   text-align: left;
   white-space: nowrap;
   vertical-align: top;
+  line-height: 1.3;
 }
-.cleaner-opportunities__table tbody td {
-  height: 40px;
+.cleaner-opportunities__table tr {
+  min-height: 36px;
 }
 .cleaner-opportunities__table th {
   position: sticky;
@@ -575,27 +576,43 @@
 .cleaner-opportunities__reason-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  align-items: center;
+  gap: 0.25rem;
   max-width: 24rem;
   white-space: normal;
 }
 .cleaner-opportunities__reason-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 15rem;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--xos-accent) 35%, var(--xos-border));
   border-radius: 999px;
-  padding: 0.15rem 0.45rem;
+  padding: 2px 8px;
   color: var(--xos-text);
   background: color-mix(in srgb, var(--xos-accent) 10%, transparent);
-  font-size: 0.68rem;
-  line-height: 1.25;
-  white-space: normal;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cleaner-opportunities__reason-groups {
   display: grid;
-  gap: 0.35rem;
-  min-width: 16rem;
-  max-width: 25rem;
+  gap: 0.25rem;
+  min-width: 12rem;
+  max-width: 24rem;
   white-space: normal;
+}
+.cleaner-opportunities__reason-groups--collapsed
+  .cleaner-opportunities__reason-chips {
+  max-height: 3rem;
+  overflow: hidden;
+}
+.cleaner-opportunities__reason-family-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.45rem;
 }
 .cleaner-opportunities__reason-family-group {
   display: grid;
@@ -607,6 +624,22 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+.cleaner-opportunities__reason-more {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--xos-accent) 45%, var(--xos-border));
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--xos-accent);
+  background: color-mix(in srgb, var(--xos-accent) 12%, transparent);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.cleaner-opportunities__reason-more:hover {
+  background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
 }
 .cleaner-opportunities__salesforce-link {
   display: inline-grid;
