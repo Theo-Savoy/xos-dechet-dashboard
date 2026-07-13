@@ -1184,8 +1184,10 @@ describe("call targeting copy and controls", () => {
           team={[
             { user_id: "user-1", label: "Alice", sf_user_id: "005A" },
             { user_id: "user-2", label: "Christophe Hirtz", sf_user_id: "0055I000002lY9QQAU" },
-            { user_id: "user-3", label: "Yanis Agharbi", sf_user_id: "005Sb000007b6dWIAQ" },
-            { user_id: "user-4", label: "Théo Savoy", sf_user_id: "005AZ000000X5nDYAS" },
+            { user_id: "user-3", label: "Paul Rathouin", sf_user_id: "005AZ000000fLYkYAM" },
+            { user_id: "user-4", label: "Jérôme Bosio", sf_user_id: "005b0000005zfnvAAA" },
+            { user_id: "user-5", label: "Yanis Agharbi", sf_user_id: "005Sb000007b6dWIAQ" },
+            { user_id: "user-6", label: "Théo Savoy", sf_user_id: "005AZ000000X5nDYAS" },
           ]}
         />
         <DedupBanner
@@ -1201,6 +1203,8 @@ describe("call targeting copy and controls", () => {
     expect(screen.getByText("Propriétaire du compte")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Christophe Hirtz" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Paul Rathouin" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Jérôme Bosio" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Yanis Agharbi" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Théo Savoy" })).toBeNull();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();

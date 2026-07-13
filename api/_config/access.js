@@ -53,7 +53,11 @@ export const WEEKLY_EXCLUDED_NAME_PATTERNS = [
 
 /** Libellés affichés Combo (équipe, filtre propriétaire) — prioritaire sur email / full_name incomplet. */
 export const CALLS_TEAM_LABEL_BY_SF_ID = {
+  "005AZ000000fLYkYAM": "Paul Rathouin",
   "0055I000002lY9QQAU": "Christophe Hirtz",
+  "005b0000005zfnvAAA": "Jérôme Bosio",
+  "005AZ000000X5nDYAS": "Théo Savoy",
+  "005Sb000007b6dWIAQ": "Yanis Agharbi",
 };
 
 /**
@@ -92,18 +96,31 @@ export function isWeeklyOwnerExcluded(sfUser, nameFallback = "", emailFallback =
   return WEEKLY_EXCLUDED_NAME_PATTERNS.some((pattern) => pattern.test(name) || pattern.test(email));
 }
 
+export function looksLikeSalesforceId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  return /^005[A-Za-z0-9]{12,17}$/.test(raw);
+}
+
 export function resolveCallsTeamLabel(sfUserId, fallbackLabel = "", email = "") {
   const key = sfIdKey(sfUserId);
   const override = Object.entries(CALLS_TEAM_LABEL_BY_SF_ID).find(([id]) => sfIdKey(id) === key)?.[1];
   if (override) return override;
-  if (fallbackLabel && !fallbackLabel.includes("@")) return fallbackLabel;
-  const local = String(email || fallbackLabel || "").split("@")[0] || "";
-  if (!local) return fallbackLabel || sfUserId;
+  const fallback = String(fallbackLabel || "").trim();
+  if (fallback && !fallback.includes("@") && !looksLikeSalesforceId(fallback)) return fallback;
+  const local = String(email || (fallback.includes("@") ? fallback : "") || "").split("@")[0] || "";
+  if (!local) return override || fallback || sfUserId;
   return local
     .split(/[._-]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+export function shouldUpgradeCallsTeamLabel(sfUserId, label) {
+  if (hasCallsTeamLabelOverride(sfUserId)) return true;
+  const current = String(label || "");
+  return current.includes("@") || looksLikeSalesforceId(current);
 }
 
 export function hasCallsTeamLabelOverride(sfUserId) {

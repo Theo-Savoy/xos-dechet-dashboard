@@ -216,8 +216,14 @@ describe("GET /api/calls", () => {
           {
             id: "user-chris",
             full_name: null,
-            email: "christophe.hirtz@xos-learning.fr",
+            email: null,
             sf_user_id: "0055I000002lY9QQAU",
+          },
+          {
+            id: "user-paul",
+            full_name: null,
+            email: null,
+            sf_user_id: "005AZ000000fLYkYAM",
           },
         ],
         error: null,
@@ -225,6 +231,7 @@ describe("GET /api/calls", () => {
       .mockResolvedValueOnce({
         data: [
           { email: "christophe.hirtz@xos-learning.fr", sf_user_id: "0055I000002lY9QQAU" },
+          { email: "paul.rathouin@xos-learning.fr", sf_user_id: "005AZ000000fLYkYAM" },
           { email: "alice@example.com", sf_user_id: "005000000000001" },
         ],
         error: null,
@@ -238,6 +245,7 @@ describe("GET /api/calls", () => {
         { user_id: "user-1", label: "Alice Martin", sf_user_id: "005000000000001" },
         { user_id: "user-2", label: "Bob", sf_user_id: "005000000000002" },
         { user_id: "user-chris", label: "Christophe Hirtz", sf_user_id: "0055I000002lY9QQAU" },
+        { user_id: "user-paul", label: "Paul Rathouin", sf_user_id: "005AZ000000fLYkYAM" },
       ],
     });
     expect(mockFrom).toHaveBeenCalledWith("profiles");

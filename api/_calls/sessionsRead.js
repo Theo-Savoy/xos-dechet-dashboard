@@ -1,4 +1,4 @@
-import { hasCallsTeamLabelOverride, resolveCallsTeamLabel } from "../_config/access.js";
+import { resolveCallsTeamLabel, shouldUpgradeCallsTeamLabel } from "../_config/access.js";
 import { hydrateSessionContactsFromCrm } from "./hydrateContacts.js";
 import { listPresets } from "./presets.js";
 import mapping from "../_crm/mapping.js";
@@ -233,15 +233,22 @@ export async function handleSessionsRead({ url, user, client, headers }) {
     if (profilesResult.error) {
       return new Response(JSON.stringify({ error: "team_lookup_failed" }), { status: 500, headers });
     }
+    const emailBySfId = new Map();
+    if (!mapResult.error) {
+      for (const row of mapResult.data || []) {
+        if (row.sf_user_id && row.email) emailBySfId.set(row.sf_user_id, row.email);
+      }
+    }
     const bySfId = new Map();
     for (const profile of profilesResult.data || []) {
       if (!profile.sf_user_id) continue;
+      const email = profile.email || emailBySfId.get(profile.sf_user_id) || "";
       bySfId.set(profile.sf_user_id, {
         user_id: profile.id,
         label: resolveCallsTeamLabel(
           profile.sf_user_id,
-          profile.full_name || profile.email || profile.sf_user_id,
-          profile.email,
+          profile.full_name || email || profile.sf_user_id,
+          email,
         ),
         sf_user_id: profile.sf_user_id,
       });
@@ -253,7 +260,7 @@ export async function handleSessionsRead({ url, user, client, headers }) {
         const label = resolveCallsTeamLabel(row.sf_user_id, row.sf_user_id, row.email);
         if (bySfId.has(row.sf_user_id)) {
           const existing = bySfId.get(row.sf_user_id);
-          if (hasCallsTeamLabelOverride(row.sf_user_id) || String(existing.label).includes("@")) {
+          if (shouldUpgradeCallsTeamLabel(row.sf_user_id, existing.label)) {
             bySfId.set(row.sf_user_id, {
               ...existing,
               label: resolveCallsTeamLabel(row.sf_user_id, existing.label, row.email),

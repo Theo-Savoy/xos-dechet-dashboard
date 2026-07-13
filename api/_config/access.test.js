@@ -6,6 +6,7 @@ import {
   canViewWeeklyTeam,
   isCallsAccountOwnerCandidate,
   isWeeklyOwnerExcluded,
+  looksLikeSalesforceId,
   resolveCallsTeamLabel,
   roleAtLeast,
   roleFromEmail,
@@ -43,6 +44,17 @@ describe("Combo account owner filter", () => {
         "christophe.hirtz@xos-learning.fr",
       ),
     ).toBe("Christophe Hirtz");
+  });
+
+  it("uses display name for Paul when profile only has a Salesforce Id", () => {
+    expect(
+      resolveCallsTeamLabel("005AZ000000fLYkYAM", "005AZ000000fLYkYAM", "paul.rathouin@xos-learning.fr"),
+    ).toBe("Paul Rathouin");
+  });
+
+  it("detects Salesforce Id placeholders", () => {
+    expect(looksLikeSalesforceId("005AZ000000fLYkYAM")).toBe(true);
+    expect(looksLikeSalesforceId("Paul Rathouin")).toBe(false);
   });
 
   it("excludes Théo and Yanis from account owner candidates", () => {
