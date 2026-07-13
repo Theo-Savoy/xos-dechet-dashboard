@@ -4,6 +4,7 @@ const READ_ONLY = {
   canBulkClose: false,
   canManageRules: false,
   canWrite: false,
+  canApplyRecipes: false,
 };
 
 const ROLE_CAPABILITIES = {
@@ -27,6 +28,7 @@ const ROLE_CAPABILITIES = {
     canReadWorkspace: true,
     canReadAnalytics: true,
     canReadHistory: true,
+    canApplyRecipes: true,
   },
   admin: {
     ...READ_ONLY,
@@ -39,6 +41,7 @@ const ROLE_CAPABILITIES = {
     canReadWorkspace: true,
     canReadAnalytics: true,
     canReadHistory: true,
+    canApplyRecipes: true,
   },
 };
 

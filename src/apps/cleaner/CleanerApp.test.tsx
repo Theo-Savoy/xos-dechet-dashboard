@@ -145,17 +145,21 @@ describe('CleanerApp component', () => {
     render(<CleanerApp />);
 
     await waitFor(() =>
-      expect(screen.getByTestId('cleaner-cockpit-module')).toBeTruthy(),
+      expect(screen.getAllByTestId('cleaner-cockpit-module')).toHaveLength(2),
     );
-    expect(screen.getByTestId('cleaner-cockpit-module').textContent).toContain(
-      '2 enregistrements concernés',
-    );
+    expect(
+      screen
+        .getAllByTestId('cleaner-cockpit-module')
+        .some((module) =>
+          module.textContent?.includes('2 enregistrements concernés'),
+        ),
+    ).toBe(true);
     expect(
       screen.queryByText('Aucune donnée de nettoyage disponible.'),
     ).toBeNull();
   });
 
-  it('keeps the empty cockpit state when the workspace has no items', async () => {
+  it('keeps the Recettes tile available when Opportunities has no items', async () => {
     window.localStorage?.clear();
     vi.stubGlobal(
       'fetch',
@@ -170,8 +174,11 @@ describe('CleanerApp component', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('Aucune donnée de nettoyage disponible.'),
+        screen.getByRole('button', { name: 'Ouvrir Recettes' }),
       ).toBeTruthy(),
     );
+    expect(
+      screen.queryByRole('button', { name: 'Ouvrir Opportunités' }),
+    ).toBeNull();
   });
 });

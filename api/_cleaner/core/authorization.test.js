@@ -92,6 +92,7 @@ describe('Cleaner authorization', () => {
       canBulkEdit: true,
       canBulkClose: true,
       canManageRules: false,
+      canApplyRecipes: false,
     });
   });
 
@@ -103,6 +104,7 @@ describe('Cleaner authorization', () => {
       canBulkEdit: true,
       canBulkClose: true,
       canManageRules: false,
+      canApplyRecipes: true,
     });
     expect(capabilitiesForRole('admin')).toMatchObject({
       canViewTeam: true,
@@ -111,6 +113,7 @@ describe('Cleaner authorization', () => {
       canBulkEdit: true,
       canBulkClose: true,
       canManageRules: true,
+      canApplyRecipes: true,
     });
   });
 

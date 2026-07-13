@@ -83,6 +83,130 @@ function renderShell(
 }
 
 describe('CleanerShell navigation', () => {
+  it('opens the Recettes tile and renders the sectors recipe tab', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            obsoleteSectors: [],
+            activeSectors: [],
+            suggestedMappings: {},
+            accountsPerSector: {},
+            capabilities: { canApplyMerge: false },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    renderShell({
+      cockpit: {
+        status: 'ready',
+        summaries: [
+          ...readyCockpit.summaries,
+          {
+            moduleId: 'recettes',
+            label: 'Recettes',
+            criticality: 'warning',
+            anomalyCount: 0,
+            affectedRecordCount: 0,
+            resolvedPeriodCount: 0,
+            previousPeriodDelta: null,
+            lastRefreshedAt: null,
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir Recettes' }));
+
+    expect(screen.getByRole('tab', { name: 'Recettes' })).toBeTruthy();
+    expect(
+      await screen.findByRole('button', { name: 'Secteurs obsolètes' }),
+    ).toBeTruthy();
+  });
+
+  it('completes a sector merge from Labo navigation against the mocked server', async () => {
+    let recipeReads = 0;
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (_input, init) => {
+        if (init?.method === 'POST') {
+          const body = JSON.parse(String(init.body));
+          if (body.action === 'preview_merge') {
+            return new Response(
+              JSON.stringify({
+                obsoleteId: 'finance',
+                activeId: 'transports',
+                obsoleteLabel: 'Finance',
+                activeLabel: 'Transports',
+                accountIds: ['001-a'],
+                accounts: [{ id: '001-a', name: 'Alpha', ownerId: 'sf-owner' }],
+                accountCount: 1,
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response(
+            JSON.stringify({ updated: 1, failed: 0, accountIds: ['001-a'] }),
+            { status: 200 },
+          );
+        }
+        recipeReads += 1;
+        return new Response(
+          JSON.stringify({
+            obsoleteSectors:
+              recipeReads === 1
+                ? [{ id: 'finance', label: 'Finance', accountCount: 1 }]
+                : [],
+            activeSectors: [
+              { id: 'transports', label: 'Transports', accountCount: 4 },
+            ],
+            suggestedMappings: {},
+            accountsPerSector: recipeReads === 1 ? { finance: ['001-a'] } : {},
+            capabilities: { canApplyMerge: true },
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    renderShell({
+      role: 'manager',
+      cockpit: {
+        status: 'ready',
+        summaries: [
+          {
+            moduleId: 'recettes',
+            label: 'Recettes',
+            criticality: 'warning',
+            anomalyCount: 1,
+            affectedRecordCount: 1,
+            resolvedPeriodCount: 0,
+            previousPeriodDelta: null,
+            lastRefreshedAt: null,
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir Recettes' }));
+    await screen.findByText('Finance');
+    fireEvent.click(screen.getByRole('button', { name: 'Cible pour Finance' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Transports' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Prévisualiser Finance' }),
+    );
+    expect(await screen.findByText('Alpha')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Confirmer ce preview' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer Finance' }));
+
+    expect(await screen.findByText(/1 compte mis à jour/)).toBeTruthy();
+    expect(screen.getByText('Aucun secteur obsolète détecté')).toBeTruthy();
+  });
+
   it('keeps home fixed and renders the cockpit first', () => {
     renderShell();
 

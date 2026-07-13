@@ -45,10 +45,12 @@ export function validateCleanerQuery(input) {
     values[key] = rawValue == null ? '' : String(rawValue);
   }
 
-  if (
-    values.module !== 'opportunities' ||
-    !['workspace', 'analytics', 'history'].includes(values.resource)
-  ) {
+  const validOpportunityResource =
+    values.module === 'opportunities' &&
+    ['workspace', 'analytics', 'history'].includes(values.resource);
+  const validRecipeResource =
+    values.module === 'recettes' && values.resource === 'sectors';
+  if (!validOpportunityResource && !validRecipeResource) {
     return invalid(
       'invalid_resource',
       'Cleaner module or resource is invalid.',

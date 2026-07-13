@@ -90,8 +90,18 @@ export default function CleanerApp({ params }: CleanerAppProps) {
     void fetchOpportunityWorkspace(session.accessToken)
       .then((workspace) => {
         if (cancelled) return;
+        const recettesSummary = {
+          moduleId: 'recettes',
+          label: 'Recettes',
+          criticality: 'warning' as const,
+          anomalyCount: 0,
+          affectedRecordCount: 0,
+          resolvedPeriodCount: 0,
+          previousPeriodDelta: null,
+          lastRefreshedAt: null,
+        };
         if (workspace.items.length === 0) {
-          setCockpit({ status: 'empty', summaries: [] });
+          setCockpit({ status: 'ready', summaries: [recettesSummary] });
           return;
         }
 
@@ -100,7 +110,8 @@ export default function CleanerApp({ params }: CleanerAppProps) {
           0,
         );
         // One to four records need attention; five or more are critical. Zero stays the dedicated empty state.
-        const criticality = workspace.items.length >= 5 ? 'critical' : 'warning';
+        const criticality =
+          workspace.items.length >= 5 ? 'critical' : 'warning';
         setCockpit({
           status: 'ready',
           summaries: [
@@ -114,6 +125,7 @@ export default function CleanerApp({ params }: CleanerAppProps) {
               previousPeriodDelta: null,
               lastRefreshedAt: workspace.metadata?.fetchedAt ?? null,
             },
+            recettesSummary,
           ],
         });
       })

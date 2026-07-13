@@ -1,4 +1,4 @@
-import type { CleanerModuleId } from './shell/shellState';
+import { isCleanerModuleId, type CleanerModuleId } from './shell/shellState';
 
 export type CleanerCriticality = 'critical' | 'warning' | 'healthy';
 
@@ -135,8 +135,8 @@ export function CleanerCockpit({ state, onOpenModule }: CleanerCockpitProps) {
               type="button"
               aria-label={`Ouvrir ${summary.label}`}
               onClick={() => {
-                if (summary.moduleId === 'opportunities')
-                  onOpenModule('opportunities');
+                if (isCleanerModuleId(summary.moduleId))
+                  onOpenModule(summary.moduleId);
               }}
             >
               Ouvrir

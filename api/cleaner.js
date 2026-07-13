@@ -13,6 +13,11 @@ import { computeOpportunityAnalytics } from './_cleaner/opportunities/analytics.
 import { executeOpportunityCommand } from './_cleaner/opportunities/execute.js';
 import { previewOpportunityCommand } from './_cleaner/opportunities/preview.js';
 import { loadOpportunityWorkspace } from './_cleaner/opportunities/read.js';
+import {
+  applySectorMerge,
+  loadSectorRecipe,
+  previewSectorMerge,
+} from './_cleaner/recettes/sectors.js';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -30,6 +35,7 @@ function publicCapabilities(capabilities) {
     canBulkEdit: capabilities.canBulkEdit,
     canBulkClose: capabilities.canBulkClose,
     canManageRules: capabilities.canManageRules,
+    canApplyRecipes: capabilities.canApplyRecipes,
   };
 }
 
@@ -120,6 +126,10 @@ export async function GET(request) {
       );
     const context = await buildContext(request, user, client, profile, query);
 
+    if (query.module === 'recettes' && query.resource === 'sectors') {
+      return response(200, await loadSectorRecipe(context, query));
+    }
+
     if (query.resource === 'history') {
       const history = await historyFor(client, context, query);
       const items = history.data || [];
@@ -184,12 +194,23 @@ export async function POST(request) {
       message: 'Le corps JSON est invalide ou trop volumineux.',
     });
   }
-  if (body.module !== undefined && body.module !== 'opportunities')
+  if (
+    body.module !== undefined &&
+    body.module !== 'opportunities' &&
+    body.module !== 'recettes'
+  )
     return response(400, {
       error: 'invalid_resource',
       message: 'Cleaner module is invalid.',
     });
-  if (body.action !== 'preview' && body.action !== 'execute')
+  const opportunityAction =
+    (body.module === undefined || body.module === 'opportunities') &&
+    (body.action === 'preview' || body.action === 'execute');
+  const recipeAction =
+    body.module === 'recettes' &&
+    body.resource === 'sectors' &&
+    (body.action === 'preview_merge' || body.action === 'apply_merge');
+  if (!opportunityAction && !recipeAction)
     return response(400, {
       error: 'invalid_action',
       message: 'Cleaner action is invalid.',
@@ -211,8 +232,11 @@ export async function POST(request) {
         500,
       );
     const context = await buildContext(request, user, client, profile, {});
-    const result =
-      body.action === 'preview'
+    const result = recipeAction
+      ? body.action === 'preview_merge'
+        ? await previewSectorMerge(context, body)
+        : await applySectorMerge(context, body)
+      : body.action === 'preview'
         ? await previewOpportunityCommand(context, body)
         : await executeOpportunityCommand(context, body);
     return response(200, result);

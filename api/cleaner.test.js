@@ -7,6 +7,9 @@ const {
   mockLoadWorkspace,
   mockComputeAnalytics,
   mockListHistory,
+  mockLoadSectorRecipe,
+  mockPreviewSectorMerge,
+  mockApplySectorMerge,
 } = vi.hoisted(() => ({
   mockVerifyJWT: vi.fn(),
   mockGetServiceClient: vi.fn(),
@@ -14,6 +17,9 @@ const {
   mockLoadWorkspace: vi.fn(),
   mockComputeAnalytics: vi.fn(),
   mockListHistory: vi.fn(),
+  mockLoadSectorRecipe: vi.fn(),
+  mockPreviewSectorMerge: vi.fn(),
+  mockApplySectorMerge: vi.fn(),
 }));
 
 vi.mock('./_auth.js', () => ({ verifyJWT: mockVerifyJWT }));
@@ -28,9 +34,14 @@ vi.mock('./_cleaner/opportunities/analytics.js', () => ({
 vi.mock('./_cleaner/core/audit.js', () => ({
   listCleanerHistory: mockListHistory,
 }));
+vi.mock('./_cleaner/recettes/sectors.js', () => ({
+  loadSectorRecipe: mockLoadSectorRecipe,
+  previewSectorMerge: mockPreviewSectorMerge,
+  applySectorMerge: mockApplySectorMerge,
+}));
 
 import { CleanerError } from './_cleaner/core/errors.js';
-import { GET } from './cleaner.js';
+import { GET, POST } from './cleaner.js';
 
 function request(query = '', token = 'jwt') {
   return new Request(
@@ -39,6 +50,17 @@ function request(query = '', token = 'jwt') {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     },
   );
+}
+
+function postRequest(body, token = 'jwt') {
+  return new Request('https://app.test/api/cleaner', {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 const client = {
@@ -54,6 +76,9 @@ beforeEach(() => {
   mockLoadWorkspace.mockReset();
   mockComputeAnalytics.mockReset();
   mockListHistory.mockReset();
+  mockLoadSectorRecipe.mockReset();
+  mockPreviewSectorMerge.mockReset();
+  mockApplySectorMerge.mockReset();
   mockGetServiceClient.mockReturnValue(client);
   mockVerifyJWT.mockResolvedValue({ id: 'user-1', email: 'ada@example.test' });
   mockGetProfile.mockResolvedValue({
@@ -74,9 +99,35 @@ beforeEach(() => {
     error: null,
     nextCursor: null,
   });
+  mockLoadSectorRecipe.mockResolvedValue({
+    obsoleteSectors: [],
+    activeSectors: [],
+    suggestedMappings: {},
+    accountsPerSector: {},
+    capabilities: { canApplyMerge: false },
+  });
+  mockPreviewSectorMerge.mockResolvedValue({ accountIds: ['001-a'] });
+  mockApplySectorMerge.mockResolvedValue({ updated: 1, failed: 0 });
 });
 
 describe('GET /api/cleaner', () => {
+  it('routes the sectors recipe without loading the Opportunities workspace', async () => {
+    const response = await GET(
+      request('module=recettes&resource=sectors&limit=50'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockLoadSectorRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'commercial' }),
+      expect.objectContaining({
+        module: 'recettes',
+        resource: 'sectors',
+        limit: 50,
+      }),
+    );
+    expect(mockLoadWorkspace).not.toHaveBeenCalled();
+  });
+
   it('returns 401 unauthorized with private no-store headers', async () => {
     mockVerifyJWT.mockResolvedValue(null);
     const response = await GET(
@@ -228,5 +279,29 @@ describe('GET /api/cleaner', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'service_unavailable',
     });
+  });
+});
+
+describe('POST /api/cleaner recipes', () => {
+  it('routes preview_merge to the read-only recipe action', async () => {
+    const response = await POST(
+      postRequest({
+        module: 'recettes',
+        resource: 'sectors',
+        action: 'preview_merge',
+        obsoleteId: 'finance',
+        activeId: 'transports',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockPreviewSectorMerge).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'commercial' }),
+      expect.objectContaining({
+        obsoleteId: 'finance',
+        activeId: 'transports',
+      }),
+    );
+    expect(mockApplySectorMerge).not.toHaveBeenCalled();
   });
 });

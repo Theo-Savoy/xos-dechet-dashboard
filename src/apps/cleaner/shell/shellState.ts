@@ -1,6 +1,10 @@
 import type { AppRole } from '../../../os/registry';
 
-export type CleanerModuleId = 'opportunities';
+export type CleanerModuleId = 'opportunities' | 'recettes';
+
+export function isCleanerModuleId(value: unknown): value is CleanerModuleId {
+  return value === 'opportunities' || value === 'recettes';
+}
 
 export type CleanerTabState = {
   open: CleanerModuleId[];
@@ -17,14 +21,14 @@ export function normalizeTabState(value: unknown): CleanerTabState {
   if (!value || typeof value !== 'object') return createInitialTabState();
   const candidate = value as { open?: unknown; active?: unknown };
   const open = Array.isArray(candidate.open)
-    ? candidate.open.filter(
-        (module): module is CleanerModuleId => module === 'opportunities',
+    ? candidate.open.filter((module): module is CleanerModuleId =>
+        isCleanerModuleId(module),
       )
     : [];
   const uniqueOpen = [...new Set(open)];
   const active =
-    candidate.active === 'opportunities' && uniqueOpen.includes('opportunities')
-      ? 'opportunities'
+    isCleanerModuleId(candidate.active) && uniqueOpen.includes(candidate.active)
+      ? candidate.active
       : 'home';
   return { open: uniqueOpen, active };
 }
