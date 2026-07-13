@@ -1,7 +1,14 @@
+export type SectorSampleAccount = {
+  id: string;
+  name: string | null;
+  recordUrl: string;
+};
+
 export type SectorSummary = {
   id: string;
   label: string;
   accountCount: number;
+  sampleAccounts?: SectorSampleAccount[];
 };
 
 export type SectorRecipeState = {
@@ -226,6 +233,22 @@ export function getSectorJobStatus(
   return request<SectorJobStatus>(accessToken, {
     method: 'GET',
     path: `/api/cleaner?module=recettes&resource=sectors&action=status&jobId=${encodeURIComponent(jobId)}`,
+  });
+}
+
+export async function undoSectorMergeApi(
+  accessToken: string | undefined,
+  journalId: number | string,
+) {
+  return request<{ restored: number; failed: number }>(accessToken, {
+    method: 'POST',
+    path: '/api/cleaner',
+    body: JSON.stringify({
+      module: 'recettes',
+      resource: 'sectors',
+      action: 'undo_merge',
+      journalId,
+    }),
   });
 }
 

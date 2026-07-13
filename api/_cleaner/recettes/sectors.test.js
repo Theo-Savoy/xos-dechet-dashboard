@@ -41,7 +41,9 @@ function context(overrides = {}) {
       data: { id: 12 },
       error: null,
     }),
-    recordSectorJournal: vi.fn().mockResolvedValue({ data: { id: 13 }, error: null }),
+    recordSectorJournal: vi
+      .fn()
+      .mockResolvedValue({ data: { id: 13 }, error: null }),
     ...overrides,
   };
 }
@@ -58,7 +60,14 @@ describe('sectors recipe server slice', () => {
     );
     expect(ctx.searchContacts.mock.calls[0][1]).toContain('Industry');
     expect(result.obsoleteSectors).toEqual([
-      { id: sectorId('Finance'), label: 'Finance', accountCount: 1 },
+      expect.objectContaining({
+        id: sectorId('Finance'),
+        label: 'Finance',
+        accountCount: 1,
+      }),
+    ]);
+    expect(result.obsoleteSectors[0].sampleAccounts).toEqual([
+      expect.objectContaining({ id: '001-old', name: 'Account 001-old' }),
     ]);
     expect(result.activeSectors).toHaveLength(50);
     expect(result.activeSectors).toContainEqual(
@@ -93,11 +102,13 @@ describe('sectors recipe server slice', () => {
 
     const result = await loadSectorRecipe(ctx);
 
-    expect(result.obsoleteSectors).toContainEqual({
-      id: sectorId('Finance'),
-      label: 'Finance',
-      accountCount: 3,
-    });
+    expect(result.obsoleteSectors).toContainEqual(
+      expect.objectContaining({
+        id: sectorId('Finance'),
+        label: 'Finance',
+        accountCount: 3,
+      }),
+    );
     expect(result.accountsPerSector[sectorId('Finance')]).toEqual([
       '001-owner-a',
       '001-owner-b',
@@ -191,7 +202,10 @@ describe('sectors recipe server slice', () => {
     const ctx = context({
       role: 'admin',
       searchContacts: vi.fn().mockResolvedValue({
-        records: [account('001-finance', 'Finance'), account('001-health', 'Health')],
+        records: [
+          account('001-finance', 'Finance'),
+          account('001-health', 'Health'),
+        ],
       }),
     });
 
@@ -222,7 +236,9 @@ describe('sectors recipe server slice', () => {
     // before any write. If any mapping is invalid, the whole job
     // aborts without touching Salesforce.
     const ctx = context({
-      searchContacts: vi.fn().mockResolvedValue({ records: [account('001-old', 'Finance')] }),
+      searchContacts: vi
+        .fn()
+        .mockResolvedValue({ records: [account('001-old', 'Finance')] }),
     });
 
     const { jobId } = startBulkSectorJob(ctx, {
@@ -257,14 +273,20 @@ describe('sectors recipe server slice', () => {
 
   it('fetches the most recent recipe journal entries', async () => {
     const limit = vi.fn().mockResolvedValue({
-      data: [{
-        id: 9,
-        kind: 'recette_sectors_apply_merge',
-        payload: { obsoleteId: 'finance', activeId: 'banque-finance', accountCount: 4 },
-        actor_id: 'actor-1',
-        created_at: '2026-07-13T10:00:00Z',
-        actor: { full_name: 'Marie Martin', email: 'marie@example.com' },
-      }],
+      data: [
+        {
+          id: 9,
+          kind: 'recette_sectors_apply_merge',
+          payload: {
+            obsoleteId: 'finance',
+            activeId: 'banque-finance',
+            accountCount: 4,
+          },
+          actor_id: 'actor-1',
+          created_at: '2026-07-13T10:00:00Z',
+          actor: { full_name: 'Marie Martin', email: 'marie@example.com' },
+        },
+      ],
       error: null,
     });
     const order = vi.fn(() => ({ limit }));
@@ -275,7 +297,12 @@ describe('sectors recipe server slice', () => {
 
     expect(ctx.supabase.from).toHaveBeenCalledWith('recette_journal');
     expect(entries).toEqual([
-      expect.objectContaining({ obsoleteId: 'finance', activeId: 'banque-finance', accountCount: 4, actorLabel: 'Marie Martin' }),
+      expect.objectContaining({
+        obsoleteId: 'finance',
+        activeId: 'banque-finance',
+        accountCount: 4,
+        actorLabel: 'Marie Martin',
+      }),
     ]);
   });
 });

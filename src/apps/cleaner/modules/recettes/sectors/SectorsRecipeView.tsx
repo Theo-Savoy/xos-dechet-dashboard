@@ -32,7 +32,7 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
   const [section, setSection] = useState<'recipe' | 'journal'>('recipe');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState<
-    | { kind: 'success'; succeeded: number; failed: number }
+    | { kind: 'success'; succeeded: number; failed: number; mappings: Array<{ from: string; to: string }> }
     | { kind: 'failed'; errors: Array<{ obsoleteId: string; message: string }> }
     | null
   >(null);
@@ -71,6 +71,15 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
     [selected, targets],
   );
   const selectedCount = Object.keys(selectedMapping).length;
+  const mappingLabels = useMemo(() => {
+    if (!state) return [];
+    const oldLabels = new Map(state.obsoleteSectors.map((item) => [item.id, item.label]));
+    const newLabels = new Map(state.activeSectors.map((item) => [item.id, item.label]));
+    return Object.entries(selectedMapping).map(([from, to]) => ({
+      from: oldLabels.get(from) || from,
+      to: newLabels.get(to) || to,
+    }));
+  }, [selectedMapping, state]);
   const selectedAccounts = useMemo(
     () =>
       state?.obsoleteSectors
@@ -123,6 +132,7 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
               kind: 'success',
               succeeded: status.total - status.errors.length,
               failed: 0,
+              mappings: mappingLabels,
             });
             void load();
           }
@@ -136,7 +146,7 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
         cause instanceof Error ? cause.message : 'La fusion a échoué.',
       );
     }
-  }, [accessToken, job, load, selectedMapping]);
+  }, [accessToken, job, load, mappingLabels, selectedMapping]);
 
   // React to job completion.
   useEffect(() => {
@@ -146,7 +156,7 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
         setResult({ kind: 'failed', errors });
       } else {
         const succeeded = job.progress.total - errors.length;
-        setResult({ kind: 'success', succeeded, failed: 0 });
+        setResult({ kind: 'success', succeeded, failed: 0, mappings: mappingLabels });
         void load();
       }
     } else if (job.status === 'error') {
@@ -356,6 +366,19 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
                           }))
                         }
                       />
+                      {sector.sampleAccounts?.length ? (
+                        <details className="cleaner-sector-row__sample">
+                          <summary>Voir 3 comptes concernés</summary>
+                          <ul>
+                            {sector.sampleAccounts.map((account) => (
+                              <li key={account.id}>
+                                <span>{account.name || account.id}</span>
+                                <a href={account.recordUrl} target="_blank" rel="noopener noreferrer" className="cleaner-sector-row__sf-link">Salesforce ↗</a>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -406,6 +429,16 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
               {result.succeeded} fusion{result.succeeded === 1 ? '' : 's'}{' '}
               réussie{result.succeeded === 1 ? '' : 's'}.
             </p>
+            <div className="cleaner-sector-before-after" aria-label="Avant après">
+              <strong>Avant → après</strong>
+              <ul>
+                {result.mappings.map((mapping) => (
+                  <li key={`${mapping.from}-${mapping.to}`}>
+                    <span>{mapping.from}</span><span aria-hidden="true">→</span><strong>{mapping.to}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <button
               className="cleaner-sector-journal-link"
               type="button"

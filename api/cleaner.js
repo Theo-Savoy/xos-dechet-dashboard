@@ -20,6 +20,7 @@ import {
   loadSectorRecipe,
   previewSectorMerge,
   startBulkSectorJob,
+  undoSectorMerge,
 } from './_cleaner/recettes/sectors.js';
 
 const HEADERS = {
@@ -224,7 +225,8 @@ export async function POST(request) {
     body.resource === 'sectors' &&
     (body.action === 'preview_merge' ||
       body.action === 'apply_merge' ||
-      body.action === 'bulk_apply');
+      body.action === 'bulk_apply' ||
+      body.action === 'undo_merge');
   if (!opportunityAction && !recipeAction)
     return response(400, {
       error: 'invalid_action',
@@ -252,7 +254,9 @@ export async function POST(request) {
         ? await previewSectorMerge(context, body)
         : body.action === 'apply_merge'
           ? await applySectorMerge(context, body)
-          : { ok: true, ...startBulkSectorJob(context, body) }
+          : body.action === 'undo_merge'
+            ? await undoSectorMerge(context, body)
+            : { ok: true, ...startBulkSectorJob(context, body) }
       : body.action === 'preview'
         ? await previewOpportunityCommand(context, body)
         : await executeOpportunityCommand(context, body);
