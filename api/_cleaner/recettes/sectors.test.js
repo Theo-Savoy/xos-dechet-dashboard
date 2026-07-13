@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   applySectorMerge,
+  fetchSectorJournal,
+  getSectorJobStatus,
   loadSectorRecipe,
   previewSectorMerge,
+  startBulkSectorJob,
   sectorId,
 } from './sectors.js';
 
@@ -38,6 +41,7 @@ function context(overrides = {}) {
       data: { id: 12 },
       error: null,
     }),
+    recordSectorJournal: vi.fn().mockResolvedValue({ data: { id: 13 }, error: null }),
     ...overrides,
   };
 }
@@ -172,6 +176,98 @@ describe('sectors recipe server slice', () => {
         },
       }),
     );
+    expect(ctx.recordSectorJournal).toHaveBeenCalledWith({
+      kind: 'recette_sectors_apply_merge',
+      payload: expect.objectContaining({
+        obsoleteId: sectorId('Finance'),
+        activeId: sectorId('Transports'),
+        accountCount: 1,
+      }),
+    });
     expect(result).toMatchObject({ updated: 1, failed: 0 });
+  });
+
+  it('runs a bulk preview job sequentially and exposes progress by job id', async () => {
+    const ctx = context({
+      role: 'commercial',
+      searchContacts: vi.fn().mockResolvedValue({
+        records: [account('001-finance', 'Finance'), account('001-health', 'Health')],
+      }),
+    });
+
+    const { jobId } = startBulkSectorJob(ctx, {
+      action: 'bulk_preview',
+      obsoleteIds: ['finance', 'health'],
+      mapping: {
+        finance: 'banque-finance',
+        health: 'sante-pharmacie-biotech',
+      },
+    });
+    let status;
+    await vi.waitFor(() => {
+      status = getSectorJobStatus(ctx, jobId);
+      expect(status.status).toBe('done');
+    });
+
+    expect(status).toMatchObject({ total: 2, processed: 2, errors: [] });
+    expect(status.results).toHaveLength(2);
+    expect(ctx.updateSObjects).not.toHaveBeenCalled();
+  });
+
+  it('continues a bulk apply after an item error and reports the failed obsolete id', async () => {
+    const ctx = context({
+      searchContacts: vi.fn().mockResolvedValue({ records: [account('001-old', 'Finance')] }),
+    });
+
+    const { jobId } = startBulkSectorJob(ctx, {
+      action: 'bulk_apply',
+      obsoleteIds: ['finance', 'missing'],
+      mapping: { finance: 'banque-finance', missing: 'transports' },
+    });
+    let status;
+    await vi.waitFor(() => {
+      status = getSectorJobStatus(ctx, jobId);
+      expect(status.status).toBe('done');
+    });
+
+    expect(status).toMatchObject({ total: 2, processed: 2 });
+    expect(status.errors).toEqual([
+      expect.objectContaining({ obsoleteId: 'missing' }),
+    ]);
+    expect(ctx.updateSObjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires manager/admin capability before starting a bulk apply', () => {
+    expect(() =>
+      startBulkSectorJob(context({ role: 'commercial' }), {
+        action: 'bulk_apply',
+        obsoleteIds: ['finance'],
+        mapping: { finance: 'banque-finance' },
+      }),
+    ).toThrow(expect.objectContaining({ code: 'forbidden', status: 403 }));
+  });
+
+  it('fetches the most recent recipe journal entries', async () => {
+    const limit = vi.fn().mockResolvedValue({
+      data: [{
+        id: 9,
+        kind: 'recette_sectors_apply_merge',
+        payload: { obsoleteId: 'finance', activeId: 'banque-finance', accountCount: 4 },
+        actor_id: 'actor-1',
+        created_at: '2026-07-13T10:00:00Z',
+        actor: { full_name: 'Marie Martin', email: 'marie@example.com' },
+      }],
+      error: null,
+    });
+    const order = vi.fn(() => ({ limit }));
+    const select = vi.fn(() => ({ order }));
+    const ctx = context({ supabase: { from: vi.fn(() => ({ select })) } });
+
+    const entries = await fetchSectorJournal(ctx, 50);
+
+    expect(ctx.supabase.from).toHaveBeenCalledWith('recette_journal');
+    expect(entries).toEqual([
+      expect.objectContaining({ obsoleteId: 'finance', activeId: 'banque-finance', accountCount: 4, actorLabel: 'Marie Martin' }),
+    ]);
   });
 });

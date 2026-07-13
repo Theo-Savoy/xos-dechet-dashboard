@@ -28,6 +28,30 @@ export type SectorMergeResult = {
   accountIds: string[];
 };
 
+export type SectorJobStatus = {
+  ok: true;
+  jobId: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+  total: number;
+  processed: number;
+  errors: Array<{ obsoleteId: string; message: string }>;
+  results: Array<SectorMergePreview | SectorMergeResult>;
+  error?: string | null;
+};
+
+export type SectorJournalEntry = {
+  id: number | string;
+  kind: string;
+  obsoleteId: string | null;
+  activeId: string | null;
+  obsoleteLabel: string | null;
+  activeLabel: string | null;
+  accountCount: number;
+  actorId: string;
+  actorLabel: string;
+  createdAt: string;
+};
+
 class SectorRecipeApiError extends Error {
   constructor(
     message: string,
@@ -159,4 +183,75 @@ export function applySectorMerge(
       expectedAccountIds,
     }),
   });
+}
+
+type SectorMapping = Record<string, string>;
+
+async function startBulk(
+  accessToken: string | undefined,
+  action: 'bulk_preview' | 'bulk_apply',
+  mapping: SectorMapping,
+) {
+  return request<{ ok: true; jobId: string }>(accessToken, {
+    method: 'POST',
+    path: '/api/cleaner',
+    body: JSON.stringify({
+      module: 'recettes',
+      resource: 'sectors',
+      action,
+      obsoleteIds: Object.keys(mapping),
+      mapping,
+    }),
+  });
+}
+
+export function bulkPreviewSectors(
+  accessToken: string | undefined,
+  mapping: SectorMapping,
+) {
+  return startBulk(accessToken, 'bulk_preview', mapping);
+}
+
+export function bulkApplySectors(
+  accessToken: string | undefined,
+  mapping: SectorMapping,
+) {
+  return startBulk(accessToken, 'bulk_apply', mapping);
+}
+
+export function getSectorJobStatus(
+  accessToken: string | undefined,
+  jobId: string,
+) {
+  return request<SectorJobStatus>(accessToken, {
+    method: 'GET',
+    path: `/api/cleaner?module=recettes&resource=sectors&action=status&jobId=${encodeURIComponent(jobId)}`,
+  });
+}
+
+export async function pollJobStatus(
+  accessToken: string | undefined,
+  jobId: string,
+  onProgress?: (status: SectorJobStatus) => void,
+) {
+  for (;;) {
+    const status = await getSectorJobStatus(accessToken, jobId);
+    onProgress?.(status);
+    if (status.status === 'done' || status.status === 'error') return status;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+export async function fetchSectorJournal(
+  accessToken: string | undefined,
+  limit = 50,
+) {
+  const body = await request<{ ok: true; items: SectorJournalEntry[] }>(
+    accessToken,
+    {
+      method: 'GET',
+      path: `/api/cleaner?module=recettes&resource=sectors&action=journal&limit=${limit}`,
+    },
+  );
+  return body.items;
 }

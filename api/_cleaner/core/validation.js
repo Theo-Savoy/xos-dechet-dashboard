@@ -4,6 +4,8 @@ export const MAX_CLEANER_LIMIT = 200;
 const ALLOWED_KEYS = new Set([
   'module',
   'resource',
+  'action',
+  'jobId',
   'limit',
   'cursor',
   'period',
@@ -57,6 +59,32 @@ export function validateCleanerQuery(input) {
       'resource',
     );
   }
+  if (
+    validOpportunityResource &&
+    (values.action !== undefined || values.jobId !== undefined)
+  )
+    return invalid(
+      'invalid_query',
+      'Recipe job parameters are not valid for opportunities.',
+      values.action !== undefined ? 'action' : 'jobId',
+    );
+  if (
+    validRecipeResource &&
+    values.action !== undefined &&
+    values.action !== 'status' &&
+    values.action !== 'journal'
+  )
+    return invalid('invalid_query', 'Sector recipe action is invalid.', 'action');
+  if (
+    validRecipeResource &&
+    ((values.action === 'status' && values.jobId === undefined) ||
+      (values.action !== 'status' && values.jobId !== undefined))
+  )
+    return invalid(
+      'invalid_query',
+      'jobId is required only for the status action.',
+      'jobId',
+    );
 
   let limit = 100;
   if (values.limit !== undefined) {
@@ -88,7 +116,7 @@ export function validateCleanerQuery(input) {
   }
 
   const safeFields = {};
-  for (const key of ['period', 'start', 'end']) {
+  for (const key of ['period', 'start', 'end', 'action', 'jobId']) {
     if (values[key] === undefined) continue;
     if (
       values[key] === '' ||

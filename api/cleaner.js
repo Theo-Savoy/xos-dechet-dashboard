@@ -15,8 +15,11 @@ import { previewOpportunityCommand } from './_cleaner/opportunities/preview.js';
 import { loadOpportunityWorkspace } from './_cleaner/opportunities/read.js';
 import {
   applySectorMerge,
+  fetchSectorJournal,
+  getSectorJobStatus,
   loadSectorRecipe,
   previewSectorMerge,
+  startBulkSectorJob,
 } from './_cleaner/recettes/sectors.js';
 
 const HEADERS = {
@@ -127,6 +130,16 @@ export async function GET(request) {
     const context = await buildContext(request, user, client, profile, query);
 
     if (query.module === 'recettes' && query.resource === 'sectors') {
+      if (query.action === 'status')
+        return response(200, {
+          ok: true,
+          ...getSectorJobStatus(context, query.jobId),
+        });
+      if (query.action === 'journal')
+        return response(200, {
+          ok: true,
+          items: await fetchSectorJournal(context, query.limit),
+        });
       return response(200, await loadSectorRecipe(context, query));
     }
 
@@ -209,7 +222,10 @@ export async function POST(request) {
   const recipeAction =
     body.module === 'recettes' &&
     body.resource === 'sectors' &&
-    (body.action === 'preview_merge' || body.action === 'apply_merge');
+    (body.action === 'preview_merge' ||
+      body.action === 'apply_merge' ||
+      body.action === 'bulk_preview' ||
+      body.action === 'bulk_apply');
   if (!opportunityAction && !recipeAction)
     return response(400, {
       error: 'invalid_action',
@@ -235,7 +251,9 @@ export async function POST(request) {
     const result = recipeAction
       ? body.action === 'preview_merge'
         ? await previewSectorMerge(context, body)
-        : await applySectorMerge(context, body)
+        : body.action === 'apply_merge'
+          ? await applySectorMerge(context, body)
+          : { ok: true, ...startBulkSectorJob(context, body) }
       : body.action === 'preview'
         ? await previewOpportunityCommand(context, body)
         : await executeOpportunityCommand(context, body);

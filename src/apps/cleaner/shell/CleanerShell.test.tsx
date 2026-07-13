@@ -208,8 +208,11 @@ describe('CleanerShell navigation', () => {
       screen.getByRole('button', { name: /Confirmer l'aperçu/ }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Appliquer Finance' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Appliquer' }),
+    );
 
-    expect(await screen.findByText(/1 compte mis à jour/)).toBeTruthy();
+    expect(await screen.findByText(/1 fusion réussie, 0 échecs/)).toBeTruthy();
     expect(
       screen.getAllByText(/Aucun secteur obsolète/)[0],
     ).toBeTruthy();

@@ -16,6 +16,7 @@ export const ACTIVE_SECTORS = Object.freeze([
 ]);
 
 const MAX_WRITE_BATCH = 200;
+const sectorJobs = new Map();
 
 export function sectorId(label) {
   return String(label || '')
@@ -134,8 +135,21 @@ function authorizeRecipeContext(context) {
   return authorization;
 }
 
-async function loadScopedAccounts(context) {
-  const authorization = authorizeRecipeContext(context);
+function authorizeReadContext(context) {
+  const authorization = authorizeContext(context);
+  if (!authorization.ok)
+    throw new CleanerError(
+      authorization.error,
+      authorization.error,
+      authorization.status,
+    );
+  return authorization;
+}
+
+async function loadScopedAccounts(context, { requireApply = true } = {}) {
+  const authorization = requireApply
+    ? authorizeRecipeContext(context)
+    : authorizeReadContext(context);
   const token = await tokenFor(context);
   const search = context.searchContacts || searchContacts;
   const query = accountQuery();
@@ -243,9 +257,9 @@ function validateMergeInput(input) {
     );
 }
 
-async function resolveMerge(context, input) {
+async function resolveMerge(context, input, options) {
   validateMergeInput(input);
-  const loaded = await loadScopedAccounts(context);
+  const loaded = await loadScopedAccounts(context, options);
   const groups = groupAccounts(loaded.accounts);
   const obsolete = groups.get(input.obsoleteId);
   const activeLabel = ACTIVE_SECTORS.find(
@@ -261,7 +275,9 @@ async function resolveMerge(context, input) {
 }
 
 export async function previewSectorMerge(context = {}, input = {}) {
-  const { obsolete, activeLabel } = await resolveMerge(context, input);
+  const { obsolete, activeLabel } = await resolveMerge(context, input, {
+    requireApply: false,
+  });
   return {
     obsoleteId: obsolete.id,
     activeId: sectorId(activeLabel),
@@ -297,6 +313,26 @@ function writeResults(accounts, batchResponses) {
           'Salesforce write failed.',
     };
   });
+}
+
+async function recordSectorJournal(context, entry) {
+  if (typeof context.recordSectorJournal === 'function')
+    return context.recordSectorJournal(entry);
+  const table = context.supabase?.from?.('recette_journal');
+  // Some unit-test contexts intentionally expose only the legacy audit mock.
+  if (!table || typeof table.insert !== 'function') return { data: null, error: null };
+  const result = await table.insert({
+    kind: entry.kind,
+    payload: entry.payload,
+    actor_id: context.user.id,
+  });
+  if (result?.error)
+    throw new CleanerError(
+      'audit_error',
+      result.error.message || 'Le journal de la recette est indisponible.',
+      502,
+    );
+  return result;
 }
 
 export async function applySectorMerge(context = {}, input = {}) {
@@ -387,6 +423,18 @@ export async function applySectorMerge(context = {}, input = {}) {
         'Le journal de la recette est indisponible.',
       502,
     );
+  await recordSectorJournal(context, {
+    kind: 'recette_sectors_apply_merge',
+    payload: {
+      obsoleteId: resolved.obsolete.id,
+      activeId: sectorId(resolved.activeLabel),
+      obsoleteLabel: resolved.obsolete.label,
+      activeLabel: resolved.activeLabel,
+      accountCount: resolved.obsolete.accounts.length,
+      updated,
+      failed: results.length - updated,
+    },
+  });
   return {
     ...payload,
     updated,
@@ -396,4 +444,149 @@ export async function applySectorMerge(context = {}, input = {}) {
       .map((result) => result.id),
     results,
   };
+}
+
+function validateBulkInput(input) {
+  if (
+    !Array.isArray(input?.obsoleteIds) ||
+    input.obsoleteIds.length === 0 ||
+    input.obsoleteIds.some((id) => typeof id !== 'string' || !id) ||
+    !input.mapping ||
+    typeof input.mapping !== 'object' ||
+    Array.isArray(input.mapping) ||
+    input.obsoleteIds.some(
+      (id) => typeof input.mapping[id] !== 'string' || !input.mapping[id],
+    )
+  )
+    throw new CleanerError(
+      'invalid_command',
+      'obsoleteIds et mapping sont requis.',
+      400,
+    );
+}
+
+function newJobId() {
+  return globalThis.crypto?.randomUUID?.() ||
+    `sector-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function runBulkSectorJob(context, input, job) {
+  job.status = 'running';
+  try {
+    for (const obsoleteId of input.obsoleteIds) {
+      try {
+        const activeId = input.mapping[obsoleteId];
+        const preview = await previewSectorMerge(context, {
+          obsoleteId,
+          activeId,
+        });
+        const result = input.action === 'bulk_apply'
+          ? await applySectorMerge(context, {
+              obsoleteId,
+              activeId,
+              expectedAccountIds: preview.accountIds,
+            })
+          : preview;
+        job.results.push(result);
+      } catch (error) {
+        job.errors.push({
+          obsoleteId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        job.processed += 1;
+      }
+    }
+    job.status = 'done';
+  } catch (error) {
+    job.status = 'error';
+    job.error = error instanceof Error ? error.message : String(error);
+  } finally {
+    job.finishedAt = new Date().toISOString();
+  }
+}
+
+export function startBulkSectorJob(context = {}, input = {}) {
+  validateBulkInput(input);
+  const authorization = authorizeReadContext(context);
+  if (
+    input.action !== 'bulk_preview' &&
+    input.action !== 'bulk_apply'
+  )
+    throw new CleanerError('invalid_action', 'Cleaner action is invalid.', 400);
+  if (
+    input.action === 'bulk_apply' &&
+    !authorization.capabilities.canApplyRecipes
+  )
+    throw new CleanerError(
+      'forbidden',
+      'Cette action nécessite un rôle manager ou admin.',
+      403,
+    );
+  const jobId = newJobId();
+  const job = {
+    jobId,
+    actorId: context.user.id,
+    kind: input.action,
+    status: 'pending',
+    total: input.obsoleteIds.length,
+    processed: 0,
+    errors: [],
+    results: [],
+    error: null,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+  };
+  sectorJobs.set(jobId, job);
+  void Promise.resolve().then(() => runBulkSectorJob(context, input, job));
+  return { jobId };
+}
+
+export function getSectorJobStatus(context = {}, jobId) {
+  authorizeReadContext(context);
+  const job = sectorJobs.get(jobId);
+  if (!job || job.actorId !== context.user.id)
+    throw new CleanerError('job_not_found', 'Job introuvable.', 404);
+  return {
+    jobId: job.jobId,
+    kind: job.kind,
+    status: job.status,
+    total: job.total,
+    processed: job.processed,
+    errors: job.errors,
+    results: job.results,
+    error: job.error,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+  };
+}
+
+export async function fetchSectorJournal(context = {}, limit = 50) {
+  authorizeReadContext(context);
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 50);
+  const result = await context.supabase
+    .from('recette_journal')
+    .select(
+      'id, kind, payload, actor_id, created_at, actor:profiles!recette_journal_actor_id_fkey(full_name, email)',
+    )
+    .order('created_at', { ascending: false })
+    .limit(safeLimit);
+  if (result?.error)
+    throw new CleanerError(
+      'supabase_error',
+      result.error.message || 'Le journal de la recette est indisponible.',
+      502,
+    );
+  return (result?.data || []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    obsoleteId: row.payload?.obsoleteId ?? row.payload?.obsolete_id ?? null,
+    activeId: row.payload?.activeId ?? row.payload?.active_id ?? null,
+    obsoleteLabel: row.payload?.obsoleteLabel ?? row.payload?.obsolete_label ?? null,
+    activeLabel: row.payload?.activeLabel ?? row.payload?.active_label ?? null,
+    accountCount: row.payload?.accountCount ?? row.payload?.account_count ?? 0,
+    actorId: row.actor_id,
+    actorLabel: row.actor?.full_name || row.actor?.email || 'Utilisateur',
+    createdAt: row.created_at,
+  }));
 }

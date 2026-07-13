@@ -3,7 +3,12 @@ import type { AppRole } from '../../../../os/registry';
 import type { CleanerModuleProps } from '../../shell/moduleRegistry';
 
 export type RecipeAction =
-  'bulk_edit' | 'bulk_close' | 'preview_merge' | 'apply_merge';
+  | 'bulk_edit'
+  | 'bulk_close'
+  | 'preview_merge'
+  | 'apply_merge'
+  | 'bulk_preview'
+  | 'bulk_apply';
 
 export type RecipeFilter = {
   id: string;
@@ -57,7 +62,7 @@ export const sectorsRecipe = {
     { id: 'sector_target', label: 'Secteur cible' },
     { id: 'account_owner', label: 'Propriétaire du compte' },
   ],
-  actions: ['preview_merge', 'apply_merge'],
+  actions: ['preview_merge', 'apply_merge', 'bulk_preview', 'bulk_apply'],
   component: lazySectorsRecipe,
 } satisfies RecipeManifest;
 

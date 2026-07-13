@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import type { CleanerModuleProps } from '../../shell/moduleRegistry';
 import { recipeRegistry } from './manifest';
+import { RecetteJobProvider } from './recetteJobStore';
 
 export function RecettesModule(props: CleanerModuleProps) {
   const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>(
@@ -72,7 +73,9 @@ export function RecettesModule(props: CleanerModuleProps) {
         <strong>{activeRecipe.label}</strong>
       </div>
       <Suspense fallback={<div role="status">Ouverture de la recette…</div>}>
-        <Recipe {...props} />
+        <RecetteJobProvider>
+          <Recipe {...props} />
+        </RecetteJobProvider>
       </Suspense>
     </section>
   );

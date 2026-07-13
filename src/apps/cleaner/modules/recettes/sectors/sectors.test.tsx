@@ -9,11 +9,15 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchSectorRecipe, previewSectorMerge, applySectorMerge } = vi.hoisted(
+const { fetchSectorRecipe, previewSectorMerge, applySectorMerge, bulkPreviewSectors, bulkApplySectors, getSectorJobStatus, fetchSectorJournal } = vi.hoisted(
   () => ({
     fetchSectorRecipe: vi.fn(),
     previewSectorMerge: vi.fn(),
     applySectorMerge: vi.fn(),
+    bulkPreviewSectors: vi.fn(),
+    bulkApplySectors: vi.fn(),
+    getSectorJobStatus: vi.fn(),
+    fetchSectorJournal: vi.fn(),
   }),
 );
 
@@ -21,9 +25,18 @@ vi.mock('./api', () => ({
   fetchSectorRecipe,
   previewSectorMerge,
   applySectorMerge,
+  bulkPreviewSectors,
+  bulkApplySectors,
+  getSectorJobStatus,
+  fetchSectorJournal,
 }));
 
 import { SectorsRecipeView } from './SectorsRecipeView';
+import { RecetteJobProvider } from '../recetteJobStore';
+
+function renderRecipe() {
+  return render(<RecetteJobProvider pollInterval={1}><SectorsRecipeView accessToken="jwt" /></RecetteJobProvider>);
+}
 
 const state = {
   obsoleteSectors: [{ id: 'finance', label: 'Finance', accountCount: 2 }],
@@ -65,7 +78,7 @@ describe('SectorsRecipeView', () => {
   it('renders the three KPI cards and obsolete sectors', async () => {
     fetchSectorRecipe.mockResolvedValue(state);
 
-    render(<SectorsRecipeView accessToken="jwt" />);
+    renderRecipe();
 
     expect(await screen.findByText('Finance')).toBeTruthy();
     expect(screen.getAllByTestId('sector-recipe-kpi')).toHaveLength(3);
@@ -79,7 +92,7 @@ describe('SectorsRecipeView', () => {
   it('renders an informative empty state with the analyzed sector stats', async () => {
     fetchSectorRecipe.mockResolvedValue(emptyState);
 
-    render(<SectorsRecipeView accessToken="jwt" />);
+    renderRecipe();
 
     expect(
       await screen.findByRole('heading', {
@@ -94,7 +107,7 @@ describe('SectorsRecipeView', () => {
   it('opens and closes the list of used sectors from the empty state disclosure', async () => {
     fetchSectorRecipe.mockResolvedValue(emptyState);
 
-    render(<SectorsRecipeView accessToken="jwt" />);
+    renderRecipe();
 
     await screen.findByRole('heading', {
       name: 'Aucun secteur obsolète — votre base est alignée sur la nomenclature',
@@ -139,9 +152,9 @@ describe('SectorsRecipeView', () => {
       failed: 0,
       accountIds: ['001-a', '001-b'],
     });
-    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+    const nativeConfirm = vi.spyOn(window, 'confirm');
 
-    render(<SectorsRecipeView accessToken="jwt" />);
+    renderRecipe();
     await screen.findByText('Finance');
 
     fireEvent.click(screen.getByRole('button', { name: 'Cible pour Finance' }));
@@ -160,6 +173,8 @@ describe('SectorsRecipeView', () => {
     );
     expect((applyButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(applyButton);
+    expect(await screen.findByRole('dialog', { name: 'Confirmer la fusion' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
 
     await waitFor(() =>
       expect(applySectorMerge).toHaveBeenCalledWith(
@@ -169,10 +184,26 @@ describe('SectorsRecipeView', () => {
         ['001-a', '001-b'],
       ),
     );
-    expect(confirm).toHaveBeenCalledWith(
-      'Vous allez remplacer 2 comptes du secteur Finance par Transports. Continuer ?',
-    );
-    expect(await screen.findByText(/2 comptes mis à jour/)).toBeTruthy();
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(await screen.findByText(/2 fusions réussies, 0 échecs/)).toBeTruthy();
     expect(fetchSectorRecipe).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs one bulk preview then opens a single custom confirmation modal for bulk apply', async () => {
+    fetchSectorRecipe.mockResolvedValue(state);
+    bulkPreviewSectors.mockResolvedValue({ ok: true, jobId: 'preview-job' });
+    bulkApplySectors.mockResolvedValue({ ok: true, jobId: 'apply-job' });
+    getSectorJobStatus.mockResolvedValue({ ok: true, jobId: 'preview-job', status: 'done', total: 1, processed: 1, errors: [], results: [] });
+    renderRecipe();
+    await screen.findByText('Finance');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bulk preview' }));
+    await waitFor(() => expect(bulkPreviewSectors).toHaveBeenCalledWith('jwt', { finance: 'banque-finance' }));
+    const bulkApply = screen.getByRole('button', { name: 'Bulk apply' });
+    await waitFor(() => expect((bulkApply as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(bulkApply);
+
+    expect(screen.getAllByRole('dialog', { name: 'Confirmer la fusion groupée' })).toHaveLength(1);
+    expect(screen.getByText(/fusionner 1 secteurs obsolètes/)).toBeTruthy();
   });
 });
