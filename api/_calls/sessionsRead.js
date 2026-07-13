@@ -1,3 +1,4 @@
+import { hasCallsTeamLabelOverride, resolveCallsTeamLabel } from "../_config/access.js";
 import { hydrateSessionContactsFromCrm } from "./hydrateContacts.js";
 import { listPresets } from "./presets.js";
 import mapping from "../_crm/mapping.js";
@@ -237,20 +238,29 @@ export async function handleSessionsRead({ url, user, client, headers }) {
       if (!profile.sf_user_id) continue;
       bySfId.set(profile.sf_user_id, {
         user_id: profile.id,
-        label: profile.full_name || profile.email || profile.sf_user_id,
+        label: resolveCallsTeamLabel(
+          profile.sf_user_id,
+          profile.full_name || profile.email || profile.sf_user_id,
+          profile.email,
+        ),
         sf_user_id: profile.sf_user_id,
       });
     }
     // Map entries enrichissent la liste (Paul / Christophe même s'ils n'ont pas encore de profil).
     if (!mapResult.error) {
       for (const row of mapResult.data || []) {
-        if (!row.sf_user_id || bySfId.has(row.sf_user_id)) continue;
-        const local = String(row.email || "").split("@")[0] || row.sf_user_id;
-        const label = local
-          .split(/[._-]+/)
-          .filter(Boolean)
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(" ") || row.sf_user_id;
+        if (!row.sf_user_id) continue;
+        const label = resolveCallsTeamLabel(row.sf_user_id, row.sf_user_id, row.email);
+        if (bySfId.has(row.sf_user_id)) {
+          const existing = bySfId.get(row.sf_user_id);
+          if (hasCallsTeamLabelOverride(row.sf_user_id) || String(existing.label).includes("@")) {
+            bySfId.set(row.sf_user_id, {
+              ...existing,
+              label: resolveCallsTeamLabel(row.sf_user_id, existing.label, row.email),
+            });
+          }
+          continue;
+        }
         bySfId.set(row.sf_user_id, {
           user_id: `map:${row.email || row.sf_user_id}`,
           label,

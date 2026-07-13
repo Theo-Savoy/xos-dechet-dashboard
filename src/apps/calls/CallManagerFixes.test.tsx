@@ -1183,7 +1183,9 @@ describe("call targeting copy and controls", () => {
           {...filterBuilderProps}
           team={[
             { user_id: "user-1", label: "Alice", sf_user_id: "005A" },
-            { user_id: "user-2", label: "Bob", sf_user_id: "005B" },
+            { user_id: "user-2", label: "Christophe Hirtz", sf_user_id: "0055I000002lY9QQAU" },
+            { user_id: "user-3", label: "Yanis Agharbi", sf_user_id: "005Sb000007b6dWIAQ" },
+            { user_id: "user-4", label: "Théo Savoy", sf_user_id: "005AZ000000X5nDYAS" },
           ]}
         />
         <DedupBanner
@@ -1198,6 +1200,9 @@ describe("call targeting copy and controls", () => {
     expect(screen.getByText("Tier")).toBeTruthy();
     expect(screen.getByText("Propriétaire du compte")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Christophe Hirtz" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Yanis Agharbi" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Théo Savoy" })).toBeNull();
     expect(screen.getByText(/Compte principal \(ID CRM/)).toBeTruthy();
     expect(screen.getByLabelText("Contacts max")).toBeTruthy();
     expect(screen.getByLabelText("Maximum de contacts par entreprise")).toBeTruthy();

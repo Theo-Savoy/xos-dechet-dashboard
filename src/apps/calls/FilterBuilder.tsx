@@ -18,6 +18,7 @@ import {
   type MaxPerCompany,
 } from "../../crm";
 import { getOpportunityFilterGuidance } from "../../crm/opportunityFilters";
+import { isAccountOwnerFilterCandidate } from "./accountOwners";
 import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
 import type { TeamMember } from "./types";
 
@@ -147,7 +148,8 @@ export function FilterBuilder({
     const seen = new Set<string>();
     const options: { value: string; label: string }[] = [];
     for (const member of team) {
-      if (!member.sf_user_id || seen.has(member.sf_user_id)) continue;
+      if (!member.sf_user_id || !isAccountOwnerFilterCandidate(member.sf_user_id)) continue;
+      if (seen.has(member.sf_user_id)) continue;
       seen.add(member.sf_user_id);
       options.push({ value: member.sf_user_id, label: member.label });
     }

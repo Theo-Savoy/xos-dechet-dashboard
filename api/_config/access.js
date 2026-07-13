@@ -51,6 +51,20 @@ export const WEEKLY_EXCLUDED_NAME_PATTERNS = [
   /theo\.savoy/i,
 ];
 
+/** Libellés affichés Combo (équipe, filtre propriétaire) — prioritaire sur email / full_name incomplet. */
+export const CALLS_TEAM_LABEL_BY_SF_ID = {
+  "0055I000002lY9QQAU": "Christophe Hirtz",
+};
+
+/**
+ * Pas de comptes SF à leur nom — exclus du filtre propriétaire (Labo couvrira le reste).
+ * Préfixes 15 car. Salesforce (alignés sf_user_map).
+ */
+export const CALLS_ACCOUNT_OWNER_EXCLUDED_SF_PREFIXES = [
+  "005AZ000000X5nD", // Théo Savoy
+  "005Sb000007b6dW", // Yanis Agharbi (SDR)
+];
+
 export function roleFromEmail(email) {
   if (typeof email !== "string" || email === "") return "commercial";
   const key = email.trim().toLowerCase();
@@ -76,6 +90,31 @@ export function isWeeklyOwnerExcluded(sfUser, nameFallback = "", emailFallback =
   const name = String(sfUser?.Name || nameFallback || "");
   const email = String(sfUser?.Email || emailFallback || "");
   return WEEKLY_EXCLUDED_NAME_PATTERNS.some((pattern) => pattern.test(name) || pattern.test(email));
+}
+
+export function resolveCallsTeamLabel(sfUserId, fallbackLabel = "", email = "") {
+  const key = sfIdKey(sfUserId);
+  const override = Object.entries(CALLS_TEAM_LABEL_BY_SF_ID).find(([id]) => sfIdKey(id) === key)?.[1];
+  if (override) return override;
+  if (fallbackLabel && !fallbackLabel.includes("@")) return fallbackLabel;
+  const local = String(email || fallbackLabel || "").split("@")[0] || "";
+  if (!local) return fallbackLabel || sfUserId;
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function hasCallsTeamLabelOverride(sfUserId) {
+  const key = sfIdKey(sfUserId);
+  return Object.keys(CALLS_TEAM_LABEL_BY_SF_ID).some((id) => sfIdKey(id) === key);
+}
+
+export function isCallsAccountOwnerCandidate(sfUserId) {
+  if (!sfUserId) return false;
+  const key = sfIdKey(sfUserId);
+  return !CALLS_ACCOUNT_OWNER_EXCLUDED_SF_PREFIXES.some((prefix) => key.startsWith(sfIdKey(prefix)));
 }
 
 export function roleAtLeast(role, minimum) {
