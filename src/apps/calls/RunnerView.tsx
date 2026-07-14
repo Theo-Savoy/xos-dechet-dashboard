@@ -157,6 +157,18 @@ function formatAttemptLabel(completedAttempts: number): string {
   return `${next}e tentative`;
 }
 
+function formatPreviousCallersBadge(previousCallers: SessionContact["previous_callers"]): string | null {
+  if (!previousCallers || previousCallers.length === 0) return null;
+  const [last] = previousCallers;
+  const relative = formatRelativeDaysFr(last.called_at);
+  const outcome = last.outcome ?? "—";
+  const prefix =
+    previousCallers.length === 1
+      ? "Tenté 1 fois"
+      : `Tenté ${previousCallers.length} fois · dernier`;
+  return `${prefix} · ${last.user_label} il y a ${relative} · ${outcome}`;
+}
+
 function formatRelativeDaysFr(iso: string | null | undefined, today = todayParisIso()): string {
   const value = String(iso ?? "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return "";
@@ -1657,6 +1669,9 @@ export function RunnerView({
               </li>
               {filteredContacts.map((contact) => {
                 const status = listStatusDisplay(contact);
+                const previousCallersBadge = isRecallQueue
+                  ? formatPreviousCallersBadge(contact.previous_callers)
+                  : null;
                 return (
                 <li
                   key={isRecallQueue ? `${contact.origin_session_id}-${contact.id}` : contact.id}
@@ -1686,6 +1701,7 @@ export function RunnerView({
                         {formatAttemptLabel(contact.attempt_count ?? 0)}
                       </small>
                     )}
+                    {previousCallersBadge && <small className="calls-muted">{previousCallersBadge}</small>}
                   </button>
                   <span className="calls-cockpit-list__cell calls-cockpit-list__cell--wrap" title={contact.title ?? undefined}>
                     {contact.title ?? "—"}

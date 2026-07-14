@@ -38,6 +38,7 @@ export function recallsToSessionContacts(recalls: RecallInboxItem[]): SessionCon
     attempt_count: item.attempt_count ?? 0,
     origin_session_id: item.session_id,
     origin_session_name: item.session_name,
+    previous_callers: item.previous_callers,
   }));
 }
 

@@ -58,6 +58,12 @@ export type RecallInboxItem = {
   recall_at: string;
   outcome: ResultatCall | null;
   attempt_count?: number;
+  previous_callers?: Array<{
+    user_label: string;
+    called_at: string;
+    outcome: ResultatCall | null;
+    session_name: string;
+  }>;
 };
 
 export type SessionContact = {
@@ -85,6 +91,7 @@ export type SessionContact = {
   /** Present when the contact is shown in the infinite recall queue. */
   origin_session_id?: number;
   origin_session_name?: string;
+  previous_callers?: RecallInboxItem["previous_callers"];
   logged_by?: string | null;
   claimed_by?: string | null;
   claimed_at?: string | null;

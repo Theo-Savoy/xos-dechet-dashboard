@@ -338,9 +338,45 @@ export async function handleSessionsRead({ url, user, client, headers }) {
     if (recallsError) {
       return new Response(JSON.stringify({ error: "recalls_lookup_failed" }), { status: 500, headers });
     }
-    const recalls = (rows || [])
-      .filter((row) => row.status === "called" && row.recall_at)
-      .map((row) => {
+    const dueRows = (rows || []).filter((row) => row.status === "called" && row.recall_at);
+    const contactIds = [...new Set(dueRows.map((row) => row.sf_contact_id).filter(Boolean))];
+    const previousByContact = new Map();
+    if (contactIds.length) {
+      const { data: prevRows, error: prevError } = await client
+        .from("call_session_contacts")
+        .select("id, sf_contact_id, logged_by, called_at, outcome, session_id")
+        .in("sf_contact_id", contactIds)
+        .in("session_id", sessions.map((session) => session.id))
+        .eq("status", "called")
+        .not("called_at", "is", null)
+        .order("called_at", { ascending: false })
+        .limit(200);
+      if (prevError) {
+        return new Response(JSON.stringify({ error: "previous_callers_lookup_failed" }), { status: 500, headers });
+      }
+      const loggerIds = [...new Set((prevRows || []).map((row) => row.logged_by).filter(Boolean))];
+      const loggerLabels = new Map();
+      if (loggerIds.length) {
+        const { data: loggers } = await client.from("profiles").select("id, full_name, email").in("id", loggerIds);
+        for (const profile of loggers || []) {
+          loggerLabels.set(profile.id, profile.full_name || profile.email || "Collègue");
+        }
+      }
+      const currentRowIds = new Set(dueRows.map((row) => row.id));
+      for (const row of prevRows || []) {
+        if (currentRowIds.has(row.id)) continue;
+        if (!previousByContact.has(row.sf_contact_id)) previousByContact.set(row.sf_contact_id, []);
+        const list = previousByContact.get(row.sf_contact_id);
+        if (list.length >= 5) continue;
+        list.push({
+          user_label: (row.logged_by && loggerLabels.get(row.logged_by)) || "Collègue",
+          called_at: row.called_at,
+          outcome: row.outcome ?? null,
+          session_name: sessionById.get(row.session_id)?.name ?? "Séance",
+        });
+      }
+    }
+    const recalls = dueRows.map((row) => {
         const session = sessionById.get(row.session_id);
         return {
           id: row.id,
@@ -358,6 +394,7 @@ export async function handleSessionsRead({ url, user, client, headers }) {
           recall_at: row.recall_at,
           outcome: row.outcome,
           attempt_count: row.attempt_count,
+          previous_callers: previousByContact.get(row.sf_contact_id) ?? [],
         };
       });
     return new Response(JSON.stringify({ recalls }), { status: 200, headers });
