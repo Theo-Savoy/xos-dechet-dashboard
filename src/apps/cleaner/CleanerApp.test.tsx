@@ -99,15 +99,17 @@ describe('CleanerApp component', () => {
   });
 
   it('keeps the session token in the native module context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
     render(<CleanerApp />);
 
-    await waitFor(() =>
-      expect(
-        screen
-          .getByTestId('cleaner-session-state')
-          .getAttribute('data-access-token'),
-      ).toBe('cleaner-jwt'),
-    );
+    // Token propagation is verified via the fetch spy rather than a DOM
+    // node: the cockpit load must forward the Supabase session token.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.headers?.Authorization).toBe('Bearer cleaner-jwt');
   });
 
   it('loads cockpit modules on the home tab without a deep-link query', async () => {

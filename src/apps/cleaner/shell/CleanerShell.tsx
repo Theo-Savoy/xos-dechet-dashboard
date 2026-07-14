@@ -162,10 +162,6 @@ export function CleanerShell({
           })}
         </div>
       </main>
-      <span
-        data-testid="cleaner-session-state"
-        data-access-token={accessToken ?? ''}
-      />
     </div>
   );
 }

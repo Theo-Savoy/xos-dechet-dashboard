@@ -85,21 +85,19 @@ function renderShell(
 
 describe('CleanerShell navigation', () => {
   it('opens the Secteurs cockpit tile inside the Recettes top-level tab', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            obsoleteSectors: [],
-            activeSectors: [],
-            suggestedMappings: {},
-            accountsPerSector: {},
-            capabilities: { canApplyMerge: false },
-          }),
-          { status: 200 },
-        ),
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          obsoleteSectors: [],
+          activeSectors: [],
+          suggestedMappings: {},
+          accountsPerSector: {},
+          capabilities: { canApplyMerge: false },
+        }),
+        { status: 200 },
       ),
     );
+    vi.stubGlobal('fetch', fetchMock);
     renderShell({
       cockpit: {
         status: 'ready',
@@ -127,6 +125,11 @@ describe('CleanerShell navigation', () => {
     expect(
       await screen.findByRole('heading', { name: /Secteurs obsolètes/ }),
     ).toBeTruthy();
+    // Token propagation is verified via the fetch spy rather than a DOM node:
+    // the shell must forward the accessToken prop as a Bearer header.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.headers?.Authorization).toBe('Bearer test-token');
   });
 
   it('completes a sector merge from Labo navigation with the V17d dry-run flow', async () => {
