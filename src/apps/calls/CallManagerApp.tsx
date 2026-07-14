@@ -162,6 +162,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
   const [maxPerCompany, setMaxPerCompany] = useState<MaxPerCompany | null>(null);
   const [preview, setPreview] = useState<ContactPreview[]>([]);
   const [dedup, setDedup] = useState<DedupEntry[]>([]);
+  const [excludedCount, setExcludedCount] = useState(0);
   const [previewTruncated, setPreviewTruncated] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [matchCount, setMatchCount] = useState<number | null>(null);
@@ -437,6 +438,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       if (previewRequest.current !== requestId) return;
       setPreview(data.contacts);
       setDedup(data.dedup);
+      setExcludedCount(data.excluded_count ?? 0);
       setPreviewTruncated(data.truncated);
       if (data.contacts.length === 0) {
         setNewError("Aucun contact ne correspond aux filtres.");
@@ -446,6 +448,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       setNewError(errorMessage(err));
       setPreview([]);
       setDedup([]);
+      setExcludedCount(0);
       setPreviewTruncated(false);
     } finally {
       if (previewRequest.current === requestId) setPreviewLoading(false);
@@ -1349,6 +1352,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           error={newError}
           preview={preview}
           dedup={dedup}
+          excludedCount={excludedCount}
           previewTruncated={previewTruncated}
           presets={presets}
           presetsLoading={presetsLoading}

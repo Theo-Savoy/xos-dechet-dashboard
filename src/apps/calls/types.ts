@@ -205,6 +205,7 @@ export type AccountSearchHit = {
 export type AccountSearchResult = {
   accounts: AccountSearchHit[];
   truncated: boolean;
+  excluded_count?: number;
 };
 
 export type PeriodKpis = {

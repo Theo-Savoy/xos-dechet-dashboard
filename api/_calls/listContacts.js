@@ -14,6 +14,7 @@ import {
   SOQL_FETCH_CAP,
 } from "../_crm/salesforce.js";
 import { buildPreviewContactList } from "./selection.js";
+import { findActiveSessionConflicts } from "./activeSessionConflicts.js";
 import { getProfile } from "./profileCache.js";
 
 const MAX_PER_COMPANY_OPTIONS = [1, 2, 3, 5];
@@ -84,35 +85,7 @@ function normalizeContacts(records) {
     });
 }
 
-async function findDedup(client, contactIds) {
-  if (!contactIds.length) return [];
-  const { data: sessions, error: sessionsError } = await client
-    .from("call_sessions")
-    .select("id, owner")
-    .eq("status", "active");
-  if (sessionsError || !sessions?.length) return [];
-  const sessionIds = sessions.map((session) => session.id);
-  const { data: sessionContacts, error: contactsError } = await client
-    .from("call_session_contacts")
-    .select("sf_contact_id, session_id")
-    .in("session_id", sessionIds)
-    .in("sf_contact_id", contactIds);
-  if (contactsError || !sessionContacts?.length) return [];
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  const owners = [...new Set(sessions.map((session) => session.owner))];
-  const { data: profiles } = await client.from("profiles").select("id, full_name, email").in("id", owners);
-  const ownerLabels = new Map((profiles || []).map((profile) => [profile.id, profile.full_name || profile.email || profile.id]));
-  const dedup = new Map();
-  for (const row of sessionContacts) {
-    if (!dedup.has(row.sf_contact_id)) {
-      const session = sessionById.get(row.session_id);
-      dedup.set(row.sf_contact_id, ownerLabels.get(session.owner) || session.owner);
-    }
-  }
-  return [...dedup].map(([sf_contact_id, in_session_of]) => ({ sf_contact_id, in_session_of }));
-}
-
-/** Returns { contacts, dedup } or { count, capped } or { error, status }. */
+/** Returns { contacts, dedup, excluded_count } or { count, capped } or { error, status }. */
 export async function listContacts(client, userId, body) {
   const parsed = parseListContactsBody(body);
   if (parsed.error) return { error: parsed.error, status: 400 };
@@ -169,7 +142,11 @@ export async function listContacts(client, userId, body) {
     : hasRelanceQueryFilters(parsed.filters)
       ? normalized.slice(0, requestedLimit)
       : normalized;
-  const dedup = await findDedup(client, contacts.map((contact) => contact.sf_contact_id));
+  // Exclusion stricte : les contacts déjà dans une séance active sont défiltrés
+  // du résultat, sans opt-in. `dedup` reste renvoyé pour rétro-compat.
+  const dedup = await findActiveSessionConflicts(client, contacts.map((contact) => contact.sf_contact_id), parisToday());
+  const excludedIds = new Set(dedup.map((entry) => entry.sf_contact_id));
+  const filteredContacts = contacts.filter((contact) => !excludedIds.has(contact.sf_contact_id));
   const truncated = search.truncated === true || (opportunitySets?.truncated === true);
-  return { contacts, dedup, truncated };
+  return { contacts: filteredContacts, dedup, excluded_count: dedup.length, truncated };
 }

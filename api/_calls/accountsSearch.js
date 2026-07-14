@@ -7,9 +7,11 @@ import {
   fetchOpportunityAccountIdSets,
   fetchSFToken,
   hasOpportunityQueryFilters,
+  parisToday,
   searchContacts,
   searchSOSL,
 } from "../_crm/salesforce.js";
+import { findActiveSessionConflicts } from "./activeSessionConflicts.js";
 import { getProfile } from "./profileCache.js";
 
 const MAX_ACCOUNTS = 25;
@@ -156,8 +158,22 @@ export async function searchAccounts(client, userId, body) {
     contacts: contactsByAccount.get(record[af.id]) || [],
   }));
 
+  // Exclusion stricte : les contacts déjà dans une séance active sont défiltrés
+  // du résultat, sans opt-in. Un compte qui perd tous ses contacts est gardé
+  // avec contacts: [] plutôt que supprimé.
+  const allContactIds = accounts.flatMap((acc) => acc.contacts.map((c) => c.sf_contact_id));
+  const conflicts = await findActiveSessionConflicts(client, allContactIds, parisToday());
+  const excludedIds = new Set(conflicts.map((entry) => entry.sf_contact_id));
+  const finalAccounts = excludedIds.size
+    ? accounts.map((acc) => ({
+      ...acc,
+      contacts: acc.contacts.filter((c) => !excludedIds.has(c.sf_contact_id)),
+    }))
+    : accounts;
+
   return {
-    accounts,
+    accounts: finalAccounts,
+    excluded_count: conflicts.length,
     truncated: soslCapped || contactsResult.records.length >= MAX_CONTACTS_PER_QUERY,
   };
 }

@@ -29,6 +29,7 @@ type NewSessionViewProps = {
   error: string | null;
   preview: ContactPreview[];
   dedup: DedupEntry[];
+  excludedCount?: number;
   previewTruncated: boolean;
   presets: CallTargetPreset[];
   presetsLoading: boolean;
@@ -83,6 +84,7 @@ export function NewSessionView({
   error,
   preview,
   dedup,
+  excludedCount = 0,
   previewTruncated,
   presets,
   presetsLoading,
@@ -258,6 +260,12 @@ export function NewSessionView({
         <GlassCard className="calls-truncated-banner" role="status">
           <p>Résultats partiels : affinez vos filtres.</p>
         </GlassCard>
+      )}
+
+      {excludedCount > 0 && (
+        <div className="calls-builder-excluded-banner" role="status">
+          <strong>{excludedCount}</strong> contact{excludedCount > 1 ? "s" : ""} exclu{excludedCount > 1 ? "s" : ""} car déjà dans une séance active.
+        </div>
       )}
 
       {dedup.length > 0 && (
