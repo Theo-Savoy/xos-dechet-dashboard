@@ -951,8 +951,6 @@
   position: sticky;
   top: 0.5rem;
   z-index: 30;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   background: color-mix(in srgb, rgba(8, 12, 32, 0.92) 88%, transparent);
   border-color: color-mix(in srgb, var(--xos-accent) 35%, var(--xos-border));
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
@@ -2211,7 +2209,6 @@
   border-top: 1px solid color-mix(in srgb, var(--xos-accent) 28%, var(--xos-border));
   background: color-mix(in srgb, rgba(4, 8, 28, 0.96) 92%, transparent);
   box-shadow: 0 -0.6rem 1.2rem rgba(4, 8, 28, 0.28);
-  backdrop-filter: blur(16px);
 }
 
 .calls-runner-actions__row {
@@ -2243,7 +2240,6 @@
   color: var(--xos-text);
   font-size: 0.82rem;
   box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(14px);
 }
 
 .calls-runner-toast--rdv {
@@ -3130,8 +3126,7 @@
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(4, 8, 28, 0.55);
-  backdrop-filter: blur(8px);
+  background: rgba(4, 8, 28, 0.78);
 }
 
 .calls-cmdk__panel,
@@ -3359,8 +3354,7 @@
   place-items: center;
   background:
     radial-gradient(ellipse at 30% 20%, color-mix(in srgb, var(--xos-accent) 28%, transparent), transparent 55%),
-    rgba(4, 8, 28, 0.72);
-  backdrop-filter: blur(10px);
+    rgba(4, 8, 28, 0.85);
 }
 
 .calls-demo__stage {
@@ -3733,8 +3727,7 @@ a.calls-contact-card__peer:hover {
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(4, 8, 28, 0.55);
-  backdrop-filter: blur(8px);
+  background: rgba(4, 8, 28, 0.78);
 }
 .calls-share-panel {
   position: relative;
