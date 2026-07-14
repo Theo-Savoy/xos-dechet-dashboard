@@ -145,6 +145,7 @@ export type ContactListResult = {
   contacts: ContactPreview[];
   dedup: DedupEntry[];
   truncated: boolean;
+  excluded_count?: number;
 };
 
 export type ContactCountResult = {

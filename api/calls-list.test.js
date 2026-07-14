@@ -35,10 +35,10 @@ vi.mock("./_auth.js", () => ({
 }));
 
 const mockMaybeSingle = vi.fn();
-const mockEq = vi.fn(() => ({ maybeSingle: mockMaybeSingle, eq: mockEq, in: () => mockChain }));
+const mockEq = vi.fn(() => ({ maybeSingle: mockMaybeSingle, eq: mockEq, in: () => mockChain, or: () => mockChain }));
 const mockIn = vi.fn(() => mockChain);
 const mockSelect = vi.fn(() => ({ eq: mockEq, in: mockIn, select: mockSelect }));
-const mockChain = { eq: mockEq, in: mockIn, select: mockSelect };
+const mockChain = { eq: mockEq, in: mockIn, select: mockSelect, or: () => mockChain, limit: () => mockChain };
 const mockFrom = vi.fn(() => ({ select: mockSelect }));
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -528,7 +528,7 @@ describe("POST /api/calls action=list_contacts", () => {
 
     mockFrom.mockImplementation((table) => {
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }) };
       }
       return { select: mockSelect };
     });
@@ -565,7 +565,7 @@ describe("POST /api/calls action=list_contacts", () => {
 
     mockFrom.mockImplementation((table) => {
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }) };
       }
       return { select: mockSelect };
     });
@@ -598,7 +598,7 @@ describe("POST /api/calls action=list_contacts", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ records }), { status: 200 }));
     mockFrom.mockImplementation((table) => {
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }) };
       }
       return { select: mockSelect };
     });
@@ -649,7 +649,7 @@ describe("POST /api/calls action=list_contacts", () => {
 
     mockFrom.mockImplementation((table) => {
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }) };
       }
       return { select: mockSelect };
     });
@@ -682,15 +682,17 @@ describe("POST /api/calls action=list_contacts", () => {
         };
       }
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [{ id: 9, owner: "user-456" }], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [{ id: 9, owner: "user-456" }], error: null }) }) }) };
       }
       if (table === "call_session_contacts") {
         return {
           select: () => ({
             in: () => ({
-              in: () => Promise.resolve({
-                data: [{ sf_contact_id: "003000000000001AAA", session_id: 9 }],
-                error: null,
+              in: () => ({
+                limit: () => Promise.resolve({
+                  data: [{ sf_contact_id: "003000000000001AAA", session_id: 9 }],
+                  error: null,
+                }),
               }),
             }),
           }),
@@ -703,6 +705,8 @@ describe("POST /api/calls action=list_contacts", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.dedup).toEqual([{ sf_contact_id: "003000000000001AAA", in_session_of: "Paul" }]);
+    expect(body.excluded_count).toBe(1);
+    expect(body.contacts).toEqual([]);
   });
 
   it("sets Cache-Control: no-store on success", async () => {
@@ -713,7 +717,7 @@ describe("POST /api/calls action=list_contacts", () => {
 
     mockFrom.mockImplementation((table) => {
       if (table === "call_sessions") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [], error: null }) }) }) };
       }
       return { select: mockSelect };
     });
@@ -872,8 +876,54 @@ describe("POST /api/calls action=accounts_search", () => {
         decision_level: "+",
       },
     ]);
+    expect(body.excluded_count).toBe(0);
     // 2nd call = SOSL search, 3rd call = Contact SOQL (no refine query since no filters).
     expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("excludes contacts already in an active session but keeps the emptied account", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ searchRecords: ACCOUNT_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: CONTACT_RECORDS }), { status: 200 }));
+
+    mockFrom.mockImplementation((table) => {
+      if (table === "profiles") {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: mockMaybeSingle }),
+            in: () => Promise.resolve({ data: [{ id: "user-456", full_name: "Paul" }], error: null }),
+          }),
+        };
+      }
+      if (table === "call_sessions") {
+        return { select: () => ({ eq: () => ({ or: () => Promise.resolve({ data: [{ id: 9, owner: "user-456" }], error: null }) }) }) };
+      }
+      if (table === "call_session_contacts") {
+        return {
+          select: () => ({
+            in: () => ({
+              in: () => ({
+                limit: () => Promise.resolve({
+                  data: [{ sf_contact_id: "003000000000001AAA", session_id: 9 }],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return { select: mockSelect };
+    });
+
+    const res = await POST(makeAccountsReq({ q: "ACME" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.accounts).toHaveLength(1);
+    expect(body.accounts[0].id).toBe("001000000000001AAA");
+    expect(body.accounts[0].contacts).toEqual([]);
+    expect(body.excluded_count).toBe(1);
   });
 
   it("returns an empty account list without querying contacts when SOSL finds nothing", async () => {
@@ -884,7 +934,7 @@ describe("POST /api/calls action=accounts_search", () => {
 
     const res = await POST(makeAccountsReq({ q: "INCONNU" }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ accounts: [], truncated: false });
+    expect(await res.json()).toEqual({ accounts: [], excluded_count: 0, truncated: false });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -913,7 +963,7 @@ describe("POST /api/calls action=accounts_search", () => {
 
     const res = await POST(makeAccountsReq({ q: "ACME", filters: { tiers: ["D"] } }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ accounts: [], truncated: false });
+    expect(await res.json()).toEqual({ accounts: [], excluded_count: 0, truncated: false });
   });
 
   it("returns 502 when the SOSL search fails", async () => {

@@ -50,6 +50,7 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
   const [truncated, setTruncated] = useState(false);
   const [searched, setSearched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [excludedCount, setExcludedCount] = useState(0);
 
   const setFilter = (patch: Partial<AbmFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
@@ -62,12 +63,14 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
       const data = await fetchAccountsSearch(token, { q, filters });
       setAccounts(data.accounts);
       setTruncated(data.truncated);
+      setExcludedCount(data.excluded_count ?? 0);
       setSelectedIds(new Set());
       setSearched(true);
       if (data.accounts.length === 0) setError("Aucun compte ne correspond à cette recherche.");
     } catch (err) {
       setError(errorMessage(err));
       setAccounts([]);
+      setExcludedCount(0);
     } finally {
       setLoading(false);
     }
@@ -171,6 +174,12 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
         <GlassCard className="calls-truncated-banner" role="status">
           <p>Résultats partiels : affinez votre recherche.</p>
         </GlassCard>
+      )}
+
+      {excludedCount > 0 && (
+        <div className="calls-builder-excluded-banner" role="status">
+          <strong>{excludedCount}</strong> contact{excludedCount > 1 ? "s" : ""} exclu{excludedCount > 1 ? "s" : ""} car déjà dans une séance active.
+        </div>
       )}
 
       {accounts.length > 0 && (
