@@ -8,6 +8,7 @@ import {
   previewSectorMerge,
   startBulkSectorJob,
   sectorId,
+  undoSectorMerge,
 } from './sectors.js';
 
 function account(id, industry, ownerId = 'sf-owner') {
@@ -324,5 +325,41 @@ describe('sectors recipe server slice', () => {
         actorLabel: 'Marie Martin',
       }),
     ]);
+  });
+
+  it('refuses to undo a merge that was already undone', async () => {
+    const ctx = context();
+    const entryMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 12,
+        kind: 'recette_sectors_apply_merge',
+        actor_id: ctx.user.id,
+        payload: {
+          obsoleteLabel: 'Finance',
+          activeLabel: 'Transports',
+          snapshot: [{ id: '001-old', industry: 'Finance' }],
+        },
+      },
+      error: null,
+    });
+    const entryEq = vi.fn(() => ({ maybeSingle: entryMaybeSingle }));
+    const entrySelect = vi.fn(() => ({ eq: entryEq }));
+
+    const undoMaybeSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { id: 99 }, error: null });
+    const undoEq2 = vi.fn(() => ({ maybeSingle: undoMaybeSingle }));
+    const undoEq1 = vi.fn(() => ({ eq: undoEq2 }));
+    const undoSelect = vi.fn(() => ({ eq: undoEq1 }));
+
+    ctx.supabase.from = vi
+      .fn()
+      .mockReturnValueOnce({ select: entrySelect })
+      .mockReturnValueOnce({ select: undoSelect });
+
+    await expect(
+      undoSectorMerge(ctx, { journalId: 12 }),
+    ).rejects.toMatchObject({ code: 'already_undone', status: 409 });
+    expect(ctx.updateSObjects).not.toHaveBeenCalled();
   });
 });

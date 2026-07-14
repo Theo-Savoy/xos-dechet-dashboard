@@ -520,6 +520,28 @@ export async function undoSectorMerge(context = {}, input = {}) {
       422,
     );
 
+  // Refuse a second undo of the same merge.
+  const undoTable = context.supabase?.from?.('recette_journal');
+  if (!undoTable)
+    throw new CleanerError('audit_error', 'Le journal est indisponible.', 502);
+  const { data: existingUndo, error: undoLookupError } = await undoTable
+    .select('id')
+    .eq('kind', 'recette_sectors_undo_merge')
+    .eq('payload->>originalJournalId', String(entry.id))
+    .maybeSingle();
+  if (undoLookupError)
+    throw new CleanerError(
+      'audit_error',
+      undoLookupError.message || 'Le journal de la recette est indisponible.',
+      502,
+    );
+  if (existingUndo)
+    throw new CleanerError(
+      'already_undone',
+      'Cette fusion a déjà été annulée.',
+      409,
+    );
+
   // Restore each account's original Industry.
   const fields = mapping.objects.account.fields;
   const records = entry.payload.snapshot.map((item) => ({
