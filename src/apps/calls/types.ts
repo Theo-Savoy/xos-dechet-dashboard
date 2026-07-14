@@ -1,4 +1,12 @@
-import { RESULTAT_CALL_VALUES, type FilterTree, type ResultatCall } from "../../crm";
+import {
+  RESULTAT_CALL_VALUES,
+  type EffectifTranche,
+  type FilterTree,
+  type NiveauDecision,
+  type ResultatCall,
+  type Tier,
+  type TypeClient,
+} from "../../crm";
 
 export type ContactStatus = "pending" | "called" | "skipped";
 
@@ -164,6 +172,32 @@ export type ContactPreview = {
   mobile_phone?: string | null;
   last_call_at?: string | null;
   call_count?: number;
+};
+
+export type AccountSearchContact = {
+  sf_contact_id: string;
+  contact_name: string;
+  title: string | null;
+  phone: string | null;
+  mobile_phone: string | null;
+  email: string | null;
+  decision_level: NiveauDecision | null;
+};
+
+export type AccountSearchHit = {
+  id: string;
+  name: string;
+  industry: string | null;
+  owner_name: string | null;
+  type_client: TypeClient | null;
+  tier: Tier | null;
+  effectif: EffectifTranche | null;
+  contacts: AccountSearchContact[];
+};
+
+export type AccountSearchResult = {
+  accounts: AccountSearchHit[];
+  truncated: boolean;
 };
 
 export type PeriodKpis = {

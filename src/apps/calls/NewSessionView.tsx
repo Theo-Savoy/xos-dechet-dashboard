@@ -36,6 +36,7 @@ type NewSessionViewProps = {
   currentUserId: string;
   team?: TeamMember[];
   onBack: () => void;
+  onOpenAccountSearch?: () => void;
   onPreview: () => void;
   onLoadPreset: (preset: CallTargetPreset) => void;
   onSavePreset: (name: string, shared: boolean) => void;
@@ -89,6 +90,7 @@ export function NewSessionView({
   currentUserId,
   team = [],
   onBack,
+  onOpenAccountSearch,
   onPreview,
   onLoadPreset,
   onSavePreset,
@@ -215,6 +217,11 @@ export function NewSessionView({
             <h2>Composer une liste</h2>
           </div>
         </div>
+        {onOpenAccountSearch && (
+          <Button variant="secondary" onClick={onOpenAccountSearch}>
+            Mode ABM
+          </Button>
+        )}
       </header>
 
       <FilterBuilder

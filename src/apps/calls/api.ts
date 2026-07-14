@@ -1,5 +1,6 @@
 import type { CallTargetPreset, DedupEntry, FilterTree, MaxPerCompany, ResultatCall } from "../../crm";
 import type {
+  AccountSearchResult,
   CallStats,
   ContactContext,
   ContactPreview,
@@ -180,6 +181,16 @@ export async function fetchContactCount(
       count_only: true,
       limit: 2000,
     }),
+  });
+}
+
+export async function fetchAccountsSearch(
+  token: string,
+  body: { q: string; filters?: Partial<FilterTree["entreprise"]>; limit?: number },
+): Promise<AccountSearchResult> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({ action: "accounts_search", ...body }),
   });
 }
 

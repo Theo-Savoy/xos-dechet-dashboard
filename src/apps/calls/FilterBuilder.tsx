@@ -60,6 +60,7 @@ function countEntrepriseFilters(entreprise: FilterTree["entreprise"]): number {
   if (entreprise.opp_perdue !== null) count += 1;
   if (entreprise.compte_principal) count += 1;
   if (entreprise.proprietaires.length) count += 1;
+  if (entreprise.comptes_cibles?.length) count += 1;
   return count;
 }
 

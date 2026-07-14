@@ -91,6 +91,8 @@ export type FilterTree = {
     compte_principal: string | null;
     /** Salesforce User Id (Account.OwnerId) — logique OU entre les valeurs. */
     proprietaires: string[];
+    /** Comptes présélectionnés en mode ABM (Account.Id) — restreint la requête à ce groupe. */
+    comptes_cibles?: string[];
   };
   contact: {
     a_telephone: boolean;
@@ -118,6 +120,7 @@ export function emptyFilterTree(): FilterTree {
       opp_perdue: null,
       compte_principal: null,
       proprietaires: [],
+      comptes_cibles: [],
     },
     contact: {
       a_telephone: true,
@@ -188,6 +191,7 @@ export function normalizeFilterTree(raw: unknown): FilterTree {
       opp_perdue: triStateOr(defaults.entreprise.opp_perdue, entreprise.opp_perdue),
       compte_principal: nullableString(entreprise.compte_principal),
       proprietaires: stringArray(entreprise.proprietaires),
+      comptes_cibles: stringArray(entreprise.comptes_cibles),
     },
     contact: {
       a_telephone: booleanOr(defaults.contact.a_telephone, contact.a_telephone),

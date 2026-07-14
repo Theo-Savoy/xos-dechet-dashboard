@@ -28,7 +28,7 @@ export function escapeSOQL(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-function escapedList(values) {
+export function escapedList(values) {
   return values.map((value) => `'${escapeSOQL(value)}'`).join(", ");
 }
 
@@ -127,6 +127,8 @@ export function buildTargetQuery(filters = {}, mapping = defaultMapping, sfUserI
   if (typeof enterprise.compte_principal === "string" && enterprise.compte_principal) {
     conditions.push(`Account.${account.fields.parentId} = '${escapeSOQL(enterprise.compte_principal)}'`);
   }
+  const comptesCibles = stringList(enterprise.comptes_cibles);
+  if (comptesCibles.length) conditions.push(`${contact.fields.accountId} IN (${escapedList(comptesCibles)})`);
 
   if (contactFilters.a_telephone === true) conditions.push(`${contact.fields.mobilePhone} != null`);
   if (contactFilters.exclure_npa !== false) conditions.push(`${contact.fields.doNotCall} = false`);
@@ -460,6 +462,22 @@ export async function searchContacts(token, soql, options = {}) {
   }
   const finalRecords = records.slice(0, SOQL_FETCH_CAP);
   return { records: finalRecords, truncated: finalRecords.length === SOQL_FETCH_CAP };
+}
+
+export async function searchSOSL(token, sosl) {
+  const request = (requestToken) => fetch(`${instanceUrl()}/services/data/v67.0/search?${new URLSearchParams({ q: sosl })}`, {
+    headers: { Authorization: `Bearer ${requestToken}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const result = await sfFetchWithRetry(token, request);
+  if (result.error) return result;
+  const { response } = result;
+  if (!response.ok) {
+    const message = (await response.text()).slice(0, 500);
+    return { error: "sf_query_error", message };
+  }
+  const data = await response.json();
+  return { records: data.searchRecords || [] };
 }
 
 async function createSObject(token, objectName, fields) {
