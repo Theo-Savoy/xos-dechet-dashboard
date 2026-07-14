@@ -14,6 +14,7 @@ import {
 } from "./_crm/salesforce.js";
 import mapping from "./_crm/mapping.js";
 import { FONCTION_PRESETS } from "../src/crm/index.ts";
+import { parseAccountsSearchBody } from "./_calls/accountsSearch.js";
 import { parseListContactsBody } from "./_calls/listContacts.js";
 import { buildPreviewContactList } from "./_calls/selection.js";
 import { __resetProfileCache } from "./_calls/profileCache.js";
@@ -737,6 +738,191 @@ describe("POST /api/calls action=list_contacts", () => {
       .mockResolvedValueOnce(new Response("MALFORMED_QUERY", { status: 400 }));
 
     const res = await POST(makeReq({ filters: {} }));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("sf_query_error");
+  });
+});
+
+describe("parseAccountsSearchBody", () => {
+  it("rejects a query shorter than 2 characters", () => {
+    expect(parseAccountsSearchBody({ q: "a" })).toEqual({ error: "invalid_query" });
+    expect(parseAccountsSearchBody({})).toEqual({ error: "invalid_query" });
+  });
+
+  it("defaults filters and caps limit at 25", () => {
+    expect(parseAccountsSearchBody({ q: "ACME" })).toEqual({ q: "ACME", filters: {}, limit: 25 });
+    expect(parseAccountsSearchBody({ q: "ACME", limit: 100 })).toEqual({ q: "ACME", filters: {}, limit: 25 });
+  });
+
+  it("rejects non-object filters and invalid limit", () => {
+    expect(parseAccountsSearchBody({ q: "ACME", filters: [] })).toEqual({ error: "invalid_filters" });
+    expect(parseAccountsSearchBody({ q: "ACME", limit: 0 })).toEqual({ error: "invalid_limit" });
+  });
+});
+
+describe("POST /api/calls action=accounts_search", () => {
+  function makeAccountsReq(body, token = "supabase-jwt-token") {
+    const headers = new Headers({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    });
+    return new Request("http://localhost/api/calls", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action: "accounts_search", ...body }),
+    });
+  }
+
+  const ACCOUNT_RECORDS = [
+    {
+      Id: "001000000000001AAA",
+      Name: "ACME",
+      Industry: "Services informatiques",
+      Owner: { Name: "Paul Martin" },
+      Type_de_client__c: "Client",
+      Tier__c: "A",
+      Nombre_employes__c: "251 - 500",
+    },
+  ];
+
+  const CONTACT_RECORDS = [
+    {
+      Id: "003000000000001AAA",
+      Name: "Marie Dupont",
+      Title: "Responsable formation",
+      Phone: "+33123456789",
+      MobilePhone: "+33600000000",
+      Email: "marie@acme.fr",
+      Niveau_de_d_cision__c: "+",
+      AccountId: "001000000000001AAA",
+    },
+  ];
+
+  beforeEach(async () => {
+    __resetProfileCache();
+    vi.restoreAllMocks();
+    __resetSFTokenCache();
+    __resetOpportunityAccountCache();
+    mockMaybeSingle.mockReset();
+    mockFrom.mockClear();
+
+    vi.stubEnv("SF_CLIENT_ID", "test-client-id");
+    vi.stubEnv("SF_CLIENT_SECRET", "test-client-secret");
+    vi.stubEnv("SF_REFRESH_TOKEN", "test-refresh-token");
+    vi.stubEnv("SF_LOGIN_URL", "https://login.test.salesforce.com");
+    vi.stubEnv("SF_INSTANCE_URL", "https://test.my.salesforce.com");
+    vi.stubEnv("SUPABASE_URL", "https://test-supabase-url.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key");
+    vi.stubEnv("SF_TOKEN_ENCRYPTION_KEY", Buffer.alloc(32, 3).toString("base64"));
+
+    mockVerifyJWT.mockResolvedValue({ id: "user-123", email: "test@xos-learning.fr" });
+    const ciphertext = await encryptRefreshToken("user-refresh-token");
+    mockMaybeSingle.mockResolvedValue({
+      data: {
+        sf_user_id: "005000000000001AAA",
+        role: "commercial",
+        sf_refresh_token_encrypted: ciphertext,
+        sf_auth_connected_at: "2026-07-01T00:00:00.000Z",
+      },
+      error: null,
+    });
+  });
+
+  it("returns 401 when unauthorized", async () => {
+    mockVerifyJWT.mockResolvedValue(null);
+    const res = await POST(makeAccountsReq({ q: "ACME" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for a too-short query", async () => {
+    const res = await POST(makeAccountsReq({ q: "A" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_query");
+  });
+
+  it("searches accounts via SOSL then hydrates contacts per account", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ searchRecords: ACCOUNT_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: CONTACT_RECORDS }), { status: 200 }));
+
+    const res = await POST(makeAccountsReq({ q: "ACME" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.truncated).toBe(false);
+    expect(body.accounts).toHaveLength(1);
+    expect(body.accounts[0]).toMatchObject({
+      id: "001000000000001AAA",
+      name: "ACME",
+      industry: "Services informatiques",
+      owner_name: "Paul Martin",
+      type_client: "Client",
+      tier: "A",
+      effectif: "251 - 500",
+    });
+    expect(body.accounts[0].contacts).toEqual([
+      {
+        sf_contact_id: "003000000000001AAA",
+        contact_name: "Marie Dupont",
+        title: "Responsable formation",
+        phone: "+33123456789",
+        mobile_phone: "+33600000000",
+        email: "marie@acme.fr",
+        decision_level: "+",
+      },
+    ]);
+    // 2nd call = SOSL search, 3rd call = Contact SOQL (no refine query since no filters).
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns an empty account list without querying contacts when SOSL finds nothing", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ searchRecords: [] }), { status: 200 }));
+
+    const res = await POST(makeAccountsReq({ q: "INCONNU" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ accounts: [], truncated: false });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("refines with a SOQL account query when entreprise filters are provided", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ searchRecords: ACCOUNT_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: [{ Id: "001000000000001AAA" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: CONTACT_RECORDS }), { status: 200 }));
+
+    const res = await POST(makeAccountsReq({ q: "ACME", filters: { tiers: ["A"] } }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).accounts).toHaveLength(1);
+    const refineSoql = decodeURIComponent(String(fetchSpy.mock.calls[2][0]).replace(/\+/g, " "));
+    expect(refineSoql).toContain(`${mapping.objects.account.fields.tier} IN ('A')`);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it("filters out accounts excluded by the refine query", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ searchRecords: ACCOUNT_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: [] }), { status: 200 }));
+
+    const res = await POST(makeAccountsReq({ q: "ACME", filters: { tiers: ["D"] } }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ accounts: [], truncated: false });
+  });
+
+  it("returns 502 when the SOSL search fails", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("MALFORMED_SOSL", { status: 400 }));
+
+    const res = await POST(makeAccountsReq({ q: "ACME" }));
     expect(res.status).toBe(502);
     expect((await res.json()).error).toBe("sf_query_error");
   });

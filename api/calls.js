@@ -1,4 +1,5 @@
 import { verifyJWT } from "./_auth.js";
+import { searchAccounts } from "./_calls/accountsSearch.js";
 import { listContacts } from "./_calls/listContacts.js";
 import { deletePreset, listPresets, savePreset } from "./_calls/presets.js";
 import { handleLogging } from "./_calls/logging.js";
@@ -48,6 +49,11 @@ async function handleBuiltInAction(action, body, user, client) {
     if (result.error) return response(result.status || 500, { error: result.error, ...(result.message ? { message: result.message } : {}) });
     if (typeof result.count === "number") return response(200, { count: result.count, capped: Boolean(result.capped) });
     return response(200, { contacts: result.contacts, dedup: result.dedup, truncated: Boolean(result.truncated) });
+  }
+  if (action === "accounts_search") {
+    const result = await searchAccounts(client, user.id, body);
+    if (result.error) return response(result.status || 500, { error: result.error, ...(result.message ? { message: result.message } : {}) });
+    return response(200, { accounts: result.accounts, truncated: Boolean(result.truncated) });
   }
   if (action === "list_presets") {
     const result = await listPresets(client, user.id);

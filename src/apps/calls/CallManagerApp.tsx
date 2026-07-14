@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { emptyFilterTree, normalizeFilterTree, type CallTargetPreset, type ContactLimit, type DedupEntry, type FilterTree, type MaxPerCompany } from "../../crm";
+import { AccountSearchView } from "./AccountSearchView";
 import {
   completeSession,
   createFollowUpSession,
@@ -56,7 +57,7 @@ import "./calls.css";
 const CONTEXT_PREFETCH_AHEAD = 3;
 const CONTEXT_CACHE_MAX = 32;
 
-type View = "sessions" | "new" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
+type View = "sessions" | "new" | "account-search" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
 
 function viewFromParams(params?: Record<string, string>): View {
   if (params?.session_id) return "loading-params";
@@ -65,6 +66,8 @@ function viewFromParams(params?: Record<string, string>): View {
       return "pilotage";
     case "new":
       return "new";
+    case "abm":
+      return "account-search";
     case "recalls":
       return "recalls";
     case "runner":
@@ -81,6 +84,8 @@ function navigationParamsForView(view: View, sessionId?: number | null): Record<
       return { view: "pilotage" };
     case "new":
       return { view: "new" };
+    case "account-search":
+      return { view: "abm" };
     case "recalls":
       return { view: "recalls" };
     case "runner":
@@ -398,6 +403,17 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
   const handleLoadPreset = (preset: CallTargetPreset) => {
     setFilters(normalizeFilterTree(preset.filters));
     invalidatePreview();
+  };
+
+  const handleCreateAbmSession = (accountIds: string[]) => {
+    const next = emptyFilterTree();
+    next.entreprise.comptes_cibles = accountIds;
+    setFilters(next);
+    setContactLimit(200);
+    setMaxPerCompany(null);
+    invalidatePreview();
+    setNewError(null);
+    setView("new");
   };
 
   const handleContactLimitChange = (limit: ContactLimit) => {
@@ -1340,6 +1356,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           currentUserId={session.user.id}
           team={team}
           onBack={goToSessions}
+          onOpenAccountSearch={() => setView("account-search")}
           onPreview={() => void handlePreview()}
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
@@ -1347,6 +1364,14 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           onCreate={(name, list, scheduledFor, sessionType, memberUserIds) =>
             void handleCreate(name, list, scheduledFor, sessionType, memberUserIds)
           }
+        />
+      )}
+
+      {view === "account-search" && (
+        <AccountSearchView
+          token={token}
+          onBack={() => setView("new")}
+          onCreateAbmSession={handleCreateAbmSession}
         />
       )}
 
