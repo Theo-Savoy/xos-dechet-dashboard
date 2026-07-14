@@ -100,5 +100,5 @@ export async function DELETE(request) {
 }
 
 export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type" } });
+  return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": process.env.APP_ORIGIN || "https://xos.hellotheo.fr", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type" } });
 }

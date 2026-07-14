@@ -16,7 +16,11 @@ export default defineConfig({
   plugins: [react()],
   test: {
     env: { NODE_ENV: "test" },
-    include: ["src/**/*.{test,spec}.{ts,tsx}", "api/**/*.{test,spec}.{js,ts}"],
+    include: [
+      "src/**/*.{test,spec}.{ts,tsx}",
+      "api/**/*.{test,spec}.{js,ts}",
+      "middleware.test.js",
+    ],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

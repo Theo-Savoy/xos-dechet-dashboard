@@ -3,9 +3,14 @@ import { getServiceClient } from "./_calls/http.js";
 import { completeSalesforceOAuth, startSalesforceOAuth, storeSalesforceRefreshToken } from "./_crm/salesforceOAuth.js";
 
 /**
- * POST /api/auth — pont SSO → legacy.
+ * POST /api/auth — bridge de session : vérifie le JWT Supabase, stocke le
+ *   refresh token Salesforce si fourni, et confirme au SPA qu'il peut démarrer.
  * GET /api/auth?flow=salesforce — stub OAuth Salesforce.
  */
+// POST /api/auth : bridge de session
+// Le client envoie Authorization: Bearer *** + éventuellement un body {salesforce_refresh_token}.
+// On vérifie le JWT, on stocke le refresh token SF si fourni, on retourne 204.
+// Le cookie xos_auth legacy n'est plus posé : toute l'auth API passe par le header Authorization.
 export async function POST(request) {
   const user = await verifyJWT(request);
   if (!user) {
@@ -38,17 +43,9 @@ export async function POST(request) {
     }
   }
 
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) {
-    return respond(500, { error: "Server misconfiguration: DASHBOARD_PASSWORD not set" });
-  }
-
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Set-Cookie": `xos_auth=${password}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
-    },
-  });
+  // JWT vérifié : le SPA peut poursuivre. L'accès aux routes /api/* est protégé
+  // par verifyJWT sur chaque endpoint, pas par un cookie de session.
+  return new Response(null, { status: 204 });
 }
 
 export async function GET(request) {
@@ -85,7 +82,7 @@ export async function OPTIONS() {
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": process.env.APP_ORIGIN || "https://xos.hellotheo.fr",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
     },

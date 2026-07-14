@@ -51,19 +51,16 @@ describe("GET /api/auth", () => {
 
 describe("POST /api/auth", () => {
   beforeEach(() => {
-    vi.stubEnv("DASHBOARD_PASSWORD", "legacy-password");
     mockVerifyJWT.mockResolvedValue({ id: "user-1" });
     mockGetServiceClient.mockReturnValue({ from: vi.fn() });
     mockStartSalesforceOAuth.mockResolvedValue({ authorizationUrl: "https://login.salesforce.test/authorize" });
     mockStoreSalesforceRefreshToken.mockResolvedValue({ ok: true });
   });
 
-  it("sets the legacy cookie after JWT verification", async () => {
+  it("returns 204 without any session cookie after JWT verification", async () => {
     const response = await POST(new Request("https://xos.hellotheo.fr/api/auth", { method: "POST" }));
     expect(response.status).toBe(204);
-    expect(response.headers.get("Set-Cookie")).toBe(
-      "xos_auth=legacy-password; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000",
-    );
+    expect(response.headers.get("Set-Cookie")).toBeNull();
   });
 
   it("preserves the unauthorized response", async () => {
