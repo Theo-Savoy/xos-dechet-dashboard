@@ -117,6 +117,7 @@ export function CleanerShell({
           <section aria-label="Toutes les recettes">
             <RecettesModule
               accessToken={accessToken}
+              role={role}
               params={params}
               onSelectRecipe={(recipeId: string) => {
                 setActiveRecipeId(recipeId);
@@ -152,6 +153,7 @@ export function CleanerShell({
                 >
                   <Module
                     accessToken={accessToken}
+                    role={role}
                     params={params}
                     recipeId={activeRecipeId}
                     onRecipeChange={setActiveRecipeId}

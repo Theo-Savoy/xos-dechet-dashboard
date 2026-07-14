@@ -19,17 +19,6 @@ vi.mock('./api', () => ({
   fetchSectorJournal,
 }));
 
-vi.mock('../recetteJobStore', () => ({
-  useRecetteJob: () => ({
-    jobId: null,
-    status: 'idle',
-    progress: { processed: 0, total: 0, errors: [] },
-    error: null,
-    start: vi.fn(),
-    reset: vi.fn(),
-  }),
-}));
-
 import { SectorsRecipeView } from './SectorsRecipeView';
 
 describe('SectorsRecipeView (V17d dry-run only)', () => {
@@ -104,5 +93,57 @@ describe('SectorsRecipeView (V17d dry-run only)', () => {
     );
     // bulkApplySectors must NOT have been called yet (modal is a gate).
     expect(bulkApplySectors).not.toHaveBeenCalled();
+  });
+
+  it('disables the merge button while the fusion job is running', async () => {
+    fetchSectorRecipe.mockResolvedValue({
+      obsoleteSectors: [
+        { id: 'assurance', label: 'Assurance', accountCount: 5 },
+      ],
+      activeSectors: [
+        { id: 'banque-finance', label: 'Banque / Finance', accountCount: 0 },
+      ],
+      suggestedMappings: { assurance: 'banque-finance' },
+      accountsPerSector: { assurance: ['001-A'] },
+      capabilities: { canApplyMerge: true },
+    });
+    bulkApplySectors.mockResolvedValue({ ok: true, jobId: 'job-1' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ status: 'done', total: 1, processed: 1, errors: [] }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    render(<SectorsRecipeView accessToken="token" />);
+
+    const bouton = await screen.findByRole('button', {
+      name: /fusionner 1 secteur/i,
+    });
+    bouton.click();
+    (await screen.findByRole('button', { name: 'Fusionner' })).click();
+
+    const running = await screen.findByRole(
+      'button',
+      { name: /fusion en cours/i },
+      { timeout: 3000 },
+    );
+    expect(running.hasAttribute('disabled')).toBe(true);
+
+    await waitFor(
+      () => expect(screen.getByText(/1 fusion réussie/)).toBeTruthy(),
+      { timeout: 3000 },
+    );
+    // Once the job completes, the button re-enables for a fresh run.
+    expect(
+      screen
+        .getByRole('button', { name: /fusionner 1 secteur/i })
+        .hasAttribute('disabled'),
+    ).toBe(false);
+
+    vi.unstubAllGlobals();
   });
 });

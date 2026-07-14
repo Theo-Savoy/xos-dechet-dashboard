@@ -147,7 +147,8 @@ describe('CleanerApp component', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Recettes du Labo' })).toBeTruthy(),
     );
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    // Secteurs is manager/admin-only; this session resolves to 'commercial'.
+    expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(
       screen.queryByText('Aucune donnée de nettoyage disponible.'),
     ).toBeNull();
@@ -173,6 +174,9 @@ describe('CleanerApp component', () => {
         }),
       ).toBeTruthy(),
     );
-    expect(screen.getByRole('button', { name: /Secteurs obsolètes/ })).toBeTruthy();
+    // Secteurs is manager/admin-only; this session resolves to 'commercial'.
+    expect(
+      screen.queryByRole('button', { name: /Secteurs obsolètes/ }),
+    ).toBeNull();
   });
 });

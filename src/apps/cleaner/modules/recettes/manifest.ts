@@ -24,6 +24,7 @@ export type RecipeManifest = {
   filters: readonly RecipeFilter[];
   actions: readonly RecipeAction[];
   component: LazyExoticComponent<FC<CleanerModuleProps>>;
+  roles?: readonly AppRole[];
 };
 
 const lazySectorsRecipe = lazy(() =>
@@ -64,13 +65,14 @@ export const sectorsRecipe = {
   ],
   actions: ['preview_merge', 'apply_merge', 'bulk_preview', 'bulk_apply'],
   component: lazySectorsRecipe,
+  roles: ['manager', 'admin'],
 } satisfies RecipeManifest;
 
 // Adding a recipe only extends this registry; the module shell stays unchanged.
-export const recipeRegistry = [
+export const recipeRegistry: readonly RecipeManifest[] = [
   opportunitiesRecipe,
   sectorsRecipe,
-] satisfies readonly RecipeManifest[];
+];
 
 const lazyRecettesModule = lazy(() =>
   import('./RecettesModule').then(({ RecettesModule }) => ({
