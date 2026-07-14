@@ -75,6 +75,20 @@ describe('sectors recipe server slice', () => {
       expect.objectContaining({ label: 'Transports', accountCount: 1 }),
     );
     expect(result.accountsPerSector[sectorId('Finance')]).toEqual(['001-old']);
+    expect(result.truncated).toBe(false);
+  });
+
+  it('flags truncated=true when the Account query hits the SOQL cap (2000 records)', async () => {
+    const records = Array.from({ length: 2000 }, (_, index) =>
+      account(`001-${index}`, 'Finance'),
+    );
+    const ctx = context({
+      searchContacts: vi.fn().mockResolvedValue({ records, truncated: true }),
+    });
+
+    const result = await loadSectorRecipe(ctx);
+
+    expect(result.truncated).toBe(true);
   });
 
   it('keeps colliding Salesforce labels distinct from the canonical target id', async () => {

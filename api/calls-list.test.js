@@ -543,7 +543,36 @@ describe("POST /api/calls action=list_contacts", () => {
       mobile_phone: "+33600000000",
     });
     expect(body.dedup).toEqual([]);
+    expect(body.truncated).toBe(false);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns truncated=true when the Salesforce fetch hits the SOQL cap", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const records = Array.from({ length: SOQL_FETCH_CAP }, (_, index) => ({
+      Id: `003${String(index).padStart(15, "0")}`,
+      Name: `Contact ${index}`,
+      MobilePhone: "+33600000000",
+      Title: "Chargé de formation",
+      AccountId: `001${String(index).padStart(15, "0")}`,
+      Account: { Id: `001${String(index).padStart(15, "0")}`, Name: `Compte ${index}` },
+      Tasks: { totalSize: 0, records: [] },
+    }));
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records }), { status: 200 }));
+
+    mockFrom.mockImplementation((table) => {
+      if (table === "call_sessions") {
+        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+      }
+      return { select: mockSelect };
+    });
+
+    const res = await POST(makeReq({ filters: baseFilters, max_per_company: 1 }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.truncated).toBe(true);
   });
 
   it("uses the latest non-future task for last_call_at", async () => {

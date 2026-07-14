@@ -228,6 +228,12 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
             </p>
           ) : null}
 
+          {state.truncated ? (
+            <p className="cleaner-sector-recipe__truncated" role="status">
+              Résultats partiels : affinez vos filtres.
+            </p>
+          ) : null}
+
           {state.obsoleteSectors.length === 0 ? (
             <GlassCard
               className="cleaner-sector-recipe__empty"

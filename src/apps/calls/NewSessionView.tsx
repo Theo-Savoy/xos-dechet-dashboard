@@ -29,6 +29,7 @@ type NewSessionViewProps = {
   error: string | null;
   preview: ContactPreview[];
   dedup: DedupEntry[];
+  previewTruncated: boolean;
   presets: CallTargetPreset[];
   presetsLoading: boolean;
   savingPreset: boolean;
@@ -81,6 +82,7 @@ export function NewSessionView({
   error,
   preview,
   dedup,
+  previewTruncated,
   presets,
   presetsLoading,
   savingPreset,
@@ -242,6 +244,12 @@ export function NewSessionView({
       {error && (
         <GlassCard className="calls-error">
           <p role="alert" aria-live="assertive">{error}</p>
+        </GlassCard>
+      )}
+
+      {previewTruncated && (
+        <GlassCard className="calls-truncated-banner" role="status">
+          <p>Résultats partiels : affinez vos filtres.</p>
         </GlassCard>
       )}
 

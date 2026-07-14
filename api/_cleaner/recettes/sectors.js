@@ -167,7 +167,12 @@ async function loadScopedAccounts(context, { requireApply = true } = {}) {
     (account) =>
       typeof account.id === 'string' && typeof account.sector === 'string',
   );
-  return { accounts, token, capabilities: authorization.capabilities };
+  return {
+    accounts,
+    token,
+    capabilities: authorization.capabilities,
+    truncated: result.truncated === true,
+  };
 }
 
 function sectorIds(labels) {
@@ -207,7 +212,7 @@ function publicCapabilities(capabilities) {
 
 export async function loadSectorRecipe(context = {}, query = {}) {
   authorizeRecipeContext(context);
-  const { accounts, capabilities } = await loadScopedAccounts(context);
+  const { accounts, capabilities, truncated } = await loadScopedAccounts(context);
   const groups = groupAccounts(accounts);
   const activeLabels = new Set(ACTIVE_SECTORS);
   const activeLimit = Math.min(Math.max(Number(query.limit) || 50, 1), 50);
@@ -255,6 +260,7 @@ export async function loadSectorRecipe(context = {}, query = {}) {
       ]),
     ),
     capabilities: publicCapabilities(capabilities),
+    truncated,
   };
 }
 

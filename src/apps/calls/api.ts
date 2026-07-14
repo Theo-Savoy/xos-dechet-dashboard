@@ -153,6 +153,7 @@ export async function fetchContactContext(
 export type ContactListResult = {
   contacts: ContactPreview[];
   dedup: DedupEntry[];
+  truncated: boolean;
 };
 
 export type ContactCountResult = {

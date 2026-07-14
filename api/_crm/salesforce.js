@@ -197,14 +197,14 @@ function accountIdsFromOpportunityRecords(records, accountField) {
 
 const OPP_ACCOUNT_CACHE_TTL_MS = 60_000;
 const oppAccountIdCache = {
-  open: { ids: null, fetchedAt: 0 },
-  lost: { ids: null, fetchedAt: 0 },
+  open: { ids: null, truncated: false, fetchedAt: 0 },
+  lost: { ids: null, truncated: false, fetchedAt: 0 },
 };
 
 /** Test-only hook to isolate module-scope opportunity account cache. */
 export function __resetOpportunityAccountCache() {
-  oppAccountIdCache.open = { ids: null, fetchedAt: 0 };
-  oppAccountIdCache.lost = { ids: null, fetchedAt: 0 };
+  oppAccountIdCache.open = { ids: null, truncated: false, fetchedAt: 0 };
+  oppAccountIdCache.lost = { ids: null, truncated: false, fetchedAt: 0 };
 }
 
 /** Which Opportunity account-id sets are required for the active tri-state filters. */
@@ -222,7 +222,7 @@ async function fetchOpportunityAccountIds(token, mapping, kind) {
   const opportunity = mapping.objects.opportunity;
   const cache = kind === "lost" ? oppAccountIdCache.lost : oppAccountIdCache.open;
   if (cache.ids && Date.now() - cache.fetchedAt < OPP_ACCOUNT_CACHE_TTL_MS) {
-    return { ids: cache.ids };
+    return { ids: cache.ids, truncated: cache.truncated };
   }
 
   const soql = kind === "lost"
@@ -234,15 +234,16 @@ async function fetchOpportunityAccountIds(token, mapping, kind) {
 
   const ids = accountIdsFromOpportunityRecords(result.records, opportunity.fields.accountId);
   cache.ids = ids;
+  cache.truncated = result.truncated === true;
   cache.fetchedAt = Date.now();
-  return { ids };
+  return { ids, truncated: cache.truncated };
 }
 
 /** Fetch account IDs with open / lost opportunities (no Contact semi-joins). */
 export async function fetchOpportunityAccountIdSets(token, mapping = defaultMapping, filters = {}) {
   const { needOpen, needLost } = opportunityAccountSetNeeds(filters);
   if (!needOpen && !needLost) {
-    return { open: new Set(), lost: new Set() };
+    return { open: new Set(), lost: new Set(), truncated: false };
   }
 
   const [openResult, lostResult] = await Promise.all([
@@ -255,6 +256,7 @@ export async function fetchOpportunityAccountIdSets(token, mapping = defaultMapp
   return {
     open: openResult.ids,
     lost: lostResult.ids,
+    truncated: Boolean(openResult.truncated || lostResult.truncated),
   };
 }
 
@@ -456,7 +458,8 @@ export async function searchContacts(token, soql, options = {}) {
     currentToken = nextResult.token;
     records.push(...(page.records || []));
   }
-  return { records: records.slice(0, SOQL_FETCH_CAP) };
+  const finalRecords = records.slice(0, SOQL_FETCH_CAP);
+  return { records: finalRecords, truncated: finalRecords.length === SOQL_FETCH_CAP };
 }
 
 async function createSObject(token, objectName, fields) {

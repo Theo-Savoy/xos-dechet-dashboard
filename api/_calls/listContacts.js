@@ -170,5 +170,6 @@ export async function listContacts(client, userId, body) {
       ? normalized.slice(0, requestedLimit)
       : normalized;
   const dedup = await findDedup(client, contacts.map((contact) => contact.sf_contact_id));
-  return { contacts, dedup };
+  const truncated = search.truncated === true || (opportunitySets?.truncated === true);
+  return { contacts, dedup, truncated };
 }

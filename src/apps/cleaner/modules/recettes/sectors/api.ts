@@ -17,6 +17,7 @@ export type SectorRecipeState = {
   suggestedMappings: Record<string, string>;
   accountsPerSector: Record<string, string[]>;
   capabilities: { canApplyMerge: boolean };
+  truncated: boolean;
 };
 
 export type SectorMergePreview = {

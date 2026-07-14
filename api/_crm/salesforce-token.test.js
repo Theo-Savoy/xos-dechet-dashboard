@@ -67,7 +67,7 @@ describe("Salesforce token cache and paginated queries", () => {
 
     const result = await searchContacts("token", "SELECT Id FROM Contact");
 
-    expect(result).toEqual({ records: [...firstPage, { Id: "last" }] });
+    expect(result).toEqual({ records: [...firstPage, { Id: "last" }], truncated: true });
     expect(fetchMock.mock.calls[1][0]).toBe("https://instance.example.test/next");
   });
 
@@ -79,7 +79,7 @@ describe("Salesforce token cache and paginated queries", () => {
       .mockResolvedValueOnce(jsonResponse({ records: [{ Id: "003" }], done: true }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(searchContacts("stale-token", "SELECT Id FROM Contact")).resolves.toEqual({ records: [{ Id: "003" }] });
+    await expect(searchContacts("stale-token", "SELECT Id FROM Contact")).resolves.toEqual({ records: [{ Id: "003" }], truncated: false });
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe("Bearer fresh-token");
   });
 

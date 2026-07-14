@@ -47,7 +47,7 @@ async function handleBuiltInAction(action, body, user, client) {
     const result = await listContacts(client, user.id, body);
     if (result.error) return response(result.status || 500, { error: result.error, ...(result.message ? { message: result.message } : {}) });
     if (typeof result.count === "number") return response(200, { count: result.count, capped: Boolean(result.capped) });
-    return response(200, { contacts: result.contacts, dedup: result.dedup });
+    return response(200, { contacts: result.contacts, dedup: result.dedup, truncated: Boolean(result.truncated) });
   }
   if (action === "list_presets") {
     const result = await listPresets(client, user.id);

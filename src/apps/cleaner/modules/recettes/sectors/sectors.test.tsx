@@ -60,6 +60,27 @@ describe('SectorsRecipeView (V17d dry-run only)', () => {
     expect(screen.getByText(/Assurance/)).toBeTruthy();
   });
 
+  it('shows a partial-results banner when the Account query was truncated', async () => {
+    fetchSectorRecipe.mockResolvedValue({
+      obsoleteSectors: [
+        { id: 'assurance', label: 'Assurance', accountCount: 143 },
+      ],
+      activeSectors: [
+        { id: 'banque-finance', label: 'Banque / Finance', accountCount: 0 },
+      ],
+      suggestedMappings: { assurance: 'banque-finance' },
+      accountsPerSector: { assurance: ['001-A'] },
+      capabilities: { canApplyMerge: true },
+      truncated: true,
+    });
+
+    render(<SectorsRecipeView accessToken="token" />);
+
+    expect(
+      await screen.findByText(/Résultats partiels/i),
+    ).toBeTruthy();
+  });
+
   it('shows an empty-state card when no obsolete sectors exist', async () => {
     fetchSectorRecipe.mockResolvedValue({
       obsoleteSectors: [],

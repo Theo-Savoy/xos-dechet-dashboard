@@ -1341,6 +1341,7 @@ describe("preview selection and enriched rows", () => {
         error={null}
         preview={preview}
         dedup={[]}
+        previewTruncated={false}
         presets={[]}
         presetsLoading={false}
         savingPreset={false}
@@ -1408,6 +1409,7 @@ describe("preview selection and enriched rows", () => {
         error={null}
         preview={cappedPreview}
         dedup={[]}
+        previewTruncated={false}
         presets={[]}
         presetsLoading={false}
         savingPreset={false}
@@ -1423,6 +1425,41 @@ describe("preview selection and enriched rows", () => {
 
     expect(screen.getByText("2 sélectionnés / 2")).toBeTruthy();
     expect(screen.getByText(/max 1\/entreprise/i)).toBeTruthy();
+  });
+
+  it("shows a partial-results banner when the fetch was truncated", () => {
+    render(
+      <NewSessionView
+        filters={emptyFilterTree()}
+        onFiltersChange={vi.fn()}
+        contactLimit={200}
+        onContactLimitChange={vi.fn()}
+        maxPerCompany={null}
+        onMaxPerCompanyChange={vi.fn()}
+        loading={false}
+        previewLoading={false}
+        matchCount={null}
+        matchCountCapped={false}
+        matchCountLoading={false}
+        matchCountError={null}
+        error={null}
+        preview={preview}
+        dedup={[]}
+        previewTruncated
+        presets={[]}
+        presetsLoading={false}
+        savingPreset={false}
+        currentUserId="user-1"
+        onBack={vi.fn()}
+        onPreview={vi.fn()}
+        onLoadPreset={vi.fn()}
+        onSavePreset={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Résultats partiels/i)).toBeTruthy();
   });
 });
 
@@ -1465,6 +1502,7 @@ describe("dedup modes in preview selection", () => {
     error: null,
     preview,
     dedup,
+    previewTruncated: false,
     presets: [] as [],
     presetsLoading: false,
     savingPreset: false,
@@ -1517,6 +1555,7 @@ describe("error announcements", () => {
         error="Échec d'enregistrement de la liste d'appels (base de données)"
         preview={[]}
         dedup={[]}
+        previewTruncated={false}
         presets={[]}
         presetsLoading={false}
         savingPreset={false}
