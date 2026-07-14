@@ -23,7 +23,7 @@ describe('RecettesModule', () => {
         ),
     );
 
-    render(<RecettesModule accessToken="token" />);
+    render(<RecettesModule accessToken="token" role="manager" />);
 
     expect(
       screen.getByRole('heading', { name: 'Recettes du Labo' }),
@@ -47,5 +47,18 @@ describe('RecettesModule', () => {
     expect(await screen.findByText('Nettoyage')).toBeTruthy();
     expect(screen.getByText('Synthèse')).toBeTruthy();
     expect(screen.getByText('Historique')).toBeTruthy();
+  });
+
+  it('hides the Secteurs recipe from commercial roles', () => {
+    render(<RecettesModule accessToken="token" role="commercial" />);
+
+    expect(
+      screen.getByRole('button', {
+        name: /Opportunités suspectes ou abandonnées/,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /Secteurs obsolètes/ }),
+    ).toBeNull();
   });
 });

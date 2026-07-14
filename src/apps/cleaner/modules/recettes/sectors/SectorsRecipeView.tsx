@@ -8,7 +8,6 @@ import {
   Tag,
 } from '../../../../../components/ui';
 import type { CleanerModuleProps } from '../../../shell/moduleRegistry';
-import { useRecetteJob } from '../recetteJobStore';
 import {
   bulkApplySectors,
   fetchSectorRecipe,
@@ -36,7 +35,12 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
     | { kind: 'failed'; errors: Array<{ obsoleteId: string; message: string }> }
     | null
   >(null);
-  const job = useRecetteJob();
+  const [job, setJob] = useState<{
+    running: boolean;
+    processed: number;
+    total: number;
+    errors: Array<{ obsoleteId: string; message: string }>;
+  }>({ running: false, processed: 0, total: 0, errors: [] });
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -88,9 +92,10 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
     [selected, state, targets],
   );
   const selectedTargets = new Set(Object.values(selectedMapping)).size;
-  const jobBusy = job.status === 'pending' || job.status === 'running';
+  const jobBusy = job.running;
 
   const runBulk = useCallback(async () => {
+    if (job.running) return;
     setError(null);
     setResult(null);
     setConfirmOpen(false);
@@ -98,6 +103,7 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
       setError('Session expirée.');
       return;
     }
+    setJob({ running: true, processed: 0, total: 0, errors: [] });
     try {
       const authHeader = 'Bearer ' + accessToken;
       const start = await bulkApplySectors(accessToken, selectedMapping);
@@ -118,11 +124,12 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
           processed: number;
           errors: Array<{ obsoleteId: string; message: string }>;
         };
-        // Use the store to expose live progress to the UI.
-        // We do NOT call job.update because the store API uses an
-        // event-driven shape (job.start + onProgress). The store's
-        // progress is updated via the polling loop below; the UI
-        // reads from job.progress directly when rendered.
+        setJob({
+          running: status.status !== 'done' && status.status !== 'error',
+          processed: status.processed,
+          total: status.total,
+          errors: status.errors,
+        });
         if (status.status === 'done') {
           done = true;
           if (status.errors.length > 0) {
@@ -142,28 +149,12 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
         }
       }
     } catch (cause) {
+      setJob((current) => ({ ...current, running: false }));
       setError(
         cause instanceof Error ? cause.message : 'La fusion a échoué.',
       );
     }
-  }, [accessToken, job, load, mappingLabels, selectedMapping]);
-
-  // React to job completion.
-  useEffect(() => {
-    if (job.status === 'done') {
-      const errors = job.progress.errors;
-      if (errors.length > 0) {
-        setResult({ kind: 'failed', errors });
-      } else {
-        const succeeded = job.progress.total - errors.length;
-        setResult({ kind: 'success', succeeded, failed: 0, mappings: mappingLabels });
-        void load();
-      }
-    } else if (job.status === 'error') {
-      setError(job.error || 'La fusion a échoué.');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.status]);
+  }, [accessToken, job.running, load, mappingLabels, selectedMapping]);
 
   if (status === 'loading' && !state)
     return <div role="status">Analyse des secteurs des comptes…</div>;
@@ -188,11 +179,6 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
             Le serveur vérifie chaque mapping (dry-run) avant toute écriture.
           </p>
         </div>
-        <Tag variant={state.capabilities.canApplyMerge ? 'accent' : 'muted'}>
-          {state.capabilities.canApplyMerge
-            ? 'Fusion autorisée'
-            : 'Prévisualisation seule'}
-        </Tag>
       </div>
 
       <div
@@ -283,21 +269,21 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
                     onClick={() => setConfirmOpen(true)}
                   >
                     {jobBusy
-                      ? `Fusion en cours ${job.progress.processed}/${job.progress.total}`
+                      ? `Fusion en cours ${job.processed}/${job.total}`
                       : `Fusionner ${selectedCount || ''} secteur${
                           selectedCount > 1 ? 's' : ''
                         }`.trim()}
                   </Button>
-                  {jobBusy || job.status === 'done' ? (
+                  {jobBusy || job.total > 0 ? (
                     <div
                       className="cleaner-sector-job"
                       role="status"
-                      aria-valuenow={job.progress.processed}
+                      aria-valuenow={job.processed}
                       aria-valuemin={0}
-                      aria-valuemax={Math.max(job.progress.total, 1)}
+                      aria-valuemax={Math.max(job.total, 1)}
                     >
                       <span className="cleaner-sector-job__label">
-                        {job.progress.processed}/{job.progress.total}{' '}
+                        {job.processed}/{job.total}{' '}
                         secteurs traités
                       </span>
                       <div
@@ -308,11 +294,11 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
                           className="cleaner-sector-job__bar-fill"
                           style={{
                             width: `${
-                              job.progress.total > 0
+                              job.total > 0
                                 ? Math.min(
                                     100,
-                                    (job.progress.processed /
-                                      job.progress.total) *
+                                    (job.processed /
+                                      job.total) *
                                       100,
                                   )
                                 : 0

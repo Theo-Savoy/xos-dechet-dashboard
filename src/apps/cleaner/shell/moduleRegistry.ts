@@ -5,6 +5,7 @@ import { moduleAllowedForRole, type CleanerModuleId } from './shellState';
 
 export type CleanerModuleProps = {
   accessToken?: string;
+  role?: AppRole;
   params?: Record<string, string>;
   recipeId?: string;
   onRecipeChange?: (recipeId?: string) => void;

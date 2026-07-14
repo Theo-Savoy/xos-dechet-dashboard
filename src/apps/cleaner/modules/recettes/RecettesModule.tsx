@@ -1,13 +1,18 @@
 import { Suspense, useEffect, useState } from 'react';
+import { moduleAllowedForRole } from '../../shell/shellState';
 import type { CleanerModuleProps } from '../../shell/moduleRegistry';
 import { recipeRegistry } from './manifest';
 import { RecetteJobProvider } from './recetteJobStore';
 
 export function RecettesModule(props: CleanerModuleProps) {
+  const role = props.role ?? 'commercial';
   const [activeRecipeId, setActiveRecipeId] = useState<string | undefined>(
     props.recipeId,
   );
-  const activeRecipe = recipeRegistry.find(
+  const visibleRecipes = recipeRegistry.filter((recipe) =>
+    moduleAllowedForRole(recipe.roles, role),
+  );
+  const activeRecipe = visibleRecipes.find(
     (recipe) => recipe.id === activeRecipeId,
   );
 
@@ -30,7 +35,7 @@ export function RecettesModule(props: CleanerModuleProps) {
           </p>
         </div>
         <div className="cleaner-recipes__grid" aria-label="Toutes les recettes">
-          {recipeRegistry.map((recipe) => (
+          {visibleRecipes.map((recipe) => (
             <button
               className="cleaner-recipe-tile"
               key={recipe.id}

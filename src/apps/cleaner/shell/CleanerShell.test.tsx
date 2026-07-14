@@ -99,6 +99,7 @@ describe('CleanerShell navigation', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     renderShell({
+      role: 'manager',
       cockpit: {
         status: 'ready',
         summaries: [
@@ -354,6 +355,19 @@ describe('CleanerShell navigation', () => {
         .getByRole('tab', { name: 'Recettes' })
         .getAttribute('aria-selected'),
     ).toBe('true');
+  });
+
+  it('hides the Secteurs recipe from commercial roles', () => {
+    renderShell({ role: 'commercial' });
+
+    expect(
+      screen.getByRole('button', {
+        name: /Opportunités suspectes ou abandonnées/,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /Secteurs obsolètes/ }),
+    ).toBeNull();
   });
 
   it('hides modules forbidden by role', () => {
