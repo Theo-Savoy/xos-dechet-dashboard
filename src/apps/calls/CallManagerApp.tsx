@@ -185,7 +185,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
   const [contactContext, setContactContext] = useState<ContactContext | null>(null);
   const [contextContactId, setContextContactId] = useState<number | null>(null);
   const [contextTargetContactId, setContextTargetContactId] = useState<number | null>(null);
-  const [contextLoading, setContextLoading] = useState(false);
+  const [, setContextLoading] = useState(false);
   const contextRequest = useRef(0);
   const contextTargetRef = useRef<number | null>(null);
   const lastContextKey = useRef<string | null>(null);
@@ -1364,7 +1364,6 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           contactContext={contactContext}
           contextContactId={contextContactId}
           contextTargetContactId={contextTargetContactId}
-          contextLoading={contextLoading}
           team={team}
           currentSfUserId={currentSfUserId}
           currentUserId={session.user.id}

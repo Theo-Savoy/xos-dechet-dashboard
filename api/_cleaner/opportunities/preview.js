@@ -350,7 +350,7 @@ function assertContext(context) {
     );
 }
 
-export async function buildOpportunityPreview(context = {}, input = {}) {
+async function buildOpportunityPreview(context = {}, input = {}) {
   assertContext(context);
   const ids = normalizeIds(input);
   const changes = normalizeChanges(input.changes);

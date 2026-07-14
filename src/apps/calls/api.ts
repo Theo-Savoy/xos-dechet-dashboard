@@ -55,16 +55,6 @@ async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
-export async function fetchSessions(token: string): Promise<SessionSummary[]> {
-  const data = await apiFetch<{ sessions: SessionSummary[] }>(token, "/api/calls");
-  return data.sessions;
-}
-
-export async function fetchStats(token: string): Promise<CallStats> {
-  const data = await apiFetch<{ stats: CallStats }>(token, "/api/calls?stats=1");
-  return data.stats;
-}
-
 export type ComboHubPayload = {
   sessions: SessionSummary[];
   stats: CallStats;
@@ -317,21 +307,6 @@ export async function logEvent(
       invitees,
       subject: options.subject,
       ...(options.ownerSfUserId ? { owner_sf_user_id: options.ownerSfUserId } : {}),
-    }),
-  });
-}
-
-export async function skipContact(
-  token: string,
-  sessionId: number,
-  contactId: number,
-): Promise<void> {
-  await apiFetch(token, "/api/calls", {
-    method: "POST",
-    body: JSON.stringify({
-      action: "skip_contact",
-      session_id: sessionId,
-      contact_id: contactId,
     }),
   });
 }

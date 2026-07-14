@@ -120,10 +120,6 @@ function cockpitCacheKey(period: CockpitPeriod, anchor?: string | null): string 
   return `${period}:${anchor ?? "default"}`;
 }
 
-export function invalidateProspectionCockpitCache(): void {
-  cockpitCache.clear();
-}
-
 export function prefetchProspectionCockpit(
   token: string,
   period: CockpitPeriod,

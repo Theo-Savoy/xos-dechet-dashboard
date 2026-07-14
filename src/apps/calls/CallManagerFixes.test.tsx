@@ -183,7 +183,6 @@ describe("RunnerView", () => {
     error: null as string | null,
     contactContext: null,
     contextContactId: null,
-    contextLoading: false,
     onBack: vi.fn(),
     onFocusContact: vi.fn(),
     onLogAndNext: vi.fn(),

@@ -47,7 +47,7 @@ export function getOpportunityFilterGuidance(entreprise: EntrepriseOpp): Opportu
   const disabledReasons: OpportunityFilterGuidance["disabledReasons"] = {};
 
   let hint: string | null = null;
-  let note: string | null = null;
+  const note: string | null = null;
 
   if (opp_perdue === true && opp_ouverte === true) {
     hint = "Comptes avec au moins une opportunité ouverte et au moins une opportunité perdue.";

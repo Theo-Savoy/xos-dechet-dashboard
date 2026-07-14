@@ -86,7 +86,7 @@ export type OpportunityCommandResult = {
   replayed?: boolean;
 };
 
-export class OpportunityApiError extends Error {
+class OpportunityApiError extends Error {
   constructor(
     message: string,
     public readonly code:

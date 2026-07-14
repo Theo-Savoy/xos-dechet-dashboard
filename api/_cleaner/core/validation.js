@@ -26,7 +26,7 @@ function invalid(code, message, field) {
   return { ok: false, error: { code, message, field } };
 }
 
-export function validateCleanerQuery(input) {
+function validateCleanerQuery(input) {
   const entries = entriesOf(input);
   const values = {};
   for (const [key, rawValue] of entries) {

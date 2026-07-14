@@ -100,7 +100,6 @@ type RunnerViewProps = {
   contactContext: ContactContext | null;
   contextContactId: number | null;
   contextTargetContactId?: number | null;
-  contextLoading: boolean;
   onBack: () => void;
   onPin?: () => Promise<void>;
   onShareSession?: (memberUserIds: string[]) => Promise<void>;
@@ -366,7 +365,6 @@ export function RunnerView({
   contactContext,
   contextContactId,
   contextTargetContactId = null,
-  contextLoading: _contextLoading,
   onBack,
   onPin,
   onShareSession,
@@ -655,6 +653,8 @@ export function RunnerView({
 
   useEffect(() => {
     if (awaitingEvent) setMode("detail");
+    // Only react to a new awaiting event by identity, not on every awaitingEvent reference change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awaitingEvent?.id]);
 
   // Keep local focus in sync with parent. After "Logguer & suivant" in fiche mode,
@@ -675,6 +675,9 @@ export function RunnerView({
       const focused = contacts.find((c) => c.id === id);
       return focused?.status === "pending" ? id : null;
     });
+    // currentContact is read via currentContact.id only; re-running on the full object
+    // would re-sync focus on every parent render instead of on the actual contact change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedContactId, currentContact?.id, mode, contacts]);
 
   useEffect(() => {
@@ -686,6 +689,9 @@ export function RunnerView({
 
   useEffect(() => {
     setRecallAt(addDaysIso(defaultRecallDays));
+    // Reset only when the focused contact changes; defaultRecallDays is read as a
+    // one-time seed, not tracked so an in-progress edit isn't clobbered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedContact?.id]);
 
   useEffect(() => {

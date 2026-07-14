@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState } from "react";
 
 /** Transforme une liste de valeurs simples en options {value, label}. */
 export function asOptions<T extends string>(values: readonly T[]): { value: T; label: string }[] {
@@ -375,74 +375,6 @@ export function PicklistMultiSelect<T extends string>({
           {groups?.length ? renderGrouped() : renderFlat()}
           {!hasVisible && <p className="calls-picklist__empty">Aucun résultat.</p>}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Saisie libre de tags (ex : secteurs) — Entrée ou virgule pour ajouter, croix pour retirer. */
-export function TagInput({
-  label,
-  hint,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  hint?: string;
-  value: string[];
-  onChange: (next: string[]) => void;
-  placeholder?: string;
-}) {
-  const [draft, setDraft] = useState("");
-  const inputId = useId();
-
-  const commit = () => {
-    const v = draft.trim();
-    if (v && !value.includes(v)) onChange([...value, v]);
-    setDraft("");
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      commit();
-    } else if (e.key === "Backspace" && draft === "" && value.length > 0) {
-      onChange(value.slice(0, -1));
-    }
-  };
-
-  return (
-    <div className="calls-fb-control">
-      <div className="calls-fb-control__label">
-        <label htmlFor={inputId}>{label}</label>
-        {hint && <small>{hint}</small>}
-        {value.length > 1 && <span className="calls-fb-or">OU</span>}
-      </div>
-      <div className="calls-taginput">
-        {value.map((tag) => (
-          <span key={tag} className="calls-chip calls-chip--active">
-            {tag}
-            <button
-              type="button"
-              className="calls-chip__remove"
-              aria-label={`Retirer ${tag}`}
-              onClick={() => onChange(value.filter((t) => t !== tag))}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          id={inputId}
-          type="text"
-          className="calls-taginput__field"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={commit}
-          placeholder={value.length === 0 ? placeholder : ""}
-        />
       </div>
     </div>
   );
