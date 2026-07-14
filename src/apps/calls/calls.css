@@ -329,7 +329,7 @@
 
 .calls-seg__btn--active {
   background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .calls-seg__count {
@@ -447,7 +447,7 @@
   font: inherit;
   font-size: 0.68rem;
   line-height: 1.2;
-  color: #fff;
+  color: var(--xos-surface-plain);
   background: color-mix(in srgb, var(--xos-accent) 70%, #111);
   cursor: pointer;
   overflow: hidden;
@@ -527,7 +527,7 @@
   gap: 0.75rem;
   padding: 1.15rem 1.2rem;
   background: #0b1228 !important;
-  border: 1px solid color-mix(in srgb, var(--xos-border) 90%, #fff);
+  border: 1px solid color-mix(in srgb, var(--xos-border) 90%, var(--xos-surface-plain));
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -645,7 +645,7 @@
 
 .calls-datepicker__day--selected {
   background: var(--xos-accent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .calls-datepicker__footer {
@@ -1013,7 +1013,7 @@
   transform: scale(0);
   transition: transform 0.12s ease;
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
-  background: #fff;
+  background: var(--xos-surface-plain);
 }
 
 .calls-checkbox input[type="checkbox"]:checked {
@@ -1442,7 +1442,7 @@
 
 .calls-mode-toggle__btn--active {
   background: var(--xos-accent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .calls-cockpit-list-wrap {
@@ -1519,7 +1519,7 @@
 
 .calls-list-filter-chip--active {
   background: var(--xos-accent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .calls-list-filter-chip__count {
@@ -2030,13 +2030,13 @@
 }
 
 .calls-brand-link--sf {
-  color: #00a1e0;
+  color: var(--xos-accent-salesforce);
 }
 
 .calls-brand-link--sf:hover {
   color: #4fc3f7;
-  border-color: color-mix(in srgb, #00a1e0 50%, var(--xos-border));
-  background: color-mix(in srgb, #00a1e0 14%, transparent);
+  border-color: color-mix(in srgb, var(--xos-accent-salesforce) 50%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent-salesforce) 14%, transparent);
 }
 
 .calls-brand-link--li {
@@ -2277,11 +2277,11 @@
 }
 
 .calls-runner-toast--heat-2 {
-  border-color: color-mix(in srgb, #f5c542 45%, var(--xos-border));
+  border-color: color-mix(in srgb, var(--xos-accent-warning) 45%, var(--xos-border));
 }
 
 .calls-runner-toast--heat-2 .calls-runner-toast__eyebrow {
-  color: #f5c542;
+  color: var(--xos-accent-warning);
 }
 
 .calls-runner-toast--heat-3,
@@ -2305,18 +2305,18 @@
 
 .calls-runner-toast--goal,
 .calls-runner-toast--heat-5 {
-  border-color: color-mix(in srgb, #f5c542 70%, var(--xos-border));
+  border-color: color-mix(in srgb, var(--xos-accent-warning) 70%, var(--xos-border));
   background:
-    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, #f5c542 35%, transparent), transparent 60%),
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--xos-accent-warning) 35%, transparent), transparent 60%),
     rgba(8, 15, 36, 0.96);
   box-shadow:
     0 0.85rem 2.2rem rgba(0, 0, 0, 0.4),
-    0 0 32px color-mix(in srgb, #f5c542 30%, transparent);
+    0 0 32px color-mix(in srgb, var(--xos-accent-warning) 30%, transparent);
 }
 
 .calls-runner-toast--goal .calls-runner-toast__eyebrow,
 .calls-runner-toast--heat-5 .calls-runner-toast__eyebrow {
-  color: #f5c542;
+  color: var(--xos-accent-warning);
 }
 
 @keyframes calls-toast-pop {
@@ -2363,7 +2363,7 @@
 }
 
 .calls-stat--rdv-heat-2 {
-  border-color: color-mix(in srgb, #f5c542 40%, var(--xos-border));
+  border-color: color-mix(in srgb, var(--xos-accent-warning) 40%, var(--xos-border));
 }
 
 .calls-stat--rdv-heat-3,
@@ -2376,9 +2376,9 @@
 
 /* Objectif RDV atteint : fond doré permanent. */
 .calls-stat--rdv-goal {
-  border-color: color-mix(in srgb, #ffe566 75%, var(--xos-border));
+  border-color: color-mix(in srgb, var(--xos-accent-highlight) 75%, var(--xos-border));
   background:
-    radial-gradient(ellipse at 55% -10%, color-mix(in srgb, #ffe566 42%, transparent), transparent 62%),
+    radial-gradient(ellipse at 55% -10%, color-mix(in srgb, var(--xos-accent-highlight) 42%, transparent), transparent 62%),
     linear-gradient(
       155deg,
       color-mix(in srgb, #c9a227 62%, transparent),
@@ -2386,15 +2386,15 @@
       color-mix(in srgb, #3d2a08 78%, transparent)
     );
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
-    0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
-    inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--xos-accent-warning) 40%, transparent),
+    0 0 22px color-mix(in srgb, var(--xos-accent-warning) 28%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--xos-accent-highlight) 14%, transparent);
 }
 
 .calls-stat--rdv-goal span,
 .calls-stat--rdv-goal strong {
   color: #fff6c8;
-  text-shadow: 0 0 10px color-mix(in srgb, #f5c542 40%, transparent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--xos-accent-warning) 40%, transparent);
 }
 
 .calls-stat--rdv-goal .calls-stat__goal {
@@ -2411,25 +2411,25 @@
     transform: scale(1);
     filter: brightness(1);
     box-shadow:
-      0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
-      0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
-      inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--xos-accent-warning) 40%, transparent),
+      0 0 22px color-mix(in srgb, var(--xos-accent-warning) 28%, transparent),
+      inset 0 0 20px color-mix(in srgb, var(--xos-accent-highlight) 14%, transparent);
   }
   35% {
     transform: scale(1.045);
     filter: brightness(1.18);
     box-shadow:
-      0 0 0 1px color-mix(in srgb, #ffe566 70%, transparent),
-      0 0 48px color-mix(in srgb, #f5c542 60%, transparent),
-      inset 0 0 28px color-mix(in srgb, #ffe566 28%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--xos-accent-highlight) 70%, transparent),
+      0 0 48px color-mix(in srgb, var(--xos-accent-warning) 60%, transparent),
+      inset 0 0 28px color-mix(in srgb, var(--xos-accent-highlight) 28%, transparent);
   }
   100% {
     transform: scale(1);
     filter: brightness(1);
     box-shadow:
-      0 0 0 1px color-mix(in srgb, #f5c542 40%, transparent),
-      0 0 22px color-mix(in srgb, #f5c542 28%, transparent),
-      inset 0 0 20px color-mix(in srgb, #ffe566 14%, transparent);
+      0 0 0 1px color-mix(in srgb, var(--xos-accent-warning) 40%, transparent),
+      0 0 22px color-mix(in srgb, var(--xos-accent-warning) 28%, transparent),
+      inset 0 0 20px color-mix(in srgb, var(--xos-accent-highlight) 14%, transparent);
   }
 }
 
@@ -3604,7 +3604,7 @@ a.calls-contact-card__peer:hover {
   position: absolute;
   inset: 12% 18%;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, #f5c542 42%, transparent), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--xos-accent-warning) 42%, transparent), transparent 70%);
   animation: calls-rdv-flare 1.8s ease-out forwards;
 }
 
@@ -3616,7 +3616,7 @@ a.calls-contact-card__peer:hover {
   height: 8rem;
   margin: -4rem 0 0 -4rem;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, #f5c542 55%, transparent);
+  border: 2px solid color-mix(in srgb, var(--xos-accent-warning) 55%, transparent);
   animation: calls-rdv-ring 1.6s ease-out forwards;
 }
 

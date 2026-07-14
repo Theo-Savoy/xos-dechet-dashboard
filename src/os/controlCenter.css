@@ -212,15 +212,15 @@
   gap: 0.3rem;
   padding: 0.25rem 0.5rem;
   border-radius: 0.4rem;
-  border: 1px solid color-mix(in srgb, #00a1e0 45%, var(--xos-border));
-  background: color-mix(in srgb, #00a1e0 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--xos-accent-salesforce) 45%, var(--xos-border));
+  background: color-mix(in srgb, var(--xos-accent-salesforce) 14%, transparent);
   color: #9ad8f5;
   text-decoration: none;
   font-size: 0.75rem;
 }
 
 .xos-cc__sf:hover {
-  background: color-mix(in srgb, #00a1e0 24%, transparent);
+  background: color-mix(in srgb, var(--xos-accent-salesforce) 24%, transparent);
 }
 
 .xos-cc__item--reaction .xos-cc__item-title {

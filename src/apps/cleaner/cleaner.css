@@ -180,7 +180,7 @@
   border-left: 3px solid var(--xos-accent);
 }
 .cleaner-cockpit-module--critical {
-  border-left-color: #ff7e8a;
+  border-left-color: var(--xos-accent-danger);
 }
 .cleaner-cockpit-module--warning {
   border-left-color: var(--xos-alert);
@@ -620,7 +620,7 @@
   font-size: 0.8rem;
 }
 .cleaner-sector-recipe__error {
-  border-left: 3px solid #ff7e8a;
+  border-left: 3px solid var(--xos-accent-danger);
   color: #ffb8bf;
   background: rgba(255, 126, 138, 0.09);
 }
@@ -789,12 +789,12 @@
   color: var(--xos-accent);
 }
 .cleaner-opportunities__kpi--critical.is-active {
-  border-color: #ff7e8a;
-  background: color-mix(in srgb, #ff7e8a 18%, transparent);
-  box-shadow: 0 0 0 1px #ff7e8a inset;
+  border-color: var(--xos-accent-danger);
+  background: color-mix(in srgb, var(--xos-accent-danger) 18%, transparent);
+  box-shadow: 0 0 0 1px var(--xos-accent-danger) inset;
 }
 .cleaner-opportunities__kpi--critical.is-active strong {
-  color: #ff7e8a;
+  color: var(--xos-accent-danger);
 }
 .cleaner-opportunities__kpi--warning.is-active {
   border-color: var(--xos-alert);
@@ -983,7 +983,7 @@
 .cleaner-opportunities__command-error {
   margin: 0;
   padding: 0.65rem 0.75rem;
-  border-left: 3px solid #ff7e8a;
+  border-left: 3px solid var(--xos-accent-danger);
   color: #ffb8bf;
   background: rgba(255, 126, 138, 0.09);
   font-size: 0.82rem;
@@ -1107,9 +1107,9 @@
   font-weight: 700;
 }
 .cleaner-opportunities__category-tag--critical {
-  border-color: color-mix(in srgb, #ff7e8a 50%, var(--xos-border));
+  border-color: color-mix(in srgb, var(--xos-accent-danger) 50%, var(--xos-border));
   color: #ffb8bf;
-  background: color-mix(in srgb, #ff7e8a 15%, transparent);
+  background: color-mix(in srgb, var(--xos-accent-danger) 15%, transparent);
 }
 .cleaner-opportunities__category-tag--warning {
   border-color: color-mix(in srgb, var(--xos-alert) 50%, var(--xos-border));
@@ -1201,14 +1201,14 @@
   width: 1.45rem;
   height: 1.45rem;
   place-items: center;
-  border: 1px solid color-mix(in srgb, #00a1e0 45%, var(--xos-border));
+  border: 1px solid color-mix(in srgb, var(--xos-accent-salesforce) 45%, var(--xos-border));
   border-radius: 0.35rem;
   color: #8fdcff;
   text-decoration: none;
 }
 .cleaner-opportunities__salesforce-link:hover {
-  border-color: #00a1e0;
-  background: color-mix(in srgb, #00a1e0 15%, transparent);
+  border-color: var(--xos-accent-salesforce);
+  background: color-mix(in srgb, var(--xos-accent-salesforce) 15%, transparent);
 }
 .cleaner-opportunities__row-link {
   border: 0;
@@ -1879,7 +1879,7 @@
 }
 .cleaner-opportunities__severity--critical {
   color: #ffd7db;
-  background: color-mix(in srgb, #ff7e8a 28%, transparent);
+  background: color-mix(in srgb, var(--xos-accent-danger) 28%, transparent);
 }
 .cleaner-opportunities__severity--warning {
   color: #fffbd0;

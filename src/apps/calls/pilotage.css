@@ -65,7 +65,7 @@
 
 .pilotage-seg__btn--active {
   background: color-mix(in srgb, var(--xos-accent) 22%, transparent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .pilotage-error {
@@ -383,7 +383,7 @@
 }
 
 .pilotage-heatmap__cell--active {
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .pilotage-heatmap__cell:hover {
@@ -393,10 +393,10 @@
 }
 
 .pilotage-heatmap__cell--selected {
-  border-color: color-mix(in srgb, var(--xos-accent) 80%, #fff);
+  border-color: color-mix(in srgb, var(--xos-accent) 80%, var(--xos-surface-plain));
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--xos-accent) 45%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--xos-surface-plain) 18%, transparent);
 }
 
 .pilotage-heatmap__cell--empty {

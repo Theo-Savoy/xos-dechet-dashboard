@@ -64,6 +64,14 @@
   --xos-border: rgba(255, 255, 255, 0.08);
   --xos-blur: blur(12px);
 
+  /* Accents partagés par les apps */
+  --xos-accent-warning: #f5c542;
+  --xos-accent-danger: #ff7e8a;
+  --xos-accent-salesforce: #00a1e0;
+  --xos-accent-success: #6effbb;
+  --xos-accent-highlight: #ffe566;
+  --xos-surface-plain: #fff;
+
   --xos-text: #f4f5fb;
   --xos-text-muted: rgba(244, 245, 251, 0.64);
 

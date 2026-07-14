@@ -246,7 +246,7 @@
 
 .xos-launcher-form__button--primary {
   background: var(--xos-accent);
-  color: #fff;
+  color: var(--xos-surface-plain);
 }
 
 .xos-launcher-form__button--primary:hover {

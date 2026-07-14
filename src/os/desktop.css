@@ -99,7 +99,7 @@ textarea {
   height: 0.48rem;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #6effbb;
+  background: var(--xos-accent-success);
   box-shadow: 0 0 12px rgba(110, 255, 187, 0.65);
 }
 
@@ -567,7 +567,7 @@ textarea {
 .xos-menubar__sf-status--linked {
   background: rgba(110, 255, 187, 0.08);
   border: 1px solid rgba(110, 255, 187, 0.2);
-  color: #6effbb;
+  color: var(--xos-accent-success);
   box-shadow: 0 0 8px rgba(110, 255, 187, 0.15);
 }
 

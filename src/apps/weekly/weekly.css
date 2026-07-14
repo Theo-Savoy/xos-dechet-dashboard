@@ -363,7 +363,7 @@
   font-size: .74rem;
 }
 
-.weekly-rate--ok { color: #6effbb; }
+.weekly-rate--ok { color: var(--xos-accent-success); }
 .weekly-rate--warn { color: #ffc857; }
 .weekly-rate--crit { color: var(--xos-alert); }
 
@@ -442,7 +442,7 @@
   text-transform: uppercase;
 }
 
-.weekly-health--ok { color: #6effbb; background: color-mix(in srgb, #6effbb 16%, transparent); }
+.weekly-health--ok { color: var(--xos-accent-success); background: color-mix(in srgb, var(--xos-accent-success) 16%, transparent); }
 .weekly-health--super { color: #b8f5ff; background: color-mix(in srgb, var(--xos-accent) 22%, transparent); }
 .weekly-health--warn { color: #ffc857; background: color-mix(in srgb, #ffc857 16%, transparent); }
 .weekly-health--crit { color: var(--xos-alert); background: color-mix(in srgb, var(--xos-alert) 16%, transparent); }
@@ -462,7 +462,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.weekly-delta--up { color: #6effbb; }
+.weekly-delta--up { color: var(--xos-accent-success); }
 .weekly-delta--down { color: var(--xos-alert); }
 
 /* —— Metrics —— */
