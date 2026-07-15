@@ -78,6 +78,10 @@ export const RECALL_ELIGIBLE_RESULTATS: ResultatCall[] = [
 /** Résultats qui comptent dans le pipe « décroché » du cockpit. */
 export const PIPE_DECROCHE: ResultatCall[] = ["Appel décroché", "Appel argumenté", "RDV planifié"];
 
+/** Résultats qui comptent dans le pipe « argumenté » du cockpit.
+ *  Un RDV planifié est un argumenté qui a abouti, il compte dans les deux. */
+export const PIPE_ARGUMENTE: ResultatCall[] = ["Appel argumenté", "RDV planifié"];
+
 export const DEFAULT_RECALL_DAYS = 3;
 
 export type FilterTree = {

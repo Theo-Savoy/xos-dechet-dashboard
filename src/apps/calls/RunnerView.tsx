@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   DEFAULT_RECALL_DAYS,
+  PIPE_ARGUMENTE,
   PIPE_DECROCHE,
   RECALL_ELIGIBLE_RESULTATS,
   RELANCE_DEFAULT_RESULTATS,
@@ -219,7 +220,9 @@ function computeKpis(contacts: SessionContact[]) {
   const calledRows = contacts.filter((c) => c.status === "called");
   const called = calledRows.length;
   const decroches = calledRows.filter((c) => c.outcome && PIPE_DECROCHE.includes(c.outcome)).length;
-  const argumentes = calledRows.filter((c) => c.outcome === "Appel argumenté").length;
+  // Cohérence avec computeHubKpis (api/_calls/http.js) : un RDV planifié
+  // est un appel argumenté qui a abouti, il doit compter dans les 2.
+  const argumentes = calledRows.filter((c) => c.outcome && PIPE_ARGUMENTE.includes(c.outcome)).length;
   const rdv = calledRows.filter((c) => c.outcome === "RDV planifié").length;
   return { total, remaining, called, decroches, argumentes, rdv };
 }
