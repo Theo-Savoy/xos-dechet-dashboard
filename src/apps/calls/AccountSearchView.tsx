@@ -11,9 +11,10 @@ import {
   type Tier,
   type TypeClient,
 } from "../../crm";
-import { fetchAccountsSearch, CallsApiError } from "./api";
+import { fetchAccountsSearch, CallsApiError, type AudienceSessionGroup } from "./api";
+import { packAccountsIntoSessions } from "./audienceBinPacking";
 import { asOptions, ChipGroup, PicklistMultiSelect } from "./filterControls";
-import type { AccountSearchHit } from "./types";
+import type { AccountSearchHit, ContactPreview } from "./types";
 
 type AbmFilters = {
   secteurs: Secteur[];
@@ -26,22 +27,49 @@ function emptyAbmFilters(): AbmFilters {
   return { secteurs: [], effectifs: [], type_client: [], tiers: [] };
 }
 
+function hasAnyFilter(filters: AbmFilters): boolean {
+  return filters.secteurs.length > 0 || filters.effectifs.length > 0 || filters.type_client.length > 0 || filters.tiers.length > 0;
+}
+
 function errorMessage(err: unknown): string {
   if (err instanceof CallsApiError) {
-    if (err.code === "invalid_query") return "Saisissez au moins 2 caractères.";
+    if (err.code === "invalid_query") return "Saisissez un nom de compte ou sélectionnez au moins un filtre.";
     if (err.code === "sf_auth_error") return "Salesforce a refusé l'authentification — reconnectez-vous.";
     return `Erreur API (${err.code})`;
   }
   return "Une erreur est survenue.";
 }
 
+function toContactPreview(account: AccountSearchHit, contact: AccountSearchHit["contacts"][number]): ContactPreview {
+  return {
+    sf_contact_id: contact.sf_contact_id,
+    sf_account_id: account.id,
+    contact_name: contact.contact_name,
+    account_name: account.name,
+    phone: contact.phone,
+    mobile_phone: contact.mobile_phone,
+    email: contact.email,
+    title: contact.title,
+  };
+}
+
+export type CreateAudiencePayload = {
+  groups: AudienceSessionGroup[];
+  targetSize: number;
+  maxSessions: number;
+  namePrefix?: string;
+  excludedCount: number;
+};
+
 type AccountSearchViewProps = {
   token: string;
   onBack: () => void;
-  onCreateAbmSession: (accountIds: string[]) => void;
+  onCreateAudience: (payload: CreateAudiencePayload) => void;
+  creating: boolean;
+  createError: string | null;
 };
 
-export function AccountSearchView({ token, onBack, onCreateAbmSession }: AccountSearchViewProps) {
+export function AccountSearchView({ token, onBack, onCreateAudience, creating, createError }: AccountSearchViewProps) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<AbmFilters>(emptyAbmFilters);
   const [loading, setLoading] = useState(false);
@@ -51,12 +79,16 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
   const [searched, setSearched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [excludedCount, setExcludedCount] = useState(0);
+  const [targetSize, setTargetSize] = useState(50);
+  const [maxSessions, setMaxSessions] = useState(5);
 
   const setFilter = (patch: Partial<AbmFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
+  const canSearch = query.trim().length >= 2 || hasAnyFilter(filters);
+
   const handleSearch = async () => {
     const q = query.trim();
-    if (q.length < 2 || !token) return;
+    if (!canSearch || !token) return;
     setLoading(true);
     setError(null);
     try {
@@ -85,13 +117,38 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
     });
   };
 
+  const selectedAccounts = useMemo(() => accounts.filter((account) => selectedIds.has(account.id)), [accounts, selectedIds]);
+
   const selectedContactsCount = useMemo(
-    () =>
-      accounts
-        .filter((account) => selectedIds.has(account.id))
-        .reduce((total, account) => total + account.contacts.length, 0),
-    [accounts, selectedIds],
+    () => selectedAccounts.reduce((total, account) => total + account.contacts.length, 0),
+    [selectedAccounts],
   );
+
+  const packableAccounts = useMemo(
+    () =>
+      selectedAccounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        contacts: account.contacts.map((contact) => toContactPreview(account, contact)),
+      })),
+    [selectedAccounts],
+  );
+
+  const groups = useMemo(
+    () => packAccountsIntoSessions(packableAccounts, targetSize, maxSessions),
+    [packableAccounts, targetSize, maxSessions],
+  );
+
+  const handleCreateClick = () => {
+    if (groups.length === 0) return;
+    onCreateAudience({
+      groups: groups.map((group) => ({ account_ids: group.accountIds, contacts: group.contacts })),
+      targetSize,
+      maxSessions,
+      namePrefix: query.trim() || undefined,
+      excludedCount,
+    });
+  };
 
   return (
     <div className="calls-view">
@@ -117,10 +174,10 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void handleSearch()}
-              placeholder="ACME"
+              placeholder="ACME (optionnel si des filtres sont sélectionnés)"
             />
           </label>
-          <Button onClick={() => void handleSearch()} disabled={loading || query.trim().length < 2}>
+          <Button onClick={() => void handleSearch()} disabled={loading || !canSearch}>
             {loading ? "Recherche…" : "Rechercher"}
           </Button>
         </div>
@@ -164,9 +221,9 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
         </details>
       </GlassCard>
 
-      {error && (
+      {(error || createError) && (
         <GlassCard className="calls-error">
-          <p role="alert" aria-live="assertive">{error}</p>
+          <p role="alert" aria-live="assertive">{error || createError}</p>
         </GlassCard>
       )}
 
@@ -191,13 +248,55 @@ export function AccountSearchView({ token, onBack, onCreateAbmSession }: Account
                 {selectedIds.size} compte{selectedIds.size > 1 ? "s" : ""} sélectionné{selectedIds.size > 1 ? "s" : ""}
               </Tag>
             </div>
-            <Button
-              onClick={() => onCreateAbmSession([...selectedIds])}
-              disabled={selectedIds.size === 0}
-            >
-              Créer séance ABM
-            </Button>
           </GlassCard>
+
+          {selectedIds.size > 0 && (
+            <GlassCard className="calls-audience-pack">
+              <h3>Découper en plusieurs séances</h3>
+              <div className="calls-fb-row">
+                <label className="calls-field">
+                  <span>Taille cible par séance</span>
+                  <input
+                    type="number"
+                    className="calls-input"
+                    min={1}
+                    value={targetSize}
+                    onChange={(e) => setTargetSize(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                </label>
+                <label className="calls-field">
+                  <span>Nombre max de séances</span>
+                  <input
+                    type="number"
+                    className="calls-input"
+                    min={1}
+                    value={maxSessions}
+                    onChange={(e) => setMaxSessions(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                </label>
+              </div>
+
+              {groups.length > 0 ? (
+                <>
+                  <p className="calls-muted calls-fb-hint">Aperçu : {groups.length} séance{groups.length > 1 ? "s" : ""}</p>
+                  <ul className="calls-audience-pack__preview">
+                    {groups.map((group, index) => (
+                      <li key={index}>
+                        {group.accountNames.join(" + ")} : {group.totalContacts} contact{group.totalContacts > 1 ? "s" : ""}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button onClick={handleCreateClick} disabled={creating}>
+                    {creating ? "Création…" : `Créer ${groups.length} séance${groups.length > 1 ? "s" : ""} ABM`}
+                  </Button>
+                </>
+              ) : (
+                <p className="calls-muted calls-fb-hint">
+                  Tous les contacts sélectionnés sont déjà en séance active. Aucune séance ne sera créée.
+                </p>
+              )}
+            </GlassCard>
+          )}
 
           <div className="calls-preview__table-wrap" role="list" aria-label="Comptes trouvés">
             {accounts.map((account) => {

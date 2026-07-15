@@ -34,14 +34,15 @@ function hasAnyRefineFilter(filters) {
 export function parseAccountsSearchBody(body) {
   if (!isObject(body)) return { error: "invalid_body" };
   const q = typeof body.q === "string" ? body.q.trim() : "";
-  if (q.length < 2) return { error: "invalid_query" };
   if (body.filters !== undefined && !isObject(body.filters)) return { error: "invalid_filters" };
+  const filters = body.filters || {};
+  if (q.length < 2 && !hasAnyRefineFilter(filters)) return { error: "invalid_query" };
   if (body.limit !== undefined && (!Number.isInteger(body.limit) || body.limit < 1)) {
     return { error: "invalid_limit" };
   }
   return {
     q,
-    filters: body.filters || {},
+    filters,
     limit: Math.min(body.limit ?? MAX_ACCOUNTS, MAX_ACCOUNTS),
   };
 }
@@ -91,28 +92,41 @@ export async function searchAccounts(client, userId, body) {
 
   const account = mapping.objects.account;
   const af = account.fields;
-  const sosl = `FIND {${escapeSOSL(parsed.q)}} IN NAME FIELDS RETURNING ${account.name}(${af.id}, ${af.name}, ${af.industry}, Owner.Name, ${af.customerType}, ${af.tier}, ${af.employeeCount} LIMIT ${parsed.limit})`;
-  const soslResult = await searchSOSL(token, sosl);
-  if (soslResult.error) return { error: soslResult.error, status: 502 };
+  const selectFields = `${af.id}, ${af.name}, ${af.industry}, Owner.Name, ${af.customerType}, ${af.tier}, ${af.employeeCount}`;
 
-  let accountRecords = soslResult.records || [];
+  let accountRecords;
+  let alreadyRefined = false;
+  if (parsed.q.length === 0) {
+    // Recherche filtres seuls : pas de FIND SOSL (plante sur une chaîne vide), on va direct en SOQL.
+    const conditions = accountRefineConditions(parsed.filters, account);
+    const soql = `SELECT ${selectFields} FROM ${account.name} WHERE ${conditions.join(" AND ")} LIMIT ${parsed.limit}`;
+    const soqlResult = await searchContacts(token, soql);
+    if (soqlResult.error) return { error: soqlResult.error, status: 502 };
+    accountRecords = soqlResult.records || [];
+    alreadyRefined = true;
+  } else {
+    const sosl = `FIND {${escapeSOSL(parsed.q)}} IN NAME FIELDS RETURNING ${account.name}(${selectFields} LIMIT ${parsed.limit})`;
+    const soslResult = await searchSOSL(token, sosl);
+    if (soslResult.error) return { error: soslResult.error, status: 502 };
+    accountRecords = soslResult.records || [];
+  }
   if (!accountRecords.length) return { accounts: [], truncated: false };
   const soslCapped = accountRecords.length >= parsed.limit;
 
-  if (hasAnyRefineFilter(parsed.filters)) {
+  if (!alreadyRefined && hasAnyRefineFilter(parsed.filters)) {
     const accountIds = accountRecords.map((record) => record[af.id]);
     const conditions = [`${af.id} IN (${escapedList(accountIds)})`, ...accountRefineConditions(parsed.filters, account)];
     const refineSoql = `SELECT ${af.id} FROM ${account.name} WHERE ${conditions.join(" AND ")}`;
     const refineResult = await searchContacts(token, refineSoql);
     if (refineResult.error) return { error: refineResult.error, status: 502 };
-    let allowedIds = refineResult.records.map((record) => record[af.id]);
+    const allowed = new Set(refineResult.records.map((record) => record[af.id]));
+    accountRecords = accountRecords.filter((record) => allowed.has(record[af.id]));
+  }
 
-    if (hasOpportunityQueryFilters({ entreprise: parsed.filters })) {
-      const oppSets = await fetchOpportunityAccountIdSets(token, mapping, { entreprise: parsed.filters });
-      if (oppSets.error) return { error: oppSets.error, status: 502 };
-      allowedIds = filterByOpenLost(allowedIds, oppSets, parsed.filters);
-    }
-
+  if (hasOpportunityQueryFilters({ entreprise: parsed.filters })) {
+    const oppSets = await fetchOpportunityAccountIdSets(token, mapping, { entreprise: parsed.filters });
+    if (oppSets.error) return { error: oppSets.error, status: 502 };
+    const allowedIds = filterByOpenLost(accountRecords.map((record) => record[af.id]), oppSets, parsed.filters);
     const allowed = new Set(allowedIds);
     accountRecords = accountRecords.filter((record) => allowed.has(record[af.id]));
   }

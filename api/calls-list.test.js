@@ -748,9 +748,19 @@ describe("POST /api/calls action=list_contacts", () => {
 });
 
 describe("parseAccountsSearchBody", () => {
-  it("rejects a query shorter than 2 characters", () => {
+  it("rejects a query shorter than 2 characters with no filters", () => {
     expect(parseAccountsSearchBody({ q: "a" })).toEqual({ error: "invalid_query" });
     expect(parseAccountsSearchBody({})).toEqual({ error: "invalid_query" });
+    expect(parseAccountsSearchBody({ q: "a", filters: {} })).toEqual({ error: "invalid_query" });
+  });
+
+  it("accepts a short/empty query when at least one refine filter is set", () => {
+    expect(parseAccountsSearchBody({ filters: { tiers: ["A"] } })).toEqual({ q: "", filters: { tiers: ["A"] }, limit: 25 });
+    expect(parseAccountsSearchBody({ q: "", filters: { secteurs: ["Finance"] } })).toEqual({
+      q: "",
+      filters: { secteurs: ["Finance"] },
+      limit: 25,
+    });
   });
 
   it("defaults filters and caps limit at 25", () => {
@@ -964,6 +974,33 @@ describe("POST /api/calls action=accounts_search", () => {
     const res = await POST(makeAccountsReq({ q: "ACME", filters: { tiers: ["D"] } }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ accounts: [], excluded_count: 0, truncated: false });
+  });
+
+  it("searches accounts via SOQL (no SOSL) when q is empty but filters are set", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "sf-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: ACCOUNT_RECORDS }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ records: CONTACT_RECORDS }), { status: 200 }));
+
+    const res = await POST(makeAccountsReq({ filters: { tiers: ["A"] } }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.accounts).toHaveLength(1);
+    expect(body.accounts[0].id).toBe("001000000000001AAA");
+
+    const accountSoql = decodeURIComponent(String(fetchSpy.mock.calls[1][0]).replace(/\+/g, " "));
+    expect(accountSoql).toContain("SELECT");
+    expect(accountSoql).not.toContain("FIND {");
+    expect(accountSoql).toContain(`${mapping.objects.account.fields.tier} IN ('A')`);
+    // 3 calls total : token + account SOQL + contact SOQL (no separate refine query, already filtered).
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns 400 when q is empty and no filters are set", async () => {
+    const res = await POST(makeAccountsReq({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_query");
   });
 
   it("returns 502 when the SOSL search fails", async () => {

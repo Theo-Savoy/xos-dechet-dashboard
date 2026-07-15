@@ -643,6 +643,125 @@ describe("POST /api/calls", () => {
     });
   });
 
+  describe("create_audience_sessions", () => {
+    const group1 = {
+      account_ids: ["001000000000001AAA"],
+      contacts: [{ sf_contact_id: "003000000000001AAA", contact_name: "Marie Dupont", sf_account_id: "001000000000001AAA" }],
+    };
+    const group2 = {
+      account_ids: ["001000000000002AAA"],
+      contacts: [{ sf_contact_id: "003000000000002AAA", contact_name: "Jean Petit", sf_account_id: "001000000000002AAA" }],
+    };
+
+    it("returns 400 when groups is missing or empty", async () => {
+      const res = await POST(makeReq("POST", { action: "create_audience_sessions", groups: [] }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_groups");
+    });
+
+    it("returns 400 when a group has no account_ids or no contacts", async () => {
+      const res = await POST(makeReq("POST", { action: "create_audience_sessions", groups: [{ account_ids: [], contacts: group1.contacts }] }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_groups");
+
+      const res2 = await POST(makeReq("POST", { action: "create_audience_sessions", groups: [{ account_ids: group1.account_ids, contacts: [] }] }));
+      expect(res2.status).toBe(400);
+      expect((await res2.json()).error).toBe("invalid_groups");
+    });
+
+    it("returns 400 for a malformed sf_account_id in a group", async () => {
+      const res = await POST(makeReq("POST", {
+        action: "create_audience_sessions",
+        groups: [{ account_ids: ["not-a-sf-id"], contacts: group1.contacts }],
+      }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_groups");
+    });
+
+    it("returns 400 for a malformed sf_contact_id inside a group", async () => {
+      const res = await POST(makeReq("POST", {
+        action: "create_audience_sessions",
+        groups: [{ account_ids: group1.account_ids, contacts: [{ sf_contact_id: "bad", contact_name: "Marie" }] }],
+      }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_sf_contact_id");
+    });
+
+    it("creates one session per group, named from name_prefix", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 101, name: "ACME T1 #1", status: "active", created_at: "2026-07-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{ id: 1, position: 0, sf_contact_id: "003000000000001AAA", contact_name: "Marie Dupont", status: "pending" }],
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: { id: 102, name: "ACME T1 #2", status: "active", created_at: "2026-07-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{ id: 2, position: 0, sf_contact_id: "003000000000002AAA", contact_name: "Jean Petit", status: "pending" }],
+          error: null,
+        });
+
+      const res = await POST(makeReq("POST", {
+        action: "create_audience_sessions",
+        groups: [group1, group2],
+        target_size: 50,
+        max_sessions: 5,
+        name_prefix: "ACME T1",
+      }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.sessions).toEqual([
+        { id: 101, name: "ACME T1 #1", contact_count: 1, account_ids: group1.account_ids },
+        { id: 102, name: "ACME T1 #2", contact_count: 1, account_ids: group2.account_ids },
+      ]);
+    });
+
+    it("falls back to a sequential name when name_prefix is omitted", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 201, name: "Audience #1", status: "active", created_at: "2026-07-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{ id: 1, position: 0, sf_contact_id: "003000000000001AAA", contact_name: "Marie Dupont", status: "pending" }],
+          error: null,
+        });
+
+      const res = await POST(makeReq("POST", { action: "create_audience_sessions", groups: [group1] }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.sessions[0].name).toBe("Audience #1");
+    });
+
+    it("stops and returns already-created sessions when a session insert fails midway", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 101, name: "ACME T1 #1", status: "active", created_at: "2026-07-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{ id: 1, position: 0, sf_contact_id: "003000000000001AAA", contact_name: "Marie Dupont", status: "pending" }],
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: { message: "insert failed" } });
+
+      const res = await POST(makeReq("POST", {
+        action: "create_audience_sessions",
+        groups: [group1, group2],
+        name_prefix: "ACME T1",
+      }));
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("session_creation_failed");
+      expect(body.sessions).toEqual([
+        { id: 101, name: "ACME T1 #1", contact_count: 1, account_ids: group1.account_ids },
+      ]);
+    });
+
+    it("returns 400 for an invalid scheduled_for", async () => {
+      const res = await POST(makeReq("POST", {
+        action: "create_audience_sessions",
+        groups: [group1],
+        scheduled_for: "2026-02-30",
+      }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_scheduled_for");
+    });
+  });
+
   describe("log_call", () => {
     const sessionRow = { id: 1, owner: "user-123", name: "Test", status: "active" };
     const contactRow = { id: 101, session_id: 1, sf_contact_id: "003000000000001", sf_account_id: "001000000000001", status: "pending" };

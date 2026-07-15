@@ -16,6 +16,7 @@ import {
   fetchContactContext,
   fetchContactCount,
   fetchContactList,
+  fetchCreateAudienceSessions,
   fetchPresets,
   fetchTeam,
   fetchRecalls,
@@ -42,6 +43,7 @@ import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
 import { ShareSessionPanel } from "./ShareSessionPanel";
+import type { AudienceSessionGroup } from "./api";
 import type {
   CallStats,
   ContactContext,
@@ -173,6 +175,13 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
   const matchCountRequest = useRef(0);
   const [newError, setNewError] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
+  const [audienceCreating, setAudienceCreating] = useState(false);
+  const [audienceError, setAudienceError] = useState<string | null>(null);
+  const [audienceBanner, setAudienceBanner] = useState<{
+    sessionId: number;
+    createdCount: number;
+    excludedCount: number;
+  } | null>(null);
   const [shareSessionId, setShareSessionId] = useState<number | null>(null);
   const [shareSaving, setShareSaving] = useState(false);
 
@@ -406,15 +415,34 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     invalidatePreview();
   };
 
-  const handleCreateAbmSession = (accountIds: string[]) => {
-    const next = emptyFilterTree();
-    next.entreprise.comptes_cibles = accountIds;
-    setFilters(next);
-    setContactLimit(200);
-    setMaxPerCompany(null);
-    invalidatePreview();
-    setNewError(null);
-    setView("new");
+  const handleCreateAudience = async (payload: {
+    groups: AudienceSessionGroup[];
+    targetSize: number;
+    maxSessions: number;
+    namePrefix?: string;
+    excludedCount: number;
+  }) => {
+    if (!token) return;
+    setAudienceCreating(true);
+    setAudienceError(null);
+    try {
+      const data = await fetchCreateAudienceSessions(token, {
+        groups: payload.groups,
+        target_size: payload.targetSize,
+        max_sessions: payload.maxSessions,
+        name_prefix: payload.namePrefix,
+      });
+      setAudienceBanner({
+        sessionId: data.sessions[0].id,
+        createdCount: data.sessions.length,
+        excludedCount: payload.excludedCount,
+      });
+      await openSession(data.sessions[0].id);
+    } catch (err) {
+      setAudienceError(errorMessage(err));
+    } finally {
+      setAudienceCreating(false);
+    }
   };
 
   const handleContactLimitChange = (limit: ContactLimit) => {
@@ -1375,8 +1403,23 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
         <AccountSearchView
           token={token}
           onBack={() => setView("new")}
-          onCreateAbmSession={handleCreateAbmSession}
+          onCreateAudience={(payload) => void handleCreateAudience(payload)}
+          creating={audienceCreating}
+          createError={audienceError}
         />
+      )}
+
+      {view === "runner" && activeSession && audienceBanner && audienceBanner.sessionId === activeSession.id && (
+        <div className="calls-builder-excluded-banner" role="status">
+          {audienceBanner.createdCount} séance{audienceBanner.createdCount > 1 ? "s" : ""} créée
+          {audienceBanner.createdCount > 1 ? "s" : ""}.
+          {audienceBanner.excludedCount > 0
+            ? ` ${audienceBanner.excludedCount} contact${audienceBanner.excludedCount > 1 ? "s" : ""} exclu${audienceBanner.excludedCount > 1 ? "s" : ""} car déjà en séance active.`
+            : ""}
+          <button type="button" className="calls-builder-excluded-banner__dismiss" onClick={() => setAudienceBanner(null)}>
+            ✕
+          </button>
+        </div>
       )}
 
       {(view === "runner" || view === "recalls") && activeSession && (

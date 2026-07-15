@@ -102,6 +102,86 @@ export async function handleSessionWrite({ action, body, user, client, headers }
     );
   }
 
+  if (action === "create_audience_sessions") {
+    const {
+      groups,
+      session_type: sessionTypeInput,
+      scheduled_for: scheduledForInput,
+      name_prefix: namePrefixInput,
+    } = body;
+
+    if (!Array.isArray(groups) || groups.length === 0) {
+      return new Response(JSON.stringify({ error: "invalid_groups" }), { status: 400, headers });
+    }
+    for (const group of groups) {
+      if (!group || typeof group !== "object") {
+        return new Response(JSON.stringify({ error: "invalid_groups" }), { status: 400, headers });
+      }
+      if (
+        !Array.isArray(group.account_ids)
+        || group.account_ids.length === 0
+        || group.account_ids.some((id) => typeof id !== "string" || !SF_ID.test(id))
+      ) {
+        return new Response(JSON.stringify({ error: "invalid_groups" }), { status: 400, headers });
+      }
+      if (!Array.isArray(group.contacts) || group.contacts.length === 0) {
+        return new Response(JSON.stringify({ error: "invalid_groups" }), { status: 400, headers });
+      }
+      for (const contact of group.contacts) {
+        if (!contact || typeof contact !== "object") {
+          return new Response(JSON.stringify({ error: "invalid_groups" }), { status: 400, headers });
+        }
+        if (!contact.sf_contact_id || typeof contact.sf_contact_id !== "string" || !SF_ID.test(contact.sf_contact_id)) {
+          return new Response(JSON.stringify({ error: "invalid_sf_contact_id" }), { status: 400, headers });
+        }
+        if (!contact.contact_name || typeof contact.contact_name !== "string" || contact.contact_name.trim().length === 0) {
+          return new Response(JSON.stringify({ error: "invalid_contact_name" }), { status: 400, headers });
+        }
+        if (contact.sf_account_id !== undefined && contact.sf_account_id !== null && (typeof contact.sf_account_id !== "string" || !SF_ID.test(contact.sf_account_id))) {
+          return new Response(JSON.stringify({ error: "invalid_sf_account_id" }), { status: 400, headers });
+        }
+      }
+    }
+
+    let scheduledFor = todayParisDate();
+    if (scheduledForInput !== undefined) {
+      if (!isValidScheduledFor(scheduledForInput)) {
+        return new Response(JSON.stringify({ error: "invalid_scheduled_for" }), { status: 400, headers });
+      }
+      scheduledFor = scheduledForInput;
+    }
+    const sessionType = sessionTypeInput === undefined ? "prospection" : sessionTypeInput;
+    if (!isValidSessionType(sessionType)) {
+      return new Response(JSON.stringify({ error: "invalid_session_type" }), { status: 400, headers });
+    }
+    const namePrefix = typeof namePrefixInput === "string" && namePrefixInput.trim()
+      ? namePrefixInput.trim()
+      : null;
+
+    const createdSessions = [];
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const name = namePrefix ? `${namePrefix} #${i + 1}` : nextContinuationName(`Audience #${i}`);
+      const created = await insertSessionWithContacts(client, user.id, name, group.contacts, scheduledFor, {
+        sessionType,
+      });
+      if (created.error) {
+        return new Response(
+          JSON.stringify({ error: created.error, sessions: createdSessions }),
+          { status: created.status, headers },
+        );
+      }
+      createdSessions.push({
+        id: created.session.id,
+        name: created.session.name,
+        contact_count: created.contacts.length,
+        account_ids: group.account_ids,
+      });
+    }
+
+    return new Response(JSON.stringify({ sessions: createdSessions }), { status: 200, headers });
+  }
+
   if (action === "update_session") {
     const { session_id, name, scheduled_for: scheduledForInput, session_type: sessionTypeInput } = body;
 

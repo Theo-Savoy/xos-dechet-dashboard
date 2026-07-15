@@ -216,6 +216,35 @@ export async function createSession(
   });
 }
 
+export type AudienceSessionGroup = {
+  account_ids: string[];
+  contacts: ContactPreview[];
+};
+
+export type CreatedAudienceSession = {
+  id: number;
+  name: string;
+  contact_count: number;
+  account_ids: string[];
+};
+
+export async function fetchCreateAudienceSessions(
+  token: string,
+  body: {
+    groups: AudienceSessionGroup[];
+    target_size: number;
+    max_sessions: number;
+    session_type?: string;
+    scheduled_for?: string;
+    name_prefix?: string;
+  },
+): Promise<{ sessions: CreatedAudienceSession[] }> {
+  return apiFetch(token, "/api/calls", {
+    method: "POST",
+    body: JSON.stringify({ action: "create_audience_sessions", ...body }),
+  });
+}
+
 export async function updateSession(
   token: string,
   sessionId: number,
