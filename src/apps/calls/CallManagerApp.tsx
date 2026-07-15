@@ -42,6 +42,7 @@ import { RecapView } from "./RecapView";
 import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
 import { RunnerView, type LogPayload } from "./RunnerView";
 import { SessionsView } from "./SessionsView";
+import { PreSessionFlow } from "./PreSessionFlow";
 import { ShareSessionPanel } from "./ShareSessionPanel";
 import type { AudienceSessionGroup } from "./api";
 import type {
@@ -59,7 +60,7 @@ import "./calls.css";
 const CONTEXT_PREFETCH_AHEAD = 3;
 const CONTEXT_CACHE_MAX = 32;
 
-type View = "sessions" | "new" | "account-search" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
+type View = "sessions" | "new" | "account-search" | "pre-session" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
 
 function viewFromParams(params?: Record<string, string>): View {
   if (params?.session_id) return "loading-params";
@@ -304,7 +305,13 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
         if (focusContactId != null && data.contacts.some((c) => c.id === focusContactId)) {
           setFocusedContactId(focusContactId);
         }
-        setView(data.session.status === "completed" ? "recap" : "runner");
+        setView(data.session.status === "completed"
+          ? "recap"
+          : data.session.rdv_goal === undefined
+            ? "runner"
+            : data.session.engaged_at && data.session.rdv_goal
+              ? "runner"
+              : "pre-session");
       } catch (err) {
         setSessionsError(errorMessage(err));
         // Si on était sur le loader de transition params, retombe sur la
@@ -529,12 +536,23 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       setContacts(data.contacts);
       setAwaitingEvent(null);
       invalidateComboHubCache();
-      setView("runner");
+      setView("pre-session");
     } catch (err) {
       setNewError(errorMessage(err));
     } finally {
       setCreateLoading(false);
     }
+  };
+
+  const handleLaunchPreSession = async (goal: number) => {
+    if (!token || !activeSession) return;
+    const updated = await updateSession(token, activeSession.id, {
+      rdv_goal: goal,
+      engaged_at: activeSession.engaged_at ?? new Date().toISOString(),
+    });
+    setActiveSession({ ...activeSession, ...updated });
+    invalidateComboHubCache();
+    setView("runner");
   };
 
   const handleUpdateSession = async (
@@ -1406,6 +1424,16 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           onCreateAudience={(payload) => void handleCreateAudience(payload)}
           creating={audienceCreating}
           createError={audienceError}
+        />
+      )}
+
+      {view === "pre-session" && activeSession && (
+        <PreSessionFlow
+          session={activeSession}
+          contacts={contacts}
+          loading={runnerLoading}
+          onLaunch={handleLaunchPreSession}
+          onCancel={goToSessions}
         />
       )}
 

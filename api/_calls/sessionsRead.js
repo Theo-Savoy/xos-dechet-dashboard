@@ -98,7 +98,7 @@ async function buildSessionSummaries(client, userId, accessibleIds) {
 
   const { data: sessions, error: sessionsError } = await client
     .from("call_sessions")
-    .select("id, owner, name, status, created_at, scheduled_for, session_type")
+    .select("id, owner, name, status, created_at, scheduled_for, session_type, rdv_goal, engaged_at")
     .in("id", accessibleIds)
     .order("created_at", { ascending: false });
 
@@ -127,6 +127,8 @@ async function buildSessionSummaries(client, userId, accessibleIds) {
       created_at: session.created_at,
       scheduled_for: session.scheduled_for ?? null,
       session_type: session.session_type ?? "prospection",
+      rdv_goal: session.rdv_goal ?? null,
+      engaged_at: session.engaged_at ?? null,
       is_owner: session.owner === userId,
       shared: members.length > 0,
       member_count: members.length,
@@ -424,7 +426,7 @@ export async function handleSessionsRead({ url, user, client, headers }) {
     ] = await Promise.all([
       client
         .from("call_sessions")
-        .select("id, owner, name, status, created_at, scheduled_for, session_type")
+        .select("id, owner, name, status, created_at, scheduled_for, session_type, rdv_goal, engaged_at")
         .eq("id", sessionId)
         .maybeSingle(),
       client

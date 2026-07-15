@@ -248,7 +248,13 @@ export async function fetchCreateAudienceSessions(
 export async function updateSession(
   token: string,
   sessionId: number,
-  patch: { name?: string; scheduled_for?: string | null; session_type?: string },
+  patch: {
+    name?: string;
+    scheduled_for?: string | null;
+    session_type?: string;
+    rdv_goal?: number;
+    engaged_at?: string;
+  },
 ): Promise<SessionDetail> {
   const data = await apiFetch<{ session: SessionDetail }>(token, "/api/calls", {
     method: "POST",

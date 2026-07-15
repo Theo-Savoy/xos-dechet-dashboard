@@ -40,6 +40,8 @@ export type SessionSummary = {
   shared?: boolean;
   member_count?: number;
   members?: TeamMember[];
+  rdv_goal?: number | null;
+  engaged_at?: string | null;
 };
 
 export type RecallInboxItem = {
@@ -165,6 +167,8 @@ export type SessionDetail = {
   is_owner?: boolean;
   owner_id?: string;
   members?: TeamMember[];
+  rdv_goal?: number | null;
+  engaged_at?: string | null;
 };
 
 export type ContactPreview = {

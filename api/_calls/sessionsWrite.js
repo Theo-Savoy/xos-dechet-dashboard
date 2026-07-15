@@ -183,7 +183,7 @@ export async function handleSessionWrite({ action, body, user, client, headers }
   }
 
   if (action === "update_session") {
-    const { session_id, name, scheduled_for: scheduledForInput, session_type: sessionTypeInput } = body;
+    const { session_id, name, scheduled_for: scheduledForInput, session_type: sessionTypeInput, rdv_goal: rdvGoalInput, engaged_at: engagedAtInput } = body;
 
     if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
       return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
@@ -213,6 +213,24 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       }
       patch.session_type = sessionTypeInput;
     }
+    if (rdvGoalInput !== undefined) {
+      if (!Number.isInteger(rdvGoalInput) || rdvGoalInput < 1 || rdvGoalInput > 8) {
+        return new Response(JSON.stringify({ error: "invalid_rdv_goal" }), { status: 400, headers });
+      }
+      if (sessionCheck.session.rdv_goal != null && rdvGoalInput < sessionCheck.session.rdv_goal) {
+        return new Response(JSON.stringify({ error: "rdv_goal_cannot_decrease" }), { status: 409, headers });
+      }
+      patch.rdv_goal = rdvGoalInput;
+    }
+    if (engagedAtInput !== undefined) {
+      if (typeof engagedAtInput !== "string" || Number.isNaN(Date.parse(engagedAtInput))) {
+        return new Response(JSON.stringify({ error: "invalid_engaged_at" }), { status: 400, headers });
+      }
+      patch.engaged_at = engagedAtInput;
+    }
+    if (rdvGoalInput !== undefined && sessionCheck.session.engaged_at && !engagedAtInput) {
+      patch.engaged_at = sessionCheck.session.engaged_at;
+    }
     if (Object.keys(patch).length === 0) {
       return new Response(JSON.stringify({ error: "empty_update" }), { status: 400, headers });
     }
@@ -221,7 +239,7 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       .from("call_sessions")
       .update(patch)
       .eq("id", session_id)
-      .select("id, name, status, created_at, scheduled_for, session_type")
+      .select("id, name, status, created_at, scheduled_for, session_type, rdv_goal, engaged_at")
       .single();
 
     if (updateError || !updated) {

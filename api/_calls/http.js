@@ -172,7 +172,7 @@ export function isClaimActive(claimedAt, now = Date.now()) {
 export async function assertSessionAccess(client, sessionId, userId, { requireOwner = false } = {}) {
   const { data: session, error } = await client
     .from("call_sessions")
-    .select("id, owner, name, status")
+    .select("id, owner, name, status, rdv_goal, engaged_at")
     .eq("id", sessionId)
     .maybeSingle();
   if (error && !isNotFoundError(error)) return { error: "session_lookup_failed", status: 500 };
@@ -277,7 +277,7 @@ export async function insertSessionWithContacts(client, userId, name, contacts, 
       scheduled_for: scheduledFor,
       session_type: sessionType,
     })
-    .select("id, name, status, created_at, scheduled_for, session_type")
+    .select("id, name, status, created_at, scheduled_for, session_type, rdv_goal, engaged_at")
     .single();
 
   if (sessionError || !session) return { error: "session_creation_failed", status: 500 };

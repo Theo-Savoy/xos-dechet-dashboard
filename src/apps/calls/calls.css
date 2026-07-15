@@ -537,6 +537,67 @@
   margin: 0;
 }
 
+.calls-pre-session {
+  width: min(42rem, 100%);
+}
+
+.calls-pre-session__eyebrow {
+  color: var(--xos-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.calls-pre-session h2 {
+  margin: 0;
+}
+
+.calls-pre-session__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.calls-pre-session__accounts {
+  max-height: 17rem;
+  overflow: auto;
+}
+
+.calls-pre-session__accounts li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 0.75rem;
+}
+
+.calls-pre-session__accounts small {
+  grid-column: 1 / -1;
+  color: var(--xos-text-muted);
+}
+
+.calls-pre-session__warmup {
+  display: grid;
+  min-height: 14rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.8rem;
+  text-align: center;
+}
+
+.calls-pre-session__countdown {
+  color: var(--xos-accent);
+  font-size: clamp(4rem, 15vw, 7rem);
+  font-weight: 800;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calls-pre-session__countdown {
+    transition: none;
+  }
+}
+
 .calls-datepicker {
   position: relative;
 }
