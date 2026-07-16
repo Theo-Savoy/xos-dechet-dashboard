@@ -469,6 +469,8 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     maxSessions: number;
     namePrefix?: string;
     excludedCount: number;
+    scheduledFor?: string;
+    sessionType?: SessionType;
   }) => {
     if (!token) return;
     setAudienceCreating(true);
@@ -479,6 +481,8 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
         target_size: payload.targetSize,
         max_sessions: payload.maxSessions,
         name_prefix: payload.namePrefix,
+        scheduled_for: payload.scheduledFor,
+        session_type: payload.sessionType,
       });
       setAudienceBanner({
         sessionId: data.sessions[0].id,
@@ -1237,7 +1241,9 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
-      setView("runner");
+      // Every newly created session passes through the same intentional
+      // objective/warmup gate, including the #2 follow-up action.
+      setView("pre-session");
     } catch (err) {
       setRunnerError(errorMessage(err));
     } finally {
@@ -1406,6 +1412,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
 
   const goToSessions = () => {
     setView("sessions");
+    setRollover(null);
     setActiveSession(null);
     setContacts([]);
     setPreview([]);
@@ -1460,6 +1467,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           loading={rolloverLoading}
           error={rolloverError}
           onApply={handleRolloverApply}
+          onCancel={goToSessions}
         />
       )}
       {view === "sessions" && !rollover && rolloverError && (
@@ -1534,6 +1542,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           onCreate={(name, list, scheduledFor, sessionType, memberUserIds) =>
             void handleCreate(name, list, scheduledFor, sessionType, memberUserIds)
           }
+          onCreateAudience={(payload) => void handleCreateAudience(payload)}
         />
       )}
 

@@ -11,6 +11,8 @@ import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
 import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
+import { packAccountsIntoSessions } from "./audienceBinPacking";
+import type { AudienceSessionGroup } from "./api";
 import type { ContactPreview, SessionType, TeamMember } from "./types";
 
 type NewSessionViewProps = {
@@ -49,6 +51,15 @@ type NewSessionViewProps = {
     sessionType: SessionType,
     memberUserIds: string[],
   ) => void;
+  onCreateAudience?: (payload: {
+    groups: AudienceSessionGroup[];
+    targetSize: number;
+    maxSessions: number;
+    namePrefix?: string;
+    excludedCount: number;
+    scheduledFor: string;
+    sessionType: SessionType;
+  }) => void;
 };
 
 function Cell({
@@ -98,6 +109,7 @@ export function NewSessionView({
   onSavePreset,
   onDeletePreset,
   onCreate,
+  onCreateAudience,
 }: NewSessionViewProps) {
   const [sessionName, setSessionName] = useState("");
   const [scheduledFor, setScheduledFor] = useState(todayParisIso);
@@ -106,6 +118,9 @@ export function NewSessionView({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareMemberIds, setShareMemberIds] = useState<Set<string>>(new Set());
   const [capHint, setCapHint] = useState<string | null>(null);
+  const [splitSessions, setSplitSessions] = useState(false);
+  const [targetSize, setTargetSize] = useState(50);
+  const [maxSessions, setMaxSessions] = useState(5);
 
   const shareableTeam = useMemo(
     () =>
@@ -147,6 +162,26 @@ export function NewSessionView({
   const selectedContacts = useMemo(
     () => preview.filter((contact) => selectedIds.has(contact.sf_contact_id)),
     [preview, selectedIds],
+  );
+
+  const packableAccounts = useMemo(() => {
+    const grouped = new Map<string, ContactPreview[]>();
+    for (const contact of selectedContacts) {
+      const id = contact.sf_account_id || contact.sf_contact_id;
+      const current = grouped.get(id) ?? [];
+      current.push(contact);
+      grouped.set(id, current);
+    }
+    return [...grouped.entries()].map(([id, contacts]) => ({
+      id,
+      name: contacts[0]?.account_name || "Compte non renseigné",
+      contacts,
+    }));
+  }, [selectedContacts]);
+
+  const packedGroups = useMemo(
+    () => packAccountsIntoSessions(packableAccounts, targetSize, maxSessions),
+    [packableAccounts, targetSize, maxSessions],
   );
 
   const toggleContact = (contactId: string) => {
@@ -204,6 +239,18 @@ export function NewSessionView({
   const handleCreate = () => {
     const name = sessionName.trim();
     if (!name || selectedContacts.length === 0) return;
+    if (splitSessions && onCreateAudience && packedGroups.length > 0) {
+      onCreateAudience({
+        groups: packedGroups.map((group) => ({ account_ids: group.accountIds, contacts: group.contacts })),
+        targetSize,
+        maxSessions,
+        namePrefix: name,
+        excludedCount,
+        scheduledFor,
+        sessionType,
+      });
+      return;
+    }
     onCreate(name, selectedContacts, scheduledFor, sessionType, [...shareMemberIds]);
   };
 
@@ -292,11 +339,53 @@ export function NewSessionView({
             </label>
             <DatePicker label="Date de séance" value={scheduledFor} onChange={setScheduledFor} />
             <SessionTypePicker value={sessionType} onChange={setSessionType} />
+            {onCreateAudience && (
+              <div className="calls-name-form__split">
+                <label className="calls-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={splitSessions}
+                    onChange={(event) => setSplitSessions(event.target.checked)}
+                    aria-label="Découper en plusieurs séances"
+                  />
+                  <span>Découper en plusieurs séances</span>
+                </label>
+                {splitSessions && (
+                  <>
+                    <div className="calls-fb-row">
+                      <label className="calls-field">
+                        <span>Taille cible par séance</span>
+                        <input
+                          type="number"
+                          className="calls-input"
+                          min={1}
+                          value={targetSize}
+                          onChange={(event) => setTargetSize(Math.max(1, Number(event.target.value) || 1))}
+                        />
+                      </label>
+                      <label className="calls-field">
+                        <span>Nombre max de séances</span>
+                        <input
+                          type="number"
+                          className="calls-input"
+                          min={1}
+                          value={maxSessions}
+                          onChange={(event) => setMaxSessions(Math.max(1, Number(event.target.value) || 1))}
+                        />
+                      </label>
+                    </div>
+                    <p className="calls-muted calls-fb-hint" role="status">
+                      Aperçu : {packedGroups.length} séance{packedGroups.length > 1 ? "s" : ""} · les contacts d&apos;un même compte restent ensemble.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             <Button
               onClick={handleCreate}
-              disabled={loading || !sessionName.trim() || selectedContacts.length === 0}
+              disabled={loading || !sessionName.trim() || selectedContacts.length === 0 || (splitSessions && packedGroups.length === 0)}
             >
-              {loading ? "Création…" : "Lancer la séance"}
+              {loading ? "Création…" : splitSessions ? `Créer ${packedGroups.length} séance${packedGroups.length > 1 ? "s" : ""}` : "Lancer la séance"}
             </Button>
             {shareableTeam.length > 0 && (
               <div className="calls-name-form__share">

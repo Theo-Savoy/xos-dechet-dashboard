@@ -17,6 +17,7 @@ type RolloverDecisionViewProps = {
   loading?: boolean;
   error?: string | null;
   onApply: (decisions: RolloverDecision[]) => Promise<void>;
+  onCancel: () => void;
 };
 
 export function RolloverDecisionView({
@@ -25,6 +26,7 @@ export function RolloverDecisionView({
   loading = false,
   error = null,
   onApply,
+  onCancel,
 }: RolloverDecisionViewProps) {
   const pending = useMemo(() => contacts.filter((contact) => contact.status === "pending"), [contacts]);
   const [globalAction, setGlobalAction] = useState<RolloverDecision["action"]>("contact");
@@ -56,9 +58,12 @@ export function RolloverDecisionView({
           <Tag variant="warning">Séance à clôturer</Tag>
           <h2 id="calls-rollover-title">Décider du devenir des contacts</h2>
           <p className="calls-muted">
-            {session.name} est datée du {formatIsoDateFr(sessionDayKey(session))}.
-            {" "}La séance est fermée, mais les {pending.length} contact{pending.length > 1 ? "s" : ""} en attente restent disponibles.
+            Depuis « {session.name} » ({formatIsoDateFr(sessionDayKey(session))}), les contacts non contactés restent disponibles.
           </p>
+          <div className="calls-rollover__summary" aria-label="Résumé de la séance">
+            <Tag variant="accent">{pending.length} non contacté{pending.length > 1 ? "s" : ""}</Tag>
+            <Tag>{contacts.length} contact{contacts.length > 1 ? "s" : ""} dans la séance</Tag>
+          </div>
         </div>
       </header>
 
@@ -93,22 +98,22 @@ export function RolloverDecisionView({
                   <strong>{contact.contact_name}</strong>
                   {contact.account_name && <small>{contact.account_name}</small>}
                 </div>
-                <label>
-                  <span>Décision</span>
-                  <select
-                    aria-label={"Décision pour " + contact.contact_name}
-                    value={action}
-                    onChange={(event) =>
-                      setOverrides((current) => ({
-                        ...current,
-                        [contact.id]: event.target.value as RolloverDecision["action"],
-                      }))
-                    }
+                <div className="calls-rollover__actions" role="group" aria-label={`Décision pour ${contact.contact_name}`}>
+                  <Button
+                    variant={action === "contact" ? "primary" : "secondary"}
+                    aria-pressed={action === "contact"}
+                    onClick={() => setOverrides((current) => ({ ...current, [contact.id]: "contact" }))}
                   >
-                    <option value="contact">Contacter</option>
-                    <option value="remove">Retirer</option>
-                  </select>
-                </label>
+                    Contacter {contact.contact_name}
+                  </Button>
+                  <Button
+                    variant={action === "remove" ? "primary" : "secondary"}
+                    aria-pressed={action === "remove"}
+                    onClick={() => setOverrides((current) => ({ ...current, [contact.id]: "remove" }))}
+                  >
+                    Retirer {contact.contact_name}
+                  </Button>
+                </div>
                 {action === "contact" && (
                   <DatePicker
                     label={"Date pour " + contact.contact_name}
@@ -121,9 +126,12 @@ export function RolloverDecisionView({
           })}
         </ul>
 
-        <div className="calls-runner-actions">
+        <div className="calls-runner-actions calls-rollover__footer">
           <Button onClick={apply} disabled={loading || pending.length === 0}>
             {loading ? "Enregistrement…" : "Appliquer les décisions"}
+          </Button>
+          <Button variant="secondary" onClick={onCancel} disabled={loading}>
+            Retour à Combo
           </Button>
         </div>
       </GlassCard>

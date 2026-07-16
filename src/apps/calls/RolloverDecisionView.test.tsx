@@ -35,7 +35,7 @@ const contact = (id: number, name: string): SessionContact => ({
 });
 
 describe("RolloverDecisionView", () => {
-  it("requires an explicit apply and confirmation before bulk removal", async () => {
+  it("uses action buttons per contact and requires confirmation before bulk removal", async () => {
     const user = userEvent.setup();
     const onApply = vi.fn().mockResolvedValue(undefined);
     render(
@@ -43,10 +43,14 @@ describe("RolloverDecisionView", () => {
         session={session}
         contacts={[contact(1, "Alice Martin"), contact(2, "Bruno Martin")]}
         onApply={onApply}
+        onCancel={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: "Retirer" }));
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Contacter Alice Martin" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retirer Alice Martin" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Appliquer les décisions" }));
     expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Confirmer le retrait" })).toBeTruthy();
@@ -55,5 +59,21 @@ describe("RolloverDecisionView", () => {
       { contactId: 1, action: "remove", scheduledFor: null },
       { contactId: 2, action: "remove", scheduledFor: null },
     ]);
+  });
+
+  it("provides a working route back to Combo", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(
+      <RolloverDecisionView
+        session={session}
+        contacts={[contact(1, "Alice Martin")]}
+        onApply={vi.fn().mockResolvedValue(undefined)}
+        onCancel={onCancel}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Retour à Combo/i }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

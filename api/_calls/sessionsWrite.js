@@ -323,6 +323,7 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       scheduled_for: scheduledForInput,
       target_session_id: targetSessionId,
       name: nameInput,
+      session_type: sessionTypeInput,
     } = body;
 
     if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
@@ -347,6 +348,9 @@ export async function handleSessionWrite({ action, body, user, client, headers }
       && (typeof nameInput !== "string" || nameInput.trim().length === 0 || nameInput.trim().length > 120)
     ) {
       return new Response(JSON.stringify({ error: "invalid_name" }), { status: 400, headers });
+    }
+    if (sessionTypeInput !== undefined && !isValidSessionType(sessionTypeInput)) {
+      return new Response(JSON.stringify({ error: "invalid_session_type" }), { status: 400, headers });
     }
 
     const sessionCheck = await assertSessionOwner(client, session_id, user.id);
@@ -462,7 +466,15 @@ export async function handleSessionWrite({ action, body, user, client, headers }
         continuationName,
         payloadContacts,
         scheduledForInput,
-        { sessionType: "relance" },
+        {
+          // Un contact encore jamais appelé reste une prospection reportée,
+          // pas une relance. Les contacts déjà essayés restent des relances.
+          sessionType: sessionTypeInput || (
+            sourceContacts.every((contact) => contact.status === "pending" && !(contact.attempt_count > 0))
+              ? "prospection"
+              : "relance"
+          ),
+        },
       );
       if (created.error) {
         return new Response(JSON.stringify({ error: created.error }), { status: created.status, headers });

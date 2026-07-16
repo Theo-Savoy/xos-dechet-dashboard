@@ -383,6 +383,7 @@ export async function deferContacts(
   scheduledFor: string,
   targetSessionId?: number | null,
   name?: string | null,
+  sessionType?: string,
 ): Promise<{ target_session: SessionDetail; contacts?: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
@@ -393,6 +394,7 @@ export async function deferContacts(
       scheduled_for: scheduledFor,
       ...(typeof targetSessionId === "number" ? { target_session_id: targetSessionId } : {}),
       ...(name ? { name } : {}),
+      ...(sessionType ? { session_type: sessionType } : {}),
     }),
   });
 }

@@ -1347,7 +1347,7 @@ describe("POST /api/calls", () => {
   });
 
   describe("defer_contacts", () => {
-    it("creates a relance session when no target is provided", async () => {
+    it("creates a prospecting session when never-contacted pending contacts are deferred", async () => {
       mockDb
         .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "Base", status: "active" }, error: null })
         .mockResolvedValueOnce({
@@ -1368,7 +1368,7 @@ describe("POST /api/calls", () => {
             status: "active",
             created_at: "2026-01-01T00:00:00Z",
             scheduled_for: "2026-07-15",
-            session_type: "relance",
+            session_type: "prospection",
           },
           error: null,
         })
@@ -1387,7 +1387,7 @@ describe("POST /api/calls", () => {
       );
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.target_session.session_type).toBe("relance");
+      expect(body.target_session.session_type).toBe("prospection");
       expect(body.target_session.name).toBe("Base #2");
     });
 

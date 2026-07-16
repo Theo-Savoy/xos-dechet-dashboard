@@ -293,6 +293,54 @@ describe("CallManagerApp component", () => {
     expect(screen.queryByRole("heading", { name: "Rechercher des comptes" })).toBeNull();
   });
 
+  it("opens recap follow-up sessions in the pre-session flow", async () => {
+    const user = userEvent.setup();
+    const contact = {
+      id: 101,
+      position: 0,
+      sf_contact_id: "003000000000001AAA",
+      sf_account_id: null,
+      contact_name: "Alice Martin",
+      account_name: "ACME",
+      phone: null,
+      title: null,
+      linkedin_url: null,
+      status: "called",
+      outcome: "Appel non décroché",
+      comments: null,
+      sf_task_id: null,
+      sf_event_id: null,
+      called_at: "2026-07-15T10:00:00Z",
+    };
+    const nextContact = { ...contact, status: "pending", outcome: null };
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
+      if (url === "/api/calls?session_id=1") {
+        return Promise.resolve(new Response(JSON.stringify({
+          session: { id: 1, name: "Prospection Lyon", status: "completed", created_at: "2026-07-15T10:00:00Z" },
+          contacts: [contact],
+        }), { status: 200 }));
+      }
+      if (url === "/api/calls" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { action?: string };
+        if (body.action === "create_follow_up_session") {
+          return Promise.resolve(new Response(JSON.stringify({
+            session: { id: 7, name: "Prospection Lyon #2", status: "active", created_at: "2026-07-16T10:00:00Z", rdv_goal: null, engaged_at: null },
+            contacts: [nextContact],
+          }), { status: 200 }));
+        }
+      }
+      return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
+    });
+
+    render(<CallManagerApp params={{ session_id: "1" }} />);
+    await user.click(await screen.findByRole("button", { name: /Créer séance #2/i }));
+
+    expect(await screen.findByRole("heading", { name: "Prospection Lyon #2" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Définir mon objectif" })).toBeTruthy();
+  });
+
   it("keeps the runner objective read-only and sourced from the session", async () => {
     const activeSession = {
       id: 1,

@@ -1428,6 +1428,55 @@ describe("preview selection and enriched rows", () => {
     );
   });
 
+  it("can split a normal contact list with the shared audience packing contract", async () => {
+    const user = userEvent.setup();
+    const onCreateAudience = vi.fn();
+    render(
+      <NewSessionView
+        filters={emptyFilterTree()}
+        onFiltersChange={vi.fn()}
+        contactLimit={200}
+        onContactLimitChange={vi.fn()}
+        maxPerCompany={null}
+        onMaxPerCompanyChange={vi.fn()}
+        loading={false}
+        previewLoading={false}
+        matchCount={null}
+        matchCountCapped={false}
+        matchCountLoading={false}
+        matchCountError={null}
+        error={null}
+        preview={preview}
+        dedup={[]}
+        previewTruncated={false}
+        presets={[]}
+        presetsLoading={false}
+        savingPreset={false}
+        currentUserId="user-1"
+        onBack={vi.fn()}
+        onPreview={vi.fn()}
+        onLoadPreset={vi.fn()}
+        onSavePreset={vi.fn()}
+        onDeletePreset={vi.fn()}
+        onCreate={vi.fn()}
+        onCreateAudience={onCreateAudience}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: /Découper en plusieurs séances/i }));
+    fireEvent.change(screen.getByLabelText("Taille cible par séance"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Nombre max de séances"), { target: { value: "2" } });
+    await user.type(screen.getByLabelText("Nom de la séance"), "Liste test");
+    await user.click(screen.getByRole("button", { name: "Créer 2 séances" }));
+
+    expect(onCreateAudience).toHaveBeenCalledWith(expect.objectContaining({
+      targetSize: 1,
+      maxSessions: 2,
+      namePrefix: "Liste test",
+      groups: expect.any(Array),
+    }));
+  });
+
   it("selects all preview contacts when max per company was applied at fetch time", () => {
     const cappedPreview = [
       {

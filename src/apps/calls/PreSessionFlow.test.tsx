@@ -90,6 +90,20 @@ describe("PreSessionFlow", () => {
     expect(screen.getByText(/Objectif choisi : 6 RDV/)).toBeTruthy();
   });
 
+  it("shows the current phase in a clear preparation indicator", () => {
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        onLaunch={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("list", { name: "Étapes de préparation" })).toBeTruthy();
+    expect(screen.getByRole("listitem", { name: /Revue.*en cours/i })).toBeTruthy();
+  });
+
   it("lets a valid objective start the accessible warmup countdown", async () => {
     const user = userEvent.setup();
     render(
@@ -113,7 +127,7 @@ describe("PreSessionFlow", () => {
     expect(callsCss).toContain(".calls-pre-session");
     expect(callsCss).toContain("max-height: calc(100dvh - 2rem)");
     expect(callsCss).toContain(".calls-pre-session__accounts");
-    expect(callsCss).toContain("backdrop-filter: blur(16px) saturate(125%)");
+    expect(callsCss).toContain("backdrop-filter: blur(24px) saturate(145%)");
     expect(callsCss).toContain(".calls-stat__progress");
     expect(callsCss).toContain(".calls-stat--rdv-heat-1");
   });

@@ -14,6 +14,11 @@ type PreSessionFlowProps = {
 type Phase = "review" | "objective" | "warmup";
 
 const OBJECTIVE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+const PHASES: { id: Phase; label: string }[] = [
+  { id: "review", label: "Revue" },
+  { id: "objective", label: "Objectif" },
+  { id: "warmup", label: "Activation" },
+];
 
 function accountGroups(contacts: SessionContact[]) {
   const groups = new Map<string, { name: string; contacts: SessionContact[] }>();
@@ -62,6 +67,19 @@ export function PreSessionFlow({ session, contacts, loading = false, onLaunch, o
       <GlassCard className="calls-modal__panel calls-pre-session">
         <div className="calls-pre-session__eyebrow">Préparation de séance</div>
         <h2 id="calls-pre-session-title">{session.name}</h2>
+        <ol className="calls-pre-session__phases" aria-label="Étapes de préparation">
+          {PHASES.map((item, index) => (
+            <li
+              key={item.id}
+              aria-label={`${item.label}${phase === item.id ? " — en cours" : ""}`}
+              aria-current={phase === item.id ? "step" : undefined}
+              className={phase === item.id ? "calls-pre-session__phase calls-pre-session__phase--active" : "calls-pre-session__phase"}
+            >
+              <span>{index + 1}</span>
+              {item.label}
+            </li>
+          ))}
+        </ol>
         {phase === "review" && (
           <>
             <p className="calls-muted">Regarde la matière avant de te lancer. Cette séance contient {remaining} contact{remaining > 1 ? "s" : ""} à traiter.</p>
@@ -136,6 +154,9 @@ export function PreSessionFlow({ session, contacts, loading = false, onLaunch, o
                 <Button onClick={() => void launch()} disabled={loading}>Entrer dans la séance</Button>
               </>
             )}
+            <div className="calls-pre-session__warmup-track" aria-hidden="true">
+              <span className={countdown === 0 ? "calls-pre-session__warmup-progress calls-pre-session__warmup-progress--done" : "calls-pre-session__warmup-progress"} />
+            </div>
           </div>
         )}
       </GlassCard>
