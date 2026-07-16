@@ -10,7 +10,8 @@ import {
   type OpportunityWorkspaceItem,
 } from './api';
 import { BulkActionBar } from './BulkActionBar';
-import { CommandPreviewPanel, type CommandAction } from './CommandPreviewPanel';
+import { CommandPreviewPanel } from './CommandPreviewPanel';
+import type { CommandAction } from './CommandPreviewPanel.types';
 import { OpportunitiesFilters } from './OpportunitiesFilters';
 import { OpportunitiesTable } from './OpportunitiesTable';
 import {

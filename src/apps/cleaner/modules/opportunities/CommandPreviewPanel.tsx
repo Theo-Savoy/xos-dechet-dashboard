@@ -4,9 +4,7 @@ import type {
   OpportunityCommandPreview,
   OpportunityCommandResult,
 } from './api';
-
-export type CommandAction =
-  'reassign-owner' | 'close-date' | 'sale-type' | 'close-lost';
+import type { CommandAction } from './CommandPreviewPanel.types';
 
 type SelectedCommandItem = { id: string; name?: string | null };
 type Option = { id: string; label: string };
@@ -92,15 +90,15 @@ export function CommandPreviewPanel({
   const [saleType, setSaleType] = useState('');
   const [lossReason, setLossReason] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const values = { ownerId, closeDate, saleType, lossReason };
   const changes = useMemo(
-    () => fieldsFor(action, values),
+    () => fieldsFor(action, { ownerId, closeDate, saleType, lossReason }),
     [action, closeDate, lossReason, ownerId, saleType],
   );
   const previewMatchesDraft =
     preview && JSON.stringify(preview.changes) === JSON.stringify(changes);
 
   useEffect(() => {
+    const previousFocusElement = previousFocus.current;
     dialogRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !loading) onClose();
@@ -108,7 +106,7 @@ export function CommandPreviewPanel({
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      previousFocus.current?.focus();
+      previousFocusElement?.focus();
     };
   }, [loading, onClose]);
 

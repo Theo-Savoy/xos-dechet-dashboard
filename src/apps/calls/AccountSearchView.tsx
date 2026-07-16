@@ -13,7 +13,8 @@ import {
 } from "../../crm";
 import { fetchAccountsSearch, CallsApiError, type AudienceSessionGroup } from "./api";
 import { packAccountsIntoSessions } from "./audienceBinPacking";
-import { asOptions, ChipGroup, PicklistMultiSelect } from "./filterControls";
+import { ChipGroup, PicklistMultiSelect } from "./filterControls";
+import { asOptions } from "./filterControls.helpers";
 import type { AccountSearchHit, ContactPreview, TeamMember } from "./types";
 
 type AbmFilters = {

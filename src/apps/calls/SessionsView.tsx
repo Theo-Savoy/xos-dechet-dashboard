@@ -1,7 +1,8 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { ProgressBar } from "./ProgressBar";
-import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
+import { DatePicker, SessionTypePicker } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
 import type { CallStats, PeriodKpis, SessionSummary, SessionType } from "./types";
 import { SESSION_TYPE_OPTIONS, sessionTypeLabel } from "./types";
 import { sessionDayKey } from "./sessionLifecycle";

@@ -1,5 +1,5 @@
 import type { CleanerCapabilities } from '../../contracts';
-import type { CommandAction } from './CommandPreviewPanel';
+import type { CommandAction } from './CommandPreviewPanel.types';
 
 type BulkActionBarProps = {
   selectedCount: number;

@@ -1,19 +1,13 @@
 import { RECALL_ELIGIBLE_RESULTATS, type ResultatCall } from "../../crm";
-import { DatePicker, todayParisIso } from "./formControls";
+import { DatePicker } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
+import { RECALL_PRESETS } from "./RecallFields.helpers";
 
 function addDaysIso(days: number): string {
   const [y, m, d] = todayParisIso().split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d + days));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
-
-export const RECALL_PRESETS: { days: number; label: string; shiftDigit: string }[] = [
-  { days: 0, label: "Aujourd'hui", shiftDigit: "1" },
-  { days: 1, label: "+1 j", shiftDigit: "2" },
-  { days: 3, label: "+3 j", shiftDigit: "3" },
-  { days: 7, label: "+7 j", shiftDigit: "4" },
-  { days: 14, label: "+14 j", shiftDigit: "5" },
-];
 
 export function RecallFields({
   resultat,

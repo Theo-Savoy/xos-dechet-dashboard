@@ -40,7 +40,8 @@ import { createDialerLogQueue } from "./dialerLogQueue";
 import { NewSessionView } from "./NewSessionView";
 import { RecapView } from "./RecapView";
 import { RECALL_QUEUE_SESSION, recallsToSessionContacts } from "./recallQueue";
-import { RunnerView, type LogPayload } from "./RunnerView";
+import { RunnerView } from "./RunnerView";
+import type { LogPayload } from "./RunnerView.types";
 import { SessionsView } from "./SessionsView";
 import { PreSessionFlow } from "./PreSessionFlow";
 import { ShareSessionPanel } from "./ShareSessionPanel";
@@ -58,7 +59,7 @@ import type {
   SessionType,
   TeamMember,
 } from "./types";
-import { todayParisIso } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
 import "./calls.css";
 
 const CONTEXT_PREFETCH_AHEAD = 3;
@@ -66,9 +67,9 @@ const CONTEXT_CACHE_MAX = 32;
 
 type View = "sessions" | "new" | "account-search" | "pre-session" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
 
-function viewFromParams(params?: Record<string, string>): View {
-  if (params?.session_id) return "loading-params";
-  switch (params?.view) {
+function viewFromParams(view?: string, sessionId?: string): View {
+  if (sessionId) return "loading-params";
+  switch (view) {
     case "pilotage":
       return "pilotage";
     case "new":
@@ -79,7 +80,7 @@ function viewFromParams(params?: Record<string, string>): View {
       return "recalls";
     case "runner":
     case "recap":
-      return params.session_id ? "loading-params" : "sessions";
+      return sessionId ? "loading-params" : "sessions";
     default:
       return "sessions";
   }
@@ -153,7 +154,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
   // saute la page d'accueil "sessions" et on affiche un loader le temps du
   // fetch. La view bascule ensuite vers runner/recap via openSession().
   // params.view=pilotage ouvre le cockpit manager.
-  const [view, setView] = useState<View>(() => viewFromParams(params));
+  const [view, setView] = useState<View>(() => viewFromParams(params?.view, params?.session_id));
   const [appRole, setAppRole] = useState<AppRole>("commercial");
   const canPilotage = appRole === "manager" || appRole === "admin";
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -410,7 +411,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
 
   useEffect(() => {
     if (params?.session_id) return;
-    const next = viewFromParams(params);
+    const next = viewFromParams(params?.view, params?.session_id);
     if (next !== "loading-params") {
       setView(next);
     }
@@ -743,12 +744,14 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     [loadContactContext],
   );
 
+  const contextSessionId = activeSession?.id ?? null;
+
   useEffect(() => {
     if (view !== "runner" && view !== "recalls") {
       lastContextKey.current = null;
       return;
     }
-    if (view === "runner" && !activeSession) return;
+    if (view === "runner" && contextSessionId === null) return;
 
     if (view === "recalls") {
       const focused = focusedContactId != null
@@ -780,7 +783,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       return;
     }
 
-    if (!activeSession) return;
+    if (contextSessionId === null) return;
     const targetId = resolveContextContactId(contacts, awaitingEvent?.id, focusedContactId);
 
     // Warm the cache as soon as the runner opens: current + next N pending.
@@ -788,7 +791,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       ...(targetId != null ? [targetId] : []),
       ...pendingContactsAhead(contacts, targetId, CONTEXT_PREFETCH_AHEAD).map((c) => c.id),
     ];
-    prefetchContactContexts(activeSession.id, [...new Set(warmIds)]);
+    prefetchContactContexts(contextSessionId, [...new Set(warmIds)]);
 
     if (!targetId) {
       lastContextKey.current = null;
@@ -798,14 +801,14 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
       contextTargetRef.current = null;
       return;
     }
-    const contextKey = `${activeSession.id}:${targetId}`;
+    const contextKey = `${contextSessionId}:${targetId}`;
     if (lastContextKey.current !== contextKey) {
       lastContextKey.current = contextKey;
-      void loadContactContext(activeSession.id, targetId);
+      void loadContactContext(contextSessionId, targetId);
     }
   }, [
     view,
-    activeSession?.id,
+    contextSessionId,
     awaitingEvent?.id,
     focusedContactId,
     contacts,

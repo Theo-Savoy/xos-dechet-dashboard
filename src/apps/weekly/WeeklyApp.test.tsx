@@ -24,7 +24,8 @@ vi.mock("recharts", () => ({
   ZAxis: () => null,
 }));
 
-import WeeklyApp, { scopePace } from "./WeeklyApp";
+import WeeklyApp from "./WeeklyApp";
+import { scopePace } from "./WeeklyApp.helpers";
 
 const baseContext = {
   iso_week: "2026-W28",

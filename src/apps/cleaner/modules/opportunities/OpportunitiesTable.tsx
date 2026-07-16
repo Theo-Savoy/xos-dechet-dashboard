@@ -6,6 +6,11 @@ import {
   type OpportunitySortKey,
   type OpportunityWorkspaceState,
 } from './filterState';
+import {
+  REASON_FAMILIES,
+  REASON_FAMILY_LABELS,
+  REASON_LABELS,
+} from './OpportunitiesTable.helpers';
 
 type OpportunitiesTableProps = {
   items: OpportunityWorkspaceItem[];
@@ -16,73 +21,6 @@ type OpportunitiesTableProps = {
   onTogglePage: () => void;
   onPageChange: (page: number) => void;
   onOpenDetail: (item: OpportunityWorkspaceItem) => void;
-};
-
-export const REASON_LABELS: Record<string, string> = {
-  close_date_overdue_over_1_year: "Date de clôture dépassée de plus d'un an",
-  close_date_overdue_6_to_12_months: 'Date de clôture dépassée de 6 à 12 mois',
-  close_date_overdue_3_to_6_months: 'Date de clôture dépassée de 3 à 6 mois',
-  close_date_overdue_under_3_months:
-    'Date de clôture dépassée de moins de 3 mois',
-  never_active: 'Aucune activité jamais enregistrée',
-  activity_never_recorded: 'Aucune activité jamais enregistrée',
-  no_activity_over_1_year: "Pas d'activité depuis plus d'un an",
-  activity_inactive_over_1_year: "Pas d'activité depuis plus d'un an",
-  no_activity_over_3_months: "Pas d'activité depuis plus de 3 mois",
-  activity_inactive_over_3_months: "Pas d'activité depuis plus de 3 mois",
-  no_activity_over_30_days: "Pas d'activité depuis plus de 30 jours",
-  activity_inactive_over_30_days: "Pas d'activité depuis plus de 30 jours",
-  amount_missing: 'Montant absent',
-  probability_zero: 'Probabilité égale à 0%',
-  owner_inactive: 'Propriétaire inactif',
-  owner_former_employee: 'Ancien commercial',
-  former_owner: 'Ancien commercial',
-  stalled_stage: 'Étape bloquée',
-  stage_suspect_stalled: 'Étape bloquée',
-  old_opportunity_2y: 'Opportunité créée il y a plus de 2 ans',
-  opportunity_created_over_2_years: 'Opportunité créée il y a plus de 2 ans',
-  old_opportunity_1y: "Opportunité créée il y a plus d'un an",
-  opportunity_created_over_1_year: "Opportunité créée il y a plus d'un an",
-  amount_implausible: 'Montant incohérent',
-};
-
-export const REASON_FAMILIES: Record<string, string> = {
-  close_date_overdue_over_1_year: 'closedate',
-  close_date_overdue_6_to_12_months: 'closedate',
-  close_date_overdue_3_to_6_months: 'closedate',
-  close_date_overdue_under_3_months: 'closedate',
-  never_active: 'activity',
-  activity_never_recorded: 'activity',
-  no_activity_over_1_year: 'activity',
-  activity_inactive_over_1_year: 'activity',
-  no_activity_over_3_months: 'activity',
-  activity_inactive_over_3_months: 'activity',
-  no_activity_over_30_days: 'activity',
-  activity_inactive_over_30_days: 'activity',
-  amount_missing: 'amount_missing',
-  probability_zero: 'prob_zero',
-  owner_inactive: 'owner_inactive',
-  owner_former_employee: 'owner_inactive',
-  former_owner: 'owner_inactive',
-  old_opportunity_2y: 'age',
-  opportunity_created_over_2_years: 'age',
-  old_opportunity_1y: 'age',
-  opportunity_created_over_1_year: 'age',
-  stalled_stage: 'stalled',
-  stage_suspect_stalled: 'stalled',
-  amount_implausible: 'incoherent_amount',
-};
-
-export const REASON_FAMILY_LABELS: Record<string, string> = {
-  closedate: '⏰ Close date dépassée',
-  activity: "⚡ Pas d'activité",
-  amount_missing: '💰 Absence de montant',
-  prob_zero: '📉 Probabilité',
-  owner_inactive: '👤 Propriétaire inactif / ancien',
-  age: "📅 Ancienneté d'opportunité",
-  stalled: '📌 Étape enlisée',
-  incoherent_amount: '⚠️ Montant incohérent',
-  autres: 'Autres anomalies',
 };
 
 const REASON_FAMILY_ORDER = [

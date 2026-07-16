@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { particlesFor } from './FloatingReactions';
+import { particlesFor } from './FloatingReactions.helpers';
 
 describe('floating reaction particles', () => {
   afterEach(() => vi.restoreAllMocks());

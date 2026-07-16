@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { DatePicker, formatIsoDateFr, todayParisIso } from "./formControls";
+import { DatePicker } from "./formControls";
+import { formatIsoDateFr, todayParisIso } from "./formControls.helpers";
 import { sessionDayKey } from "./sessionLifecycle";
 import type { SessionContact, SessionDetail } from "./types";
 

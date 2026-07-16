@@ -9,7 +9,8 @@ import {
 } from "../../crm";
 import { DedupBanner, type DedupMode } from "./DedupBanner";
 import { FilterBuilder } from "./FilterBuilder";
-import { DatePicker, SessionTypePicker, todayParisIso } from "./formControls";
+import { DatePicker, SessionTypePicker } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
 import { canSelectContact, selectIdsWithCompanyCap } from "./selection";
 import { packAccountsIntoSessions } from "./audienceBinPacking";
 import type { AudienceSessionGroup } from "./api";

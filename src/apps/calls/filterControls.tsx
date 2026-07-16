@@ -1,9 +1,5 @@
 import { useId, useState } from "react";
-
-/** Transforme une liste de valeurs simples en options {value, label}. */
-export function asOptions<T extends string>(values: readonly T[]): { value: T; label: string }[] {
-  return values.map((value) => ({ value, label: value }));
-}
+import type { PicklistGroup } from "./filterControls.helpers";
 
 /** Groupe de chips à sélection multiple — logique OU, visible pour l'utilisateur. */
 export function ChipGroup<T extends string>({
@@ -96,13 +92,6 @@ export function TriState({
     </div>
   );
 }
-
-/** Liste searchable à cases à cocher pour picklists volumineuses. */
-export type PicklistGroup<T extends string> = {
-  id: string;
-  label: string;
-  values: readonly T[];
-};
 
 export function PicklistMultiSelect<T extends string>({
   label,

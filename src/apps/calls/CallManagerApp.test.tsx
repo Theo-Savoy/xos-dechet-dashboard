@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRegistry, getAppManifest } from "../../os/registry";
 import { useSession } from "../../auth/useSession";
-import { todayParisIso } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
 
 const testToday = todayParisIso();
 const mockSession = {

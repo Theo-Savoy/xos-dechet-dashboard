@@ -15,23 +15,13 @@ import {
   type FloatingReactionBurst,
 } from './notificationsStore';
 import { useRealtimeNotifications } from './useRealtimeNotifications';
+import {
+  NOTIFICATION_CLIENT_TTL_MS,
+  shouldPollNotifications,
+} from './ControlCenter.helpers';
 import './controlCenter.css';
 
-export const NOTIFICATION_CLIENT_TTL_MS = 6 * 60 * 1000;
-export const REALTIME_EVENT_TTL_MS = 60 * 1000;
 const REACTION_TTL_MS = 30 * 60 * 1000;
-
-export function shouldPollNotifications(
-  realtimeHealthy: boolean,
-  realtimeLastEventAt: number | null,
-  now = Date.now(),
-): boolean {
-  return (
-    !realtimeHealthy ||
-    realtimeLastEventAt === null ||
-    now - realtimeLastEventAt >= REALTIME_EVENT_TTL_MS
-  );
-}
 
 type ControlCenterProps = {
   accessToken: string;

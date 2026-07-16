@@ -33,7 +33,8 @@ import {
   rdvHeatLevel,
   type RdvHeat,
 } from "./rdvCelebrate";
-import { DatePicker, formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls";
+import { DatePicker } from "./formControls";
+import { formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls.helpers";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
 import {
@@ -58,6 +59,7 @@ import { RESULTAT_OPTIONS, sessionTypeLabel } from "./types";
 import { ResultButtons } from "./ResultButtons";
 import { RecallFields } from "./RecallFields";
 import { ContextSideSkeleton } from "./ContextSideSkeleton";
+import type { DeferPayload, LogPayload } from "./RunnerView.types";
 
 const RECALL_DAYS_KEY = "xos-calls-default-recall-days";
 
@@ -72,19 +74,6 @@ type RunnerToast =
       goalJustHit: boolean;
       heat: RdvHeat;
     };
-
-type LogPayload = {
-  resultat: ResultatCall;
-  comments: string;
-  recallAt: string | null;
-  doNotCall: boolean;
-};
-
-type DeferPayload = {
-  scheduledFor: string;
-  targetSessionId: number | null;
-  name?: string | null;
-};
 
 type ListStatusFilter = "all" | "pending" | "called" | "skipped";
 
@@ -300,12 +289,14 @@ export function RunnerView({
   const [goalBurst, setGoalBurst] = useState(false);
   const [kpiGoalPulse, setKpiGoalPulse] = useState(false);
   const sessionRdvRef = useRef(sessionRdvCount);
+  const sessionContactsRef = useRef(contacts);
+  sessionContactsRef.current = contacts;
   const bootstrappedDetail = useRef(false);
   const eventPanelRef = useRef<EventPanelHandle>(null);
 
   useEffect(() => {
     setPinned(false);
-    const n = countSessionRdvs(contacts);
+    const n = countSessionRdvs(sessionContactsRef.current);
     sessionRdvRef.current = n;
     setSessionRdvCount(n);
   }, [session.id]);
@@ -612,7 +603,7 @@ export function RunnerView({
     setSelectedIds(new Set(selectableContacts.map((c) => c.id)));
   };
 
-  const handleDefaultRecallDays = (days: number) => {
+  const handleDefaultRecallDays = useCallback((days: number) => {
     setDefaultRecallDays(days);
     setRecallAt(addDaysIso(days));
     setBulkRecallAt(addDaysIso(days));
@@ -621,7 +612,7 @@ export function RunnerView({
     } catch {
       /* ignore */
     }
-  };
+  }, []);
 
   const celebrateRdv = useCallback(() => {
     const next = sessionRdvRef.current + 1;
@@ -715,12 +706,12 @@ export function RunnerView({
     });
   };
 
-  const openDefer = (ids: number[]) => {
+  const openDefer = useCallback((ids: number[]) => {
     if (ids.length === 0) return;
     setDeferIds(ids);
     setDeferDate(addDaysIso(defaultRecallDays));
     setDeferTargetId(null);
-  };
+  }, [defaultRecallDays]);
 
   const confirmDefer = () => {
     if (!deferIds?.length) return;
@@ -749,7 +740,7 @@ export function RunnerView({
     setBulkRecallPicker(null);
   };
 
-  const confirmRemove = (ids: number[], label: string) => {
+  const confirmRemove = useCallback((ids: number[], label: string) => {
     if (ids.length === 0) return;
     const clearingRecall = isRecallQueue
       || ids.every((id) => {
@@ -786,7 +777,7 @@ export function RunnerView({
           : <>Retirer {ids.length} contacts de la séance ?</>,
       confirmLabel: clearingRecall ? "Retirer des rappels" : "Retirer",
     });
-  };
+  }, [contacts, isRecallQueue]);
 
   const executeRemove = () => {
     if (!pendingRemove) return;
@@ -929,12 +920,14 @@ export function RunnerView({
     },
     [
       currentContact,
+      confirmRemove,
       focusedContact,
       handleDefaultRecallDays,
       handleSubmit,
       isRecallQueue,
       mode,
       navigateContact,
+      openDefer,
       openDetail,
       soundsEnabled,
     ],
@@ -2266,5 +2259,3 @@ export function RunnerView({
     </div>
   );
 }
-
-export type { LogPayload, DeferPayload };

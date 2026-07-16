@@ -19,7 +19,8 @@ import {
 } from "../../crm";
 import { getOpportunityFilterGuidance } from "../../crm/opportunityFilters";
 import { isAccountOwnerFilterCandidate } from "./accountOwners";
-import { asOptions, ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
+import { ChipGroup, PicklistMultiSelect, TriState } from "./filterControls";
+import { asOptions } from "./filterControls.helpers";
 import type { TeamMember } from "./types";
 
 type FilterBuilderProps = {

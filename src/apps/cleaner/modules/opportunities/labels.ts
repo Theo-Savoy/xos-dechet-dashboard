@@ -1,4 +1,4 @@
-import { REASON_LABELS } from './OpportunitiesTable';
+import { REASON_LABELS } from './OpportunitiesTable.helpers';
 
 /** Category labels stay aligned with the reason chips rendered by the table. */
 export const CATEGORY_LABELS = REASON_LABELS;

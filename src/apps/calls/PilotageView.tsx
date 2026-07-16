@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type Rea
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
-import { CallFunnelCard, stagesFromPeriodKpis } from "./CallFunnelCard";
+import { CallFunnelCard } from "./CallFunnelCard";
+import { stagesFromPeriodKpis } from "./CallFunnelCard.helpers";
 import { PilotageHeatmap } from "./PilotageHeatmap";
 import {
   cockpitDataInSync,
@@ -80,8 +81,6 @@ function cockpitSliceReducer(state: CockpitSlice, action: CockpitSliceAction): C
       return state;
   }
 }
-
-export { mergeKpis } from "./pilotageKpis";
 
 type CallerCard = {
   user_id: string;
