@@ -1,38 +1,44 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { PreSessionFlow } from "./PreSessionFlow";
-import type { SessionContact, SessionDetail } from "./types";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PreSessionFlow } from './PreSessionFlow';
+import type { SessionContact, SessionDetail } from './types';
 
 const callsCss = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fs = require("node:fs") as typeof import("node:fs");
-  return fs.readFileSync("src/apps/calls/calls.css", "utf8");
+  const fs = require('node:fs') as typeof import('node:fs');
+  return fs.readFileSync('src/apps/calls/calls.css', 'utf8');
 });
 
 afterEach(cleanup);
 
 const session: SessionDetail = {
   id: 1,
-  name: "Séance test",
-  status: "active",
-  created_at: "2026-07-10T10:00:00Z",
+  name: 'Séance test',
+  status: 'active',
+  created_at: '2026-07-10T10:00:00Z',
 };
 
 const contact: SessionContact = {
   id: 1,
   position: 1,
-  sf_contact_id: "003000000000001",
-  sf_account_id: "001000000000001",
-  contact_name: "Alice Martin",
-  account_name: "Acme",
-  phone: "0102030405",
-  title: "Responsable formation",
+  sf_contact_id: '003000000000001',
+  sf_account_id: '001000000000001',
+  contact_name: 'Alice Martin',
+  account_name: 'Acme',
+  phone: '0102030405',
+  title: 'Responsable formation',
   linkedin_url: null,
-  status: "pending",
+  status: 'pending',
   outcome: null,
   comments: null,
   sf_task_id: null,
@@ -40,9 +46,9 @@ const contact: SessionContact = {
   called_at: null,
 };
 
-describe("PreSessionFlow", () => {
-  it("closes on Escape and restores focus to the element that opened it", () => {
-    const opener = document.createElement("button");
+describe('PreSessionFlow', () => {
+  it('closes on Escape and restores focus to the element that opened it', () => {
+    const opener = document.createElement('button');
     document.body.append(opener);
     opener.focus();
     const onCancel = vi.fn();
@@ -64,14 +70,14 @@ describe("PreSessionFlow", () => {
 
     render(<Harness />);
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(opener);
     opener.remove();
   });
 
-  it("offers objectives as accessible selection chips from 1 to 8", async () => {
+  it('offers objectives as accessible selection chips from 1 to 8', async () => {
     const user = userEvent.setup();
     render(
       <PreSessionFlow
@@ -82,15 +88,23 @@ describe("PreSessionFlow", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Définir mon objectif" }));
-    expect(screen.getAllByRole("button", { name: /RDV$/ })).toHaveLength(8);
-    expect(screen.getByRole("button", { name: "5 RDV" }).getAttribute("aria-pressed")).toBe("true");
-    await user.click(screen.getByRole("button", { name: "6 RDV" }));
-    expect(screen.getByRole("button", { name: "6 RDV" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText(/Objectif choisi : 6 RDV/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Choisir le cap' }));
+    expect(screen.getAllByRole('button', { name: /RDV$/ })).toHaveLength(8);
+    expect(
+      screen
+        .getByRole('button', { name: '5 RDV' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    await user.click(screen.getByRole('button', { name: '6 RDV' }));
+    expect(
+      screen
+        .getByRole('button', { name: '6 RDV' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getByText(/Cap choisi : 6 RDV/)).toBeTruthy();
   });
 
-  it("shows the current phase in a clear preparation indicator", () => {
+  it('shows the current phase in a clear preparation indicator', () => {
     render(
       <PreSessionFlow
         session={session}
@@ -100,11 +114,15 @@ describe("PreSessionFlow", () => {
       />,
     );
 
-    expect(screen.getByRole("list", { name: "Étapes de préparation" })).toBeTruthy();
-    expect(screen.getByRole("listitem", { name: /Revue.*en cours/i })).toBeTruthy();
+    expect(
+      screen.getByRole('list', { name: 'Étapes de préparation' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('listitem', { name: /Matière.*en cours/i }),
+    ).toBeTruthy();
   });
 
-  it("lets a valid objective start the accessible warmup countdown", async () => {
+  it('lets a valid objective start the accessible warmup countdown', async () => {
     const user = userEvent.setup();
     render(
       <PreSessionFlow
@@ -115,15 +133,83 @@ describe("PreSessionFlow", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Définir mon objectif" }));
-    await user.click(screen.getByRole("button", { name: "6 RDV" }));
-    await user.click(screen.getByRole("button", { name: "Lancer le warmup" }));
+    await user.click(screen.getByRole('button', { name: 'Choisir le cap' }));
+    await user.click(screen.getByRole('button', { name: '6 RDV' }));
+    await user.click(screen.getByRole('button', { name: 'Lancer le départ' }));
 
-    expect(screen.getByRole("status").textContent).toContain("3");
-    expect(screen.getByText(/Respire\. Une conversation à la fois\./)).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('3');
+    expect(screen.getByText(/contact.*prêt.*à appeler/)).toBeTruthy();
   });
 
-  it("reaches the GO moment and exposes the ignition action once the countdown ends", async () => {
+  it('automatically hands off at GO exactly once', async () => {
+    const user = userEvent.setup();
+    const onLaunch = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        onLaunch={onLaunch}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choisir le cap' }));
+    await user.click(screen.getByRole('button', { name: 'Lancer le départ' }));
+
+    await waitFor(() => expect(onLaunch).toHaveBeenCalledTimes(1), {
+      timeout: 3000,
+    });
+    expect(screen.getByRole('status').textContent).toContain('GO');
+    expect(screen.getByText('Ouverture de la séance…')).toBeTruthy();
+    expect(
+      screen.getByRole('dialog').querySelector('.calls-pre-session')?.className,
+    ).toContain('calls-pre-session--handoff');
+    expect(
+      screen.queryByRole('button', { name: 'Entrer dans la séance' }),
+    ).toBeNull();
+    expect(onLaunch).toHaveBeenCalledWith(5);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    expect(onLaunch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps launch failures visible and allows one deliberate retry', async () => {
+    const user = userEvent.setup();
+    const onLaunch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(undefined);
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        onLaunch={onLaunch}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choisir le cap' }));
+    await user.click(screen.getByRole('button', { name: 'Lancer le départ' }));
+    await screen.findByRole(
+      'alert',
+      { name: 'Échec du départ' },
+      { timeout: 3000 },
+    );
+
+    expect(
+      screen.getByText(
+        'Le départ n’a pas abouti. Vérifie la connexion puis relance.',
+      ),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole('button', { name: 'Relancer le départ' }),
+    );
+    await waitFor(() => expect(onLaunch).toHaveBeenCalledTimes(2), {
+      timeout: 1000,
+    });
+  });
+
+  it('uses launch-gate copy for the intelligence and objective stages', async () => {
     const user = userEvent.setup();
     render(
       <PreSessionFlow
@@ -134,20 +220,22 @@ describe("PreSessionFlow", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Définir mon objectif" }));
-    await user.click(screen.getByRole("button", { name: "Lancer le warmup" }));
-
-    const ignition = await screen.findByRole("button", { name: "Entrer dans la séance" }, { timeout: 3000 });
-    expect(screen.getByRole("status").textContent).toContain("GO");
-    expect(ignition).toBeTruthy();
+    expect(screen.getByText('Matière prête')).toBeTruthy();
+    expect(screen.queryByText('Manifeste')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Choisir le cap' }));
+    expect(screen.getByText('Cap de la séance')).toBeTruthy();
+    expect(screen.getByText('Objectif verrouillé au départ.')).toBeTruthy();
+    expect(screen.queryByText(/Combien de rendez-vous veux-tu/)).toBeNull();
   });
 
-  it("exposes the pre-session responsive safeguards in the calls stylesheet", async () => {
-    expect(callsCss).toContain(".calls-pre-session");
-    expect(callsCss).toContain("max-height: calc(100dvh - 2rem)");
-    expect(callsCss).toContain(".calls-pre-session__accounts");
-    expect(callsCss).toContain("backdrop-filter: blur(24px) saturate(145%)");
-    expect(callsCss).toContain(".calls-stat__progress");
-    expect(callsCss).toContain(".calls-stat--rdv-heat-1");
+  it('exposes the pre-session responsive safeguards in the calls stylesheet', async () => {
+    expect(callsCss).toContain('.calls-pre-session');
+    expect(callsCss).toContain('max-height: calc(100dvh - 2rem)');
+    expect(callsCss).toContain('.calls-pre-session__accounts');
+    expect(callsCss).toContain('backdrop-filter: blur(24px) saturate(145%)');
+    expect(callsCss).toContain('.calls-stat__progress');
+    expect(callsCss).toContain('.calls-stat--rdv-heat-1');
+    expect(callsCss).toContain('calls-pre-session-handoff');
+    expect(callsCss).toContain('prefers-reduced-motion: reduce');
   });
 });
