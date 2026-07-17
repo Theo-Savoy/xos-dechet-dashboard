@@ -268,6 +268,9 @@ describe('PreSessionFlow', () => {
     expect(callsCss).toContain('max-height: calc(100dvh - 2rem)');
     expect(callsCss).toContain('.calls-pre-session__accounts');
     expect(callsCss).toContain('backdrop-filter: blur(28px) saturate(145%)');
+    expect(callsCss).toMatch(
+      /\.calls-pre-session__underlay\s*{[^}]*filter: blur\(14px\)/,
+    );
     expect(callsCss).toContain('.calls-stat__progress');
     expect(callsCss).toContain('.calls-stat--rdv-heat-1');
     expect(callsCss).toContain('calls-pre-session-handoff');

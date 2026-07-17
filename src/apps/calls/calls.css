@@ -564,6 +564,10 @@
   min-height: 100%;
   pointer-events: none;
   user-select: none;
+  /* Blur the cockpit directly: nested backdrop-filters are ignored by
+     Chromium inside .xos-window (which has its own backdrop-filter), so the
+     panel's glass effect must come from filtering the underlay content. */
+  filter: blur(14px) saturate(120%);
 }
 
 .calls-pre-session__underlay::after {
