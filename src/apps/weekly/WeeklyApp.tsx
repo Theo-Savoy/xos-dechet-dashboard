@@ -719,17 +719,25 @@ function QuarterGauge({ data }: { data: Quarter | undefined }) {
 }
 
 function Breakdown({ wonByType, wonAmount }: { wonByType: WonByType; wonAmount: number }) {
+  if (!wonAmount) return null;
+  const totalByType = wonByType.catalogue + wonByType.sur_mesure + wonByType.conseil;
+  const gap = wonAmount - totalByType;
+  if (gap > 1) console.warn(`Breakdown: wonByType (${totalByType}) < wonAmount (${wonAmount}), écart de ${gap}`);
+  const entries: Array<{ key: string; label: string; value: number }> = [
+    ...(Object.keys(TYPE_LABELS) as Array<keyof WonByType>).map((type) => ({ key: type, label: TYPE_LABELS[type], value: wonByType[type] })),
+    ...(gap > 1 ? [{ key: "autres", label: "Autres", value: gap }] : []),
+  ];
   return <>
     <div className="weekly-breakdown" aria-label="Répartition du CA signé">
-      {(Object.entries(wonByType) as Array<[keyof WonByType, number]>).map(([type, value]) => (
-        <Tip key={type} text={`${TYPE_LABELS[type]} · ${money.format(value)}`}>
-          <span className={`weekly-breakdown-${type}`} style={{ width: wonAmount ? `${value / wonAmount * 100}%` : "0%" }} />
+      {entries.map(({ key, label, value }) => (
+        <Tip key={key} text={`${label} · ${money.format(value)}`} style={{ width: `${value / wonAmount * 100}%` }}>
+          <span className={`weekly-breakdown-${key}`} />
         </Tip>
       ))}
     </div>
     <div className="weekly-breakdown-labels">
-      {(Object.keys(TYPE_LABELS) as Array<keyof WonByType>).map((type) => (
-        <span className={`weekly-legend-${type}`} key={type}>{TYPE_LABELS[type]} · {money.format(wonByType[type])}</span>
+      {entries.map(({ key, label, value }) => (
+        <span className={`weekly-legend-${key}`} key={key}>{label} · {money.format(value)}</span>
       ))}
     </div>
   </>;
