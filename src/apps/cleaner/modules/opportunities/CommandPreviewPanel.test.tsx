@@ -1,7 +1,16 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockUsePicklistValues } = vi.hoisted(() => ({
+  mockUsePicklistValues: vi.fn(),
+}));
+
+vi.mock('../../../crm/usePicklistValues', () => ({
+  usePicklistValues: mockUsePicklistValues,
+}));
+
 import { CommandPreviewPanel } from './CommandPreviewPanel';
 
 const baseProps = {
@@ -15,6 +24,88 @@ const baseProps = {
 
 describe('CommandPreviewPanel', () => {
   afterEach(cleanup);
+  beforeEach(() => {
+    mockUsePicklistValues.mockReset();
+    mockUsePicklistValues.mockReturnValue({
+      values: [],
+      loading: false,
+      error: null,
+    });
+  });
+
+  it('renders Salesforce picklist values and a local free-text option', () => {
+    const onPreview = vi.fn();
+    mockUsePicklistValues.mockReturnValue({
+      values: [
+        { label: 'Budget insuffisant', active: true, default: false },
+        { label: 'Priorité différente', active: true, default: false },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <CommandPreviewPanel {...baseProps} onPreview={onPreview} />,
+    );
+
+    expect(mockUsePicklistValues).toHaveBeenCalledWith(
+      'Raison_de_perte_V2__c',
+    );
+    expect(
+      screen.getByRole('combobox', { name: 'Raison de perte' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: 'Budget insuffisant' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: 'Priorité différente' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('option', { name: 'Autre (saisie libre)' }),
+    ).toBeTruthy();
+
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Raison de perte' }),
+      { target: { value: '__other__' } },
+    );
+    fireEvent.change(screen.getByLabelText('Autre raison de perte'), {
+      target: { value: 'Autre motif Salesforce' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Prévisualiser les changements' }),
+    );
+    expect(onPreview).toHaveBeenCalledWith({
+      stage: 'Fermée / Perdue',
+      loss_reason: 'Autre motif Salesforce',
+    });
+  });
+
+  it('falls back to the existing free-text field when the picklist is empty', () => {
+    render(<CommandPreviewPanel {...baseProps} />);
+
+    const input = screen.getByLabelText('Raison de perte');
+    expect(input.tagName).toBe('INPUT');
+    expect(
+      screen.queryByRole('combobox', { name: 'Raison de perte' }),
+    ).toBeNull();
+  });
+
+  it('falls back to the existing free-text field when the picklist fails', () => {
+    mockUsePicklistValues.mockReturnValue({
+      values: [],
+      loading: false,
+      error: 'Salesforce indisponible',
+    });
+
+    render(<CommandPreviewPanel {...baseProps} />);
+
+    const input = screen.getByLabelText('Raison de perte');
+    expect(input.tagName).toBe('INPUT');
+    expect(
+      screen.queryByRole('combobox', { name: 'Raison de perte' }),
+    ).toBeNull();
+  });
+
   it('requires a loss reason before asking the server for a preview', () => {
     const onPreview = vi.fn();
     render(<CommandPreviewPanel {...baseProps} onPreview={onPreview} />);

@@ -7,7 +7,14 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../crm/usePicklistValues', () => ({
+  PicklistValuesProvider: ({ children }: { children: ReactNode }) => children,
+  usePicklistValues: () => ({ values: [], loading: false, error: null }),
+}));
+
 import { OpportunitiesModule } from './OpportunitiesModule';
 
 afterEach(() => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePicklistValues } from '../../../crm/usePicklistValues';
 import type {
   OpportunityCommandChanges,
   OpportunityCommandPreview,
@@ -8,6 +9,9 @@ import type { CommandAction } from './CommandPreviewPanel.types';
 
 type SelectedCommandItem = { id: string; name?: string | null };
 type Option = { id: string; label: string };
+
+const LOSS_REASON_FIELD = 'Raison_de_perte_V2__c';
+const OTHER_LOSS_REASON = '__other__';
 
 type CommandPreviewPanelProps = {
   action: CommandAction;
@@ -89,7 +93,16 @@ export function CommandPreviewPanel({
   const [closeDate, setCloseDate] = useState('');
   const [saleType, setSaleType] = useState('');
   const [lossReason, setLossReason] = useState('');
+  const [lossReasonSource, setLossReasonSource] = useState<
+    'unselected' | 'picklist' | 'other' | 'free'
+  >('unselected');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const { values: lossReasonOptions, error: picklistError } =
+    usePicklistValues(action === 'close-lost' ? LOSS_REASON_FIELD : '');
+  const showLossReasonSelect =
+    !picklistError &&
+    lossReasonOptions.length > 0 &&
+    lossReasonSource !== 'free';
   const changes = useMemo(
     () => fieldsFor(action, { ownerId, closeDate, saleType, lossReason }),
     [action, closeDate, lossReason, ownerId, saleType],
@@ -256,12 +269,69 @@ export function CommandPreviewPanel({
               {action === 'close-lost' ? (
                 <>
                   <label htmlFor="cleaner-loss-reason">Raison de perte</label>
-                  <input
-                    id="cleaner-loss-reason"
-                    value={lossReason}
-                    onChange={(event) => setLossReason(event.target.value)}
-                    required
-                  />
+                  {showLossReasonSelect ? (
+                    <>
+                      <select
+                        id="cleaner-loss-reason"
+                        value={
+                          lossReasonSource === 'other'
+                            ? OTHER_LOSS_REASON
+                            : lossReason
+                        }
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (value === OTHER_LOSS_REASON) {
+                            setLossReasonSource('other');
+                            setLossReason('');
+                          } else {
+                            setLossReasonSource(
+                              value ? 'picklist' : 'unselected',
+                            );
+                            setLossReason(value);
+                          }
+                        }}
+                        required
+                      >
+                        <option value="">Sélectionnez une raison</option>
+                        {lossReasonOptions.map((option, index) => (
+                          <option
+                            value={option.label}
+                            key={`${option.label}-${index}`}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                        <option value={OTHER_LOSS_REASON}>
+                          Autre (saisie libre)
+                        </option>
+                      </select>
+                      {lossReasonSource === 'other' ? (
+                        <>
+                          <label htmlFor="cleaner-loss-reason-other">
+                            Autre raison de perte
+                          </label>
+                          <input
+                            id="cleaner-loss-reason-other"
+                            value={lossReason}
+                            onChange={(event) =>
+                              setLossReason(event.target.value)
+                            }
+                            required
+                          />
+                        </>
+                      ) : null}
+                    </>
+                  ) : (
+                    <input
+                      id="cleaner-loss-reason"
+                      value={lossReason}
+                      onChange={(event) => {
+                        setLossReasonSource('free');
+                        setLossReason(event.target.value);
+                      }}
+                      required
+                    />
+                  )}
                 </>
               ) : null}
             </fieldset>

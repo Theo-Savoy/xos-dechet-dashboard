@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { PicklistValuesProvider } from '../../../crm/usePicklistValues';
 import { Button, GlassCard } from '../../../../components/ui';
 import type { CleanerCapabilities } from '../../contracts';
 import {
@@ -439,20 +440,22 @@ export function OpportunitiesCleaningView({
         </div>
       </div>
       {commandAction ? (
-        <CommandPreviewPanel
-          action={commandAction}
-          selectedCount={state.selectedIds.size}
-          selectedItems={selectedItems}
-          ownerOptions={ownerOptions}
-          saleTypeOptions={saleTypeOptions}
-          preview={preview}
-          result={result}
-          loading={commandLoading}
-          error={commandError}
-          onClose={closeCommand}
-          onPreview={askPreview}
-          onExecute={executePreview}
-        />
+        <PicklistValuesProvider accessToken={accessToken}>
+          <CommandPreviewPanel
+            action={commandAction}
+            selectedCount={state.selectedIds.size}
+            selectedItems={selectedItems}
+            ownerOptions={ownerOptions}
+            saleTypeOptions={saleTypeOptions}
+            preview={preview}
+            result={result}
+            loading={commandLoading}
+            error={commandError}
+            onClose={closeCommand}
+            onPreview={askPreview}
+            onExecute={executePreview}
+          />
+        </PicklistValuesProvider>
       ) : null}
     </section>
   );
