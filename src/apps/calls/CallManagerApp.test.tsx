@@ -538,7 +538,7 @@ describe("CallManagerApp component", () => {
     for (const contact of contacts) {
       await user.click(screen.getByLabelText(`Sélectionner ${contact.contact_name}`));
       await user.click(screen.getByRole("button", { name: "Retirer" }));
-      const dialog = screen.getByRole("dialog");
+      const dialog = screen.getByRole("dialog", { name: /Retirer.*séance/i });
       await user.click(within(dialog).getByRole("button", { name: "Retirer" }));
       await waitFor(() => expect(screen.queryByText(contact.contact_name)).toBeNull());
     }
