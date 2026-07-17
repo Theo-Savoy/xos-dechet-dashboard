@@ -274,6 +274,109 @@ export function NewSessionView({
         )}
       </header>
 
+      {preview.length > 0 && (
+        <GlassCard className="calls-name-form calls-name-form--sticky">
+          <div className="calls-name-form__meta">
+            <Tag>
+              {selectedContacts.length} sélectionné{selectedContacts.length > 1 ? "s" : ""}
+            </Tag>
+          </div>
+          <label className="calls-field">
+            <span>Nom de la séance</span>
+            <input
+              type="text"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              placeholder="Prospection Lyon"
+              className="calls-input"
+            />
+          </label>
+          <DatePicker label="Date de séance" value={scheduledFor} onChange={setScheduledFor} />
+          <SessionTypePicker value={sessionType} onChange={setSessionType} />
+          {onCreateAudience && (
+            <div className="calls-name-form__split">
+              <label className="calls-checkbox">
+                <input
+                  type="checkbox"
+                  checked={splitSessions}
+                  onChange={(event) => setSplitSessions(event.target.checked)}
+                  aria-label="Découper en plusieurs séances"
+                />
+                <span>Découper en plusieurs séances</span>
+              </label>
+              {splitSessions && (
+                <>
+                  <div className="calls-fb-row">
+                    <label className="calls-field">
+                      <span>Taille cible par séance</span>
+                      <input
+                        type="number"
+                        className="calls-input"
+                        min={1}
+                        value={targetSize}
+                        onChange={(event) => setTargetSize(Math.max(1, Number(event.target.value) || 1))}
+                      />
+                    </label>
+                    <label className="calls-field">
+                      <span>Nombre max de séances</span>
+                      <input
+                        type="number"
+                        className="calls-input"
+                        min={1}
+                        value={maxSessions}
+                        onChange={(event) => setMaxSessions(Math.max(1, Number(event.target.value) || 1))}
+                      />
+                    </label>
+                  </div>
+                  <p className="calls-muted calls-fb-hint" role="status">
+                    Aperçu : {packedGroups.length} séance{packedGroups.length > 1 ? "s" : ""} · les contacts d&apos;un même compte restent ensemble.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          <Button
+            onClick={handleCreate}
+            disabled={loading || !sessionName.trim() || selectedContacts.length === 0 || (splitSessions && packedGroups.length === 0)}
+          >
+            {loading ? "Création…" : splitSessions ? `Créer ${packedGroups.length} séance${packedGroups.length > 1 ? "s" : ""}` : "Lancer la séance"}
+          </Button>
+          {shareableTeam.length > 0 && (
+            <div className="calls-name-form__share">
+              <div className="calls-name-form__share-head">
+                <span>Partager avec</span>
+                <button
+                  type="button"
+                  className={`calls-list-filter-chip${allTeamSelected ? " calls-list-filter-chip--active" : ""}`}
+                  aria-pressed={allTeamSelected}
+                  onClick={toggleAllTeam}
+                >
+                  Toute l&apos;équipe
+                </button>
+              </div>
+              <div className="calls-name-form__share-chips" role="group" aria-label="Collègues">
+                {shareableTeam.map((member) => {
+                  const checked = shareMemberIds.has(member.user_id);
+                  return (
+                    <label
+                      key={member.user_id}
+                      className={`calls-share-chip${checked ? " calls-share-chip--active" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleShareMember(member.user_id)}
+                      />
+                      <span>{member.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </GlassCard>
+      )}
+
       <FilterBuilder
         filters={filters}
         onChange={onFiltersChange}
@@ -322,107 +425,6 @@ export function NewSessionView({
 
       {preview.length > 0 && (
         <>
-          <GlassCard className="calls-name-form calls-name-form--sticky">
-            <div className="calls-name-form__meta">
-              <Tag>
-                {selectedContacts.length} sélectionné{selectedContacts.length > 1 ? "s" : ""}
-              </Tag>
-            </div>
-            <label className="calls-field">
-              <span>Nom de la séance</span>
-              <input
-                type="text"
-                value={sessionName}
-                onChange={(e) => setSessionName(e.target.value)}
-                placeholder="Prospection Lyon"
-                className="calls-input"
-              />
-            </label>
-            <DatePicker label="Date de séance" value={scheduledFor} onChange={setScheduledFor} />
-            <SessionTypePicker value={sessionType} onChange={setSessionType} />
-            {onCreateAudience && (
-              <div className="calls-name-form__split">
-                <label className="calls-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={splitSessions}
-                    onChange={(event) => setSplitSessions(event.target.checked)}
-                    aria-label="Découper en plusieurs séances"
-                  />
-                  <span>Découper en plusieurs séances</span>
-                </label>
-                {splitSessions && (
-                  <>
-                    <div className="calls-fb-row">
-                      <label className="calls-field">
-                        <span>Taille cible par séance</span>
-                        <input
-                          type="number"
-                          className="calls-input"
-                          min={1}
-                          value={targetSize}
-                          onChange={(event) => setTargetSize(Math.max(1, Number(event.target.value) || 1))}
-                        />
-                      </label>
-                      <label className="calls-field">
-                        <span>Nombre max de séances</span>
-                        <input
-                          type="number"
-                          className="calls-input"
-                          min={1}
-                          value={maxSessions}
-                          onChange={(event) => setMaxSessions(Math.max(1, Number(event.target.value) || 1))}
-                        />
-                      </label>
-                    </div>
-                    <p className="calls-muted calls-fb-hint" role="status">
-                      Aperçu : {packedGroups.length} séance{packedGroups.length > 1 ? "s" : ""} · les contacts d&apos;un même compte restent ensemble.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-            <Button
-              onClick={handleCreate}
-              disabled={loading || !sessionName.trim() || selectedContacts.length === 0 || (splitSessions && packedGroups.length === 0)}
-            >
-              {loading ? "Création…" : splitSessions ? `Créer ${packedGroups.length} séance${packedGroups.length > 1 ? "s" : ""}` : "Lancer la séance"}
-            </Button>
-            {shareableTeam.length > 0 && (
-              <div className="calls-name-form__share">
-                <div className="calls-name-form__share-head">
-                  <span>Partager avec</span>
-                  <button
-                    type="button"
-                    className={`calls-list-filter-chip${allTeamSelected ? " calls-list-filter-chip--active" : ""}`}
-                    aria-pressed={allTeamSelected}
-                    onClick={toggleAllTeam}
-                  >
-                    Toute l&apos;équipe
-                  </button>
-                </div>
-                <div className="calls-name-form__share-chips" role="group" aria-label="Collègues">
-                  {shareableTeam.map((member) => {
-                    const checked = shareMemberIds.has(member.user_id);
-                    return (
-                      <label
-                        key={member.user_id}
-                        className={`calls-share-chip${checked ? " calls-share-chip--active" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleShareMember(member.user_id)}
-                        />
-                        <span>{member.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </GlassCard>
-
           <GlassCard className="calls-preview">
             <div className="calls-preview__header">
               <div className="calls-preview__heading">
