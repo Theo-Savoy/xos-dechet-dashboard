@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   EFFECTIF_TRANCHES,
@@ -94,6 +94,10 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
 
   const setFilter = (patch: Partial<AbmFilters>) => setFilters((current) => ({ ...current, ...patch }));
 
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextAutoSearch = useRef(true);
+
   const ownerOptions = useMemo(
     () => [...new Map(team.filter((member) => member.sf_user_id).map((member) => [member.sf_user_id, {
       value: member.sf_user_id,
@@ -102,15 +106,19 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
     [team],
   );
 
-  const canSearch = query.trim().length >= 2 || hasAnyFilter(filters);
+  const canSearchWith = (q: string, currentFilters: AbmFilters) => q.trim().length >= 2 || hasAnyFilter(currentFilters);
+  const canSearch = canSearchWith(query, filters);
 
-  const handleSearch = async () => {
-    const q = query.trim();
-    if (!canSearch || !token) return;
+  const runSearch = async (q: string, currentFilters: AbmFilters) => {
+    if (!canSearchWith(q, currentFilters) || !token) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAccountsSearch(token, { q, filters });
+      const data = await fetchAccountsSearch(token, { q: q.trim(), filters: currentFilters }, { signal: controller.signal });
+      if (abortRef.current !== controller) return; // superseded by a newer filter change
       setAccounts(data.accounts);
       setTruncated(data.truncated);
       setExcludedCount(data.excluded_count ?? 0);
@@ -118,13 +126,35 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
       setSearched(true);
       if (data.accounts.length === 0) setError("Aucun compte ne correspond à cette recherche.");
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(errorMessage(err));
       setAccounts([]);
       setExcludedCount(0);
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) setLoading(false);
     }
   };
+
+  const handleSearch = async () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await runSearch(query, filters);
+  };
+
+  // Live preview: modifier un filtre relance la recherche après 300ms, sans clic "Actualiser" (F.2).
+  useEffect(() => {
+    if (skipNextAutoSearch.current) {
+      skipNextAutoSearch.current = false;
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void runSearch(query, filters);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   const toggleAccount = (id: string) => {
     setSelectedIds((current) => {

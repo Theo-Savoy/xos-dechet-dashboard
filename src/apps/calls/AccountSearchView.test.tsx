@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountSearchView } from "./AccountSearchView";
@@ -112,7 +112,7 @@ describe("AccountSearchView", () => {
     await user.type(screen.getByLabelText("Nom du compte"), "ACME");
     await user.click(screen.getByRole("button", { name: "Rechercher" }));
 
-    await waitFor(() => expect(fetchAccountsSearch).toHaveBeenCalledWith("token-123", { q: "ACME", filters: expect.any(Object) }));
+    await waitFor(() => expect(fetchAccountsSearch).toHaveBeenCalledWith("token-123", { q: "ACME", filters: expect.any(Object) }, expect.any(Object)));
 
     expect(await screen.findByText("ACME")).toBeTruthy();
     expect(screen.getByText("ACME Europe")).toBeTruthy();
@@ -157,7 +157,7 @@ describe("AccountSearchView", () => {
     expect(searchButton.disabled).toBe(false);
     await user.click(searchButton);
 
-    await waitFor(() => expect(fetchAccountsSearch).toHaveBeenCalledWith("token-123", { q: "", filters: expect.objectContaining({ tiers: ["A"] }) }));
+    await waitFor(() => expect(fetchAccountsSearch).toHaveBeenCalledWith("token-123", { q: "", filters: expect.objectContaining({ tiers: ["A"] }) }, expect.any(Object)));
   });
 
   it("shows an error message when the search fails", async () => {
@@ -215,6 +215,7 @@ describe("AccountSearchView", () => {
       expect(fetchAccountsSearch).toHaveBeenCalledWith(
         "token-123",
         { q: "ACME", filters: expect.objectContaining({ proprietaires: ["005000000000001AAA"] }) },
+        expect.any(Object),
       ),
     );
     expect(screen.queryByLabelText(/IDs Salesforce/)).toBeNull();
@@ -248,5 +249,76 @@ describe("AccountSearchView", () => {
     expect(onCreateAudience).toHaveBeenCalledWith(
       expect.objectContaining({ namePrefix: "ACME décisionnaires DAF" }),
     );
+  });
+
+  it("live preview: debounces rapid filter changes into a single request 300ms later", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchAccountsSearch).mockResolvedValue({ accounts: [acme], truncated: false });
+      renderView();
+
+      fireEvent.click(screen.getByText("Filtres entreprise"));
+      fireEvent.click(screen.getByRole("button", { name: "A" }));
+      fireEvent.click(screen.getByRole("button", { name: "B" }));
+
+      // Still within the 300ms window: no request fired yet.
+      act(() => {
+        vi.advanceTimersByTime(299);
+      });
+      expect(fetchAccountsSearch).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+
+      expect(fetchAccountsSearch).toHaveBeenCalledTimes(1);
+      expect(fetchAccountsSearch).toHaveBeenCalledWith(
+        "token-123",
+        { q: "", filters: expect.objectContaining({ tiers: ["A", "B"] }) },
+        expect.any(Object),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("live preview: aborts the in-flight request when a filter changes again before it resolves", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveFirst: (() => void) | undefined;
+      vi.mocked(fetchAccountsSearch).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = () => resolve({ accounts: [acme], truncated: false });
+          }),
+      );
+      vi.mocked(fetchAccountsSearch).mockResolvedValueOnce({ accounts: [acmeSubsidiary], truncated: false });
+
+      renderView();
+
+      fireEvent.click(screen.getByText("Filtres entreprise"));
+      fireEvent.click(screen.getByRole("button", { name: "A" }));
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(fetchAccountsSearch).toHaveBeenCalledTimes(1);
+      const firstSignal = vi.mocked(fetchAccountsSearch).mock.calls[0][2]?.signal;
+
+      fireEvent.click(screen.getByRole("button", { name: "B" }));
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(fetchAccountsSearch).toHaveBeenCalledTimes(2);
+      expect(firstSignal?.aborted).toBe(true);
+
+      resolveFirst?.();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // The stale first response must not overwrite the second one's results.
+      expect(screen.queryByText("ACME Europe")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

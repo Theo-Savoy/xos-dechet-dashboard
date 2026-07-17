@@ -188,10 +188,12 @@ export async function fetchContactCount(
 export async function fetchAccountsSearch(
   token: string,
   body: { q: string; filters?: Partial<FilterTree["entreprise"]>; limit?: number },
+  opts?: { signal?: AbortSignal },
 ): Promise<AccountSearchResult> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
     body: JSON.stringify({ action: "accounts_search", ...body }),
+    signal: opts?.signal,
   });
 }
 
