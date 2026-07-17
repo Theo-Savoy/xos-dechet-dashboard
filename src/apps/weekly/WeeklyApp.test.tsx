@@ -271,6 +271,47 @@ describe("Weekly Perf", () => {
     expect(screen.queryByRole("checkbox", { name: "Commerciaux seulement" })).toBeNull();
   });
 
+  it("shows three visible CA breakdown bars sized from won_by_type", async () => {
+    render(<WeeklyApp />);
+    const card = (await screen.findByRole("heading", { level: 4, name: "Ada Lovelace" })).closest(".weekly-pulse-card") as HTMLElement;
+    const breakdown = within(card).getByLabelText("Répartition du CA signé");
+    const widthOf = (type: string) => (breakdown.querySelector(`.weekly-breakdown-${type}`)?.closest(".weekly-tip") as HTMLElement).style.width;
+    expect(widthOf("catalogue")).toBe(`${(3000 / 6000) * 100}%`);
+    expect(widthOf("sur_mesure")).toBe(`${(2000 / 6000) * 100}%`);
+    expect(widthOf("conseil")).toBe(`${(1000 / 6000) * 100}%`);
+    expect(breakdown.querySelector(".weekly-breakdown-autres")).toBeNull();
+  });
+
+  it("does not render the CA breakdown when wonAmount is 0", async () => {
+    const zeroWonPayload = {
+      ...selfPayload,
+      pipeline: selfPayload.pipeline.map((row) => (row.week === "2026-W28"
+        ? { ...row, won_count: 0, won_amount: 0, won_by_type: { catalogue: 0, sur_mesure: 0, conseil: 0 }, won_arr_amount: 0 }
+        : row)),
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(zeroWonPayload), { status: 200 })));
+    render(<WeeklyApp />);
+    const card = (await screen.findByRole("heading", { level: 4, name: "Ada Lovelace" })).closest(".weekly-pulse-card") as HTMLElement;
+    expect(within(card).queryByLabelText("Répartition du CA signé")).toBeNull();
+  });
+
+  it("adds an Autres category and warns when won_by_type sum is below wonAmount", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const incoherentPayload = {
+      ...selfPayload,
+      pipeline: selfPayload.pipeline.map((row) => (row.week === "2026-W28"
+        ? { ...row, won_amount: 6000, won_by_type: { catalogue: 2000, sur_mesure: 1000, conseil: 500 } }
+        : row)),
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(incoherentPayload), { status: 200 })));
+    render(<WeeklyApp />);
+    const card = (await screen.findByRole("heading", { level: 4, name: "Ada Lovelace" })).closest(".weekly-pulse-card") as HTMLElement;
+    const breakdown = within(card).getByLabelText("Répartition du CA signé");
+    expect(breakdown.querySelector(".weekly-breakdown-autres")).toBeTruthy();
+    expect(within(card).getByText(/Autres/)).toBeTruthy();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
   it("shows SDR metrics without sales breakdown", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(teamPayload), { status: 200 })));
     render(<WeeklyApp />);
