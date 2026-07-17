@@ -651,6 +651,15 @@ function perfCacheKey(period: PeriodMode, weekStart: string | null | undefined) 
   return `${period}:${weekStart || "live"}`;
 }
 
+function quarterAnchorWeekStart(label: string) {
+  const match = /^FY(\d{2})-Q([1-4])$/.exec(label);
+  if (!match) return null;
+  const fiscalStartYear = 2000 + Number(match[1]) - 1;
+  const quarterStart = new Date(Date.UTC(fiscalStartYear, 6 + (Number(match[2]) - 1) * 3, 1));
+  quarterStart.setUTCDate(quarterStart.getUTCDate() + ((8 - quarterStart.getUTCDay()) % 7));
+  return quarterStart.toISOString().slice(0, 10);
+}
+
 function LazyMount({ children, minHeight = "14rem" }: { children: React.ReactNode; minHeight?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -1593,6 +1602,7 @@ export default function WeeklyApp() {
   const [displayMode, setDisplayMode] = useState<"cards" | "table">("cards");
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("all");
   const [anchorWeekStart, setAnchorWeekStart] = useState<string | null>(null);
+  const [anchorQuarterStart, setAnchorQuarterStart] = useState<string | null>(null);
   const requestSeq = useRef(0);
   const historyCacheRef = useRef<PeriodHistory>({ weeks: [], quarters: [] });
   const cacheRef = useRef(cache);
@@ -1613,7 +1623,7 @@ export default function WeeklyApp() {
   const loadPeriod = useCallback(async (nextPeriod: PeriodMode, {
     background = false,
     signal,
-    weekStart = anchorWeekStart,
+    weekStart = nextPeriod === "quarter" ? anchorQuarterStart : anchorWeekStart,
     revalidate = false,
   }: {
     background?: boolean;
@@ -1647,7 +1657,7 @@ export default function WeeklyApp() {
         setRefreshing(false);
       }
     }
-  }, [anchorWeekStart, storeEntry]);
+  }, [anchorQuarterStart, anchorWeekStart, storeEntry]);
 
   const prefetchKey = useCallback(async (nextPeriod: PeriodMode, weekStart: string | null) => {
     const key = perfCacheKey(nextPeriod, weekStart);
@@ -1663,7 +1673,8 @@ export default function WeeklyApp() {
     }
   }, [storeEntry]);
 
-  const activeKey = perfCacheKey(period, anchorWeekStart);
+  const activeAnchorStart = period === "quarter" ? anchorQuarterStart : anchorWeekStart;
+  const activeKey = perfCacheKey(period, activeAnchorStart);
   const cachedResult = cache[activeKey] || null;
   const fallbackResult = lastByPeriodRef.current[period] || null;
   const result = cachedResult || fallbackResult || null;
@@ -1678,25 +1689,25 @@ export default function WeeklyApp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const key = perfCacheKey(period, anchorWeekStart);
+    const key = perfCacheKey(period, activeAnchorStart);
     const hit = Boolean(cacheRef.current[key]);
     if (hit) {
-      // Semaine déjà en cache : affichage immédiat. Revalidate seulement la semaine live.
-      const live = !anchorWeekStart;
+      // Période déjà en cache : affichage immédiat. Revalidate seulement la période live.
+      const live = !activeAnchorStart;
       if (live) {
-        void loadPeriod(period, { background: true, revalidate: true, signal: controller.signal, weekStart: anchorWeekStart });
+        void loadPeriod(period, { background: true, revalidate: true, signal: controller.signal, weekStart: activeAnchorStart });
       }
       return () => {
         controller.abort();
       };
     }
     const soft = Boolean(lastByPeriodRef.current[period] || Object.keys(cacheRef.current).length);
-    void loadPeriod(period, { background: soft, signal: controller.signal, weekStart: anchorWeekStart });
+    void loadPeriod(period, { background: soft, signal: controller.signal, weekStart: activeAnchorStart });
     return () => {
       controller.abort();
       requestSeq.current += 1;
     };
-  }, [loadPeriod, period, anchorWeekStart]);
+  }, [loadPeriod, period, activeAnchorStart]);
 
   useEffect(() => {
     if (quarterPrefetchDone.current) return;
@@ -1854,6 +1865,26 @@ export default function WeeklyApp() {
   })();
   const selectedWeekLabel = historyOptions.find((entry) => entry.value === selectedWeekStart)?.label || shortWeekLabel(context?.iso_week);
   const currentWeekShort = selectedWeekLabel || shortWeekLabel(context?.iso_week);
+  const quarterHistorySource = periodHistory.quarters?.length ? periodHistory : historyCacheRef.current;
+  const quarterLabels = [...new Set([
+    ...(quarterHistorySource.quarters || []),
+    ...(context?.quarter_label ? [context.quarter_label] : []),
+  ])];
+  const quarterOptions = quarterLabels.flatMap((label) => {
+    const anchor = (quarterHistorySource.weeks || [])
+      .filter((entry) => entry.quarter === label)
+      .map((entry) => entry.week_start)
+      .sort((a, b) => b.localeCompare(a))[0]
+      || (label === context?.quarter_label ? context?.anchor_week_start : null)
+      || quarterAnchorWeekStart(label);
+    return anchor ? [{ value: anchor, label }] : [];
+  });
+  const selectedQuarterStart = anchorQuarterStart
+    || quarterOptions.find((entry) => entry.label === context?.quarter_label)?.value
+    || quarterOptions[0]?.value;
+  const selectedQuarterIndex = quarterOptions.findIndex((entry) => entry.value === selectedQuarterStart);
+  const previousQuarter = selectedQuarterIndex >= 0 ? quarterOptions[selectedQuarterIndex + 1] : undefined;
+  const nextQuarter = selectedQuarterIndex > 0 ? quarterOptions[selectedQuarterIndex - 1] : undefined;
   const periodBadge = weekMode
     ? (selectedWeekLabel ? `Semaine ${selectedWeekLabel}` : "Semaine en cours")
     : (context?.quarter_label ? `${context.quarter_label} · S${context.week_of_quarter}/${context.weeks_in_quarter}` : "Trimestre en cours");
@@ -1911,6 +1942,29 @@ export default function WeeklyApp() {
         )}
         {showWeekSelector && selectedWeekStart !== liveWeekStart && (
           <Button variant="secondary" onClick={() => setAnchorWeekStart(null)}>Semaine en cours</Button>
+        )}
+        {!weekMode && selectedQuarterStart && (
+          <div className="weekly-quarter-picker">
+            <Button
+              variant="secondary"
+              aria-label="Trimestre précédent"
+              disabled={!previousQuarter}
+              onClick={() => previousQuarter && setAnchorQuarterStart(previousQuarter.value)}
+            >‹</Button>
+            <Select
+              label="Trimestre"
+              aria-label="Choisir un trimestre"
+              value={selectedQuarterStart}
+              options={quarterOptions}
+              onChange={setAnchorQuarterStart}
+            />
+            <Button
+              variant="secondary"
+              aria-label="Trimestre suivant"
+              disabled={!nextQuarter}
+              onClick={() => nextQuarter && setAnchorQuarterStart(nextQuarter.value)}
+            >›</Button>
+          </div>
         )}
       </div>
       <div className="weekly-toggle weekly-seg weekly-display-toggle" aria-label="Affichage">

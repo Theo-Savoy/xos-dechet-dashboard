@@ -164,6 +164,28 @@ const quarterPayload = {
   prior_pipeline: selfPayload.pipeline.map((row) => ({ ...row, generated_count: Math.max(0, row.generated_count - 1), won_amount: Math.max(0, row.won_amount - 1000) })),
 };
 
+const quarterHistory = {
+  weeks: [
+    { week_start: "2026-07-06", iso_week: "2026-W28", quarter: "FY27-Q1" },
+  ],
+  quarters: ["FY27-Q1", "FY26-Q4", "FY26-Q3"],
+};
+
+function payloadForQuarter(label: string, anchorWeekStart: string) {
+  return {
+    ...quarterPayload,
+    context: {
+      ...baseContext,
+      quarter_label: label,
+      anchor_week_start: anchorWeekStart,
+      iso_week: quarterHistory.weeks.find((entry) => entry.week_start === anchorWeekStart)?.iso_week || anchorWeekStart,
+    },
+    period_history: quarterHistory,
+    quarter: quarterPayload.quarter.map((row) => ({ ...row, quarter: label })),
+    quarter_bounds: { ...quarterPayload.quarter_bounds, label },
+  };
+}
+
 beforeEach(() => {
   getSession.mockResolvedValue({ data: { session: { access_token: "token", user: { email: "ada@xos-learning.fr" } } } });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(selfPayload), { status: 200 })));
@@ -227,6 +249,67 @@ describe("Weekly Perf", () => {
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("period=quarter"))).toBe(true);
     expect(await screen.findByText("Semaine après semaine")).toBeTruthy();
     expect(screen.getByText("Projeté vs signé")).toBeTruthy();
+  });
+
+  it("shows the quarter picker only in quarter view", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify(
+      String(input).includes("period=quarter") ? payloadForQuarter("FY27-Q1", "2026-07-06") : selfPayload,
+    ), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+
+    await screen.findByText("Ada Lovelace");
+    expect(screen.queryByLabelText("Choisir un trimestre")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Trimestre précédent" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+
+    expect(await screen.findByLabelText("Choisir un trimestre")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trimestre précédent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Trimestre suivant" })).toBeTruthy();
+  });
+
+  it("loads the previous quarter from period history", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.includes("week_start=2026-04-06")
+        ? payloadForQuarter("FY26-Q4", "2026-04-06")
+        : url.includes("period=quarter")
+          ? payloadForQuarter("FY27-Q1", "2026-07-06")
+          : selfPayload;
+      return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+
+    await screen.findByText("Ada Lovelace");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+    await screen.findByLabelText("Choisir un trimestre");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre précédent" }));
+
+    expect(await screen.findByText(/FY26-Q4 · S1\/13/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("period=quarter&week_start=2026-04-06"))).toBe(true);
+  });
+
+  it("loads the next quarter from period history", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.includes("week_start=2026-07-06")
+        ? payloadForQuarter("FY27-Q1", "2026-07-06")
+        : url.includes("period=quarter")
+          ? payloadForQuarter("FY26-Q4", "2026-04-06")
+          : selfPayload;
+      return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+
+    await screen.findByText("Ada Lovelace");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+    await screen.findByText(/FY26-Q4 · S1\/13/);
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre suivant" }));
+
+    expect(await screen.findByText(/FY27-Q1 · S1\/13/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("period=quarter&week_start=2026-07-06"))).toBe(true);
   });
 
   it("shows consolidated team stats in team view", async () => {
