@@ -9,7 +9,7 @@ import { sessionDayKey } from "./sessionLifecycle";
 
 type HubViewMode = "list" | "calendar";
 type KpiPeriod = "week" | "month";
-type ScheduleFilter = "upcoming" | "done" | "all";
+type ScheduleFilter = "upcoming" | "planned" | "done" | "all";
 
 type SessionsViewProps = {
   sessions: SessionSummary[];
@@ -78,9 +78,14 @@ function buildMonthGrid(year: number, monthIndex: number): (Date | null)[] {
   return cells;
 }
 
-function matchesSchedule(session: SessionSummary, filter: ScheduleFilter): boolean {
+function isPlannedSession(session: SessionSummary, today: string): boolean {
+  return session.status === "active" && Boolean(session.scheduled_for && session.scheduled_for > today);
+}
+
+function matchesSchedule(session: SessionSummary, filter: ScheduleFilter, today: string): boolean {
   if (filter === "all") return true;
-  if (filter === "upcoming") return session.status === "active";
+  if (filter === "planned") return isPlannedSession(session, today);
+  if (filter === "upcoming") return session.status === "active" && !isPlannedSession(session, today);
   return session.status === "completed";
 }
 
@@ -138,22 +143,24 @@ export function SessionsView({
 
   const scheduleCounts = useMemo(() => {
     let upcoming = 0;
+    let planned = 0;
     let done = 0;
     for (const session of sessions) {
-      if (matchesSchedule(session, "upcoming")) upcoming++;
-      if (matchesSchedule(session, "done")) done++;
+      if (matchesSchedule(session, "upcoming", today)) upcoming++;
+      if (matchesSchedule(session, "planned", today)) planned++;
+      if (matchesSchedule(session, "done", today)) done++;
     }
-    return { upcoming, done, all: sessions.length };
-  }, [sessions]);
+    return { upcoming, planned, done, all: sessions.length };
+  }, [sessions, today]);
 
   const filteredSessions = useMemo(() => {
     const list = sessions.filter((session) => {
-      if (!matchesSchedule(session, scheduleFilter)) return false;
+      if (!matchesSchedule(session, scheduleFilter, today)) return false;
       if (typeFilter !== "all" && session.session_type !== typeFilter) return false;
       return true;
     });
     return sortSessions(list, scheduleFilter);
-  }, [sessions, scheduleFilter, typeFilter]);
+  }, [sessions, scheduleFilter, today, typeFilter]);
 
   const sessionsByDay = useMemo(() => {
     const map = new Map<string, SessionSummary[]>();
@@ -345,6 +352,15 @@ export function SessionsView({
               </button>
               <button
                 type="button"
+                className={`calls-seg__btn${scheduleFilter === "planned" ? " calls-seg__btn--active" : ""}`}
+                aria-pressed={scheduleFilter === "planned"}
+                onClick={() => setScheduleFilter("planned")}
+              >
+                Planifiées
+                <span className="calls-seg__count xos-numeric">{scheduleCounts.planned}</span>
+              </button>
+              <button
+                type="button"
                 className={`calls-seg__btn${scheduleFilter === "done" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={scheduleFilter === "done"}
                 onClick={() => setScheduleFilter("done")}
@@ -410,6 +426,8 @@ export function SessionsView({
             <p>
               {scheduleFilter === "upcoming"
                 ? "Pas de séance à venir"
+                : scheduleFilter === "planned"
+                  ? "Pas de séance planifiée"
                 : scheduleFilter === "done"
                   ? "Pas de séance réalisée"
                   : "Aucun résultat"}
@@ -446,9 +464,13 @@ export function SessionsView({
                         <strong>{session.name}</strong>
                         <div className="calls-session-card__tags">
                           <Tag variant="muted">{sessionTypeLabel(session.session_type)}</Tag>
-                          <Tag variant={session.status === "active" ? "accent" : "default"}>
-                            {session.status === "active" ? "En cours" : "Terminée"}
-                          </Tag>
+                          {isPlannedSession(session, today) ? (
+                            <Tag variant="muted">Planifiée</Tag>
+                          ) : (
+                            <Tag variant={session.status === "active" ? "accent" : "default"}>
+                              {session.status === "active" ? "En cours" : "Terminée"}
+                            </Tag>
+                          )}
                           {session.shared && (
                             <Tag variant="accent">
                               Partagée{session.member_count ? ` · ${session.member_count}` : ""}

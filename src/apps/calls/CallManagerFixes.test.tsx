@@ -1119,6 +1119,61 @@ describe("SessionsView hub filters", () => {
     expect(screen.getByText("Déjà faite")).toBeTruthy();
   });
 
+  it("lists future active sessions under Planifiées with a visible badge", async () => {
+    const user = userEvent.setup();
+    const sessions = [
+      {
+        id: 1,
+        name: "À lancer maintenant",
+        status: "active" as const,
+        created_at: "2026-07-18T10:00:00Z",
+        scheduled_for: "2026-07-18",
+        session_type: "prospection" as const,
+        total: 10,
+        called: 0,
+        skipped: 0,
+        pending: 10,
+      },
+      {
+        id: 2,
+        name: "Comptes stratégiques septembre",
+        status: "active" as const,
+        created_at: "2026-07-18T10:00:00Z",
+        scheduled_for: "2099-09-15",
+        session_type: "prospection" as const,
+        total: 20,
+        called: 0,
+        skipped: 0,
+        pending: 20,
+      },
+    ];
+
+    render(
+      <SessionsView
+        sessions={sessions}
+        stats={null}
+        recallCount={0}
+        recallsLoading={false}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn()}
+        onNewSession={vi.fn()}
+        onOpenSession={vi.fn()}
+        onOpenRecalls={vi.fn()}
+        onUpdateSession={vi.fn()}
+        onDeleteSession={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("À lancer maintenant")).toBeTruthy();
+    expect(screen.queryByText("Comptes stratégiques septembre")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Planifiées/i }));
+    expect(screen.getByText("Comptes stratégiques septembre")).toBeTruthy();
+    expect(screen.queryByText("À lancer maintenant")).toBeNull();
+    expect(screen.getByText("Planifiée")).toBeTruthy();
+  });
+
   it("confirms session deletion in a custom modal", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);

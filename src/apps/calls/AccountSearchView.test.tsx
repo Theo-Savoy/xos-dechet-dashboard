@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountSearchView } from "./AccountSearchView";
 import { fetchAccountsSearch } from "./api";
+import { todayParisIso, tomorrowParisIso } from "./formControls.helpers";
 import type { AccountSearchHit, TeamMember } from "./types";
 
 vi.mock("./api", async (importOriginal) => {
@@ -249,6 +250,46 @@ describe("AccountSearchView", () => {
     expect(onCreateAudience).toHaveBeenCalledWith(
       expect.objectContaining({ namePrefix: "ACME décisionnaires DAF" }),
     );
+  });
+
+  it("includes the selected future date in the ABM creation payload", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAccountsSearch).mockResolvedValue({ accounts: [acme], truncated: false });
+    const { onCreateAudience } = renderView();
+
+    await user.type(screen.getByLabelText("Nom du compte"), "ACME");
+    await user.click(screen.getByRole("button", { name: "Rechercher" }));
+    await screen.findByText("ACME");
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner ACME" }));
+
+    const scheduledFor = tomorrowParisIso();
+    await user.click(screen.getByLabelText("Date de la séance ABM"));
+    if (scheduledFor.slice(0, 7) !== todayParisIso().slice(0, 7)) {
+      await user.click(screen.getByRole("button", { name: "Mois suivant" }));
+    }
+    await user.click(screen.getByRole("button", { name: String(Number(scheduledFor.slice(-2))) }));
+    await user.click(screen.getByRole("button", { name: "Créer 1 séance ABM" }));
+
+    expect(onCreateAudience).toHaveBeenCalledWith(
+      expect.objectContaining({ scheduledFor }),
+    );
+  });
+
+  it("rejects an ABM date that is not in the future", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAccountsSearch).mockResolvedValue({ accounts: [acme], truncated: false });
+    const { onCreateAudience } = renderView();
+
+    await user.type(screen.getByLabelText("Nom du compte"), "ACME");
+    await user.click(screen.getByRole("button", { name: "Rechercher" }));
+    await screen.findByText("ACME");
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner ACME" }));
+    await user.click(screen.getByLabelText("Date de la séance ABM"));
+    await user.click(screen.getByRole("button", { name: "Aujourd'hui" }));
+    await user.click(screen.getByRole("button", { name: "Créer 1 séance ABM" }));
+
+    expect(onCreateAudience).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("date future");
   });
 
   it("live preview: debounces rapid filter changes into a single request 300ms later", async () => {

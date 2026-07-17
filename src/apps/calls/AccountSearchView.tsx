@@ -15,6 +15,8 @@ import { fetchAccountsSearch, CallsApiError, type AudienceSessionGroup } from ".
 import { packAccountsIntoSessions } from "./audienceBinPacking";
 import { ChipGroup, PicklistMultiSelect } from "./filterControls";
 import { asOptions } from "./filterControls.helpers";
+import { DatePicker } from "./formControls";
+import { todayParisIso } from "./formControls.helpers";
 import type { AccountSearchHit, ContactPreview, TeamMember } from "./types";
 
 type AbmFilters = {
@@ -67,6 +69,7 @@ export type CreateAudiencePayload = {
   maxSessions: number;
   namePrefix?: string;
   excludedCount: number;
+  scheduledFor?: string;
 };
 
 type AccountSearchViewProps = {
@@ -89,6 +92,8 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [excludedCount, setExcludedCount] = useState(0);
   const [sessionName, setSessionName] = useState("");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [dateError, setDateError] = useState<string | null>(null);
   const [targetSize, setTargetSize] = useState(50);
   const [maxSessions, setMaxSessions] = useState(5);
 
@@ -194,12 +199,18 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
 
   const handleCreateClick = () => {
     if (groups.length === 0) return;
+    if (scheduledFor && scheduledFor <= todayParisIso()) {
+      setDateError("Choisissez une date future pour planifier la séance ABM.");
+      return;
+    }
+    setDateError(null);
     onCreateAudience({
       groups: groups.map((group) => ({ account_ids: group.accountIds, contacts: group.contacts })),
       targetSize,
       maxSessions,
       namePrefix: sessionName.trim() || query.trim() || undefined,
       excludedCount,
+      scheduledFor: scheduledFor || undefined,
     });
   };
 
@@ -281,9 +292,9 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
         </details>
       </GlassCard>
 
-      {(error || createError) && (
+      {(error || createError || dateError) && (
         <GlassCard className="calls-error">
-          <p role="alert" aria-live="assertive">{error || createError}</p>
+          <p role="alert" aria-live="assertive">{error || createError || dateError}</p>
         </GlassCard>
       )}
 
@@ -325,6 +336,14 @@ export function AccountSearchView({ token, team = [], onBack, onCreateAudience, 
                 />
               </label>
               <div className="calls-fb-row">
+                <DatePicker
+                  label="Date de la séance ABM"
+                  value={scheduledFor}
+                  onChange={(next) => {
+                    setScheduledFor(next);
+                    setDateError(null);
+                  }}
+                />
                 <label className="calls-field">
                   <span>Taille cible par séance</span>
                   <input
