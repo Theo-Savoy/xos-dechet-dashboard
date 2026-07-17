@@ -229,6 +229,44 @@ describe("Weekly Perf", () => {
     expect(screen.getByText("Projeté vs signé")).toBeTruthy();
   });
 
+  it("splits the volume chart into one mini chart per unit instead of a shared axis", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(selfPayload), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify(quarterPayload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+    await screen.findByText("Ada Lovelace");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+    const title = await screen.findByText("Semaine après semaine");
+    const section = title.closest(".weekly-section") as HTMLElement;
+    expect(within(section).getByTestId("weekly-activity-mini-rdv")).toBeTruthy();
+    expect(within(section).getByTestId("weekly-activity-mini-detections")).toBeTruthy();
+    expect(within(section).getByTestId("weekly-activity-mini-calls")).toBeTruthy();
+    expect(within(section).getByText("RDV")).toBeTruthy();
+    expect(within(section).getByText("Détections")).toBeTruthy();
+    expect(within(section).getByText("Appels")).toBeTruthy();
+  });
+
+  it("drops the Appels mini chart when no seller logged calls", async () => {
+    const quarterNoCallsPayload = {
+      ...quarterPayload,
+      pulse: quarterPayload.pulse.map((row) => ({ ...row, calls: 0 })),
+      prior_pulse: quarterPayload.prior_pulse.map((row) => ({ ...row, calls: 0 })),
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(selfPayload), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify(quarterNoCallsPayload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WeeklyApp />);
+    await screen.findByText("Ada Lovelace");
+    fireEvent.click(screen.getByRole("button", { name: "Trimestre" }));
+    const title = await screen.findByText("Semaine après semaine");
+    const section = title.closest(".weekly-section") as HTMLElement;
+    expect(within(section).getByTestId("weekly-activity-mini-rdv")).toBeTruthy();
+    expect(within(section).getByTestId("weekly-activity-mini-detections")).toBeTruthy();
+    expect(within(section).queryByTestId("weekly-activity-mini-calls")).toBeNull();
+  });
+
   it("shows consolidated team stats in team view", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(teamPayload), { status: 200 })));
     render(<WeeklyApp />);

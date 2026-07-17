@@ -1220,9 +1220,12 @@
 .weekly-chart-card--empty { opacity: .72; }
 .weekly-chart { height: 190px; min-width: 0; }
 .weekly-chart--forecast { height: 220px; }
-.weekly-chart--activity { height: 220px; }
-.weekly-activity-card .recharts-legend-item-text,
 .weekly-forecast-card .recharts-legend-item-text { color: var(--xos-text-muted) !important; }
+
+.weekly-activity-grid { display: grid; gap: .35rem; }
+.weekly-activity-row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: .5rem; }
+.weekly-activity-row__label { font-size: .78rem; font-weight: 600; color: var(--xos-text-muted); }
+.weekly-chart--activity-mini { height: 80px; min-width: 0; }
 
 .weekly-chart .recharts-rectangle.recharts-tooltip-cursor {
   fill: color-mix(in srgb, var(--xos-accent) 12%, transparent) !important;
