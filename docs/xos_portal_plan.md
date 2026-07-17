@@ -176,13 +176,26 @@ Un centre de commande rapide inspiré de Spotlight (macOS), accessible via `Cmd 
 
 ### 5. 🏆 XOS Arena (Gamification & Challenges) — _Nouveau_
 
-Rendre la saisie CRM et la prospection ludiques grâce au challenge d'équipe.
+**Direction révisée 2026-07-17** (retour test utilisateur Combo, voir `docs/specs/combo-gamification-v1.md`) :
 
-- **Défis hebdomadaires** : créés par les managers depuis l'app (ex. _"Le premier à nettoyer toutes ses opportunités en retard"_, _"Meilleur convertisseur de la semaine"_), sur un catalogue de métriques calculées depuis Salesforce/journal.
-- **Leaderboard** : classement recalculé périodiquement (cron Vercel → snapshot dans `challenge_results`), médailles et badges persistés dans Postgres.
-- _Bénéfice_ : augmente l'adoption du CRM et la qualité des données par l'émulation collective.
+Arena garde sa vocation (challenges d'équipe + reconnaissance collective) mais **change d'angle** : on passe d'un système compétitif (leaderboard, médailles, classement) à un système **collaboratif et anonyme**.
 
-### 6. ⚙️ Hub Connexion (Paramètres & Status) — _Nouveau_
+- **Pas de leaderboard public.** Pas de rang affiché nominativement. Pas de médaille "1er/2e/3e".
+- **Défis hebdomadaires** créés par les managers depuis l'app, sur catalogue de métriques (qualité CRM, RDV, rappels, complétude). Templates V1 :
+  - Cumulatif : "100 RDV équipe cette semaine"
+  - Solidarité : "5 commerciaux font ≥ 10 appels lundi"
+  - Relais : "Tous les commerciaux appellent leurs rappels dus"
+- **Reconnaissance anonyme par défaut.** Le feed d'équipe ("Quelqu'un vient de passer Or vitesse") n'affiche un nom que si l'utilisateur a explicitement opté pour (case dans `profiles`).
+- **Mur des réussites personnel** (badges one-timer, paliers XP) reste **dans Combo** (menu Aide → "Mes réussites") — pas dupliqué dans Arena. Cf. spec `combo-gamification-v1.md` §5.
+- **Médaille collective** (badge 🤝 Relais) décernée à tous les contributeurs d'un défi atteint — anonyme par défaut, opt-in pour signature.
+
+**Coordination avec Combo V1** :
+- Combo émet déjà les `kind` de notifs `defi_collectif_atteint` et `relais` (réservés mais pas émis — cf. `combo-gamification-v1.md` §3.1). Arena les consommera sans changement d'API.
+- Tables déjà migrées : `challenges`, `challenge_results`, `badges` (migration `001_initial_schema.sql`).
+
+_Bénéfice_ : augmente l'adoption du CRM et la qualité des données par la **pression sociale positive** (étude citée par Théo : affichage public des temps de réponse des agents → +40% de taux de réponse, sans classement strict) plutôt que par compétition pure.
+
+---
 
 - **Statut** : connexion API Salesforce, quotas d'appels restants (endpoint SF `/limits`), fraîcheur des caches.
 - **Configuration** (managers + admin) : seuils de retard, exclusions de comptes — stockés dans `settings` (Supabase), consommés par les endpoints.

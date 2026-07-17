@@ -65,6 +65,8 @@ Tout le manager, plus :
 | Hub — CRUD `settings` | ❌ | ✅ | ✅ |
 | Hub — changer les rôles | ❌ | ❌ | ✅ |
 | Arena — créer un challenge | ❌ | ✅ | ✅ |
+| Arena — feed des réussites équipe (anonyme) | ✅ | ✅ | ✅ |
+| Arena — opt-in signature des réussites | ✅ (soi-même) | ✅ (soi-même) | ✅ (soi-même) |
 | Extinction Basic Auth / ops sensibles | ❌ | ❌ | ✅ (humain + code) |
 
 Le dock peut filtrer via `AppManifest.roles` (ex. Hub visible à tous ; panneau config seulement si `canManageSettings`).
