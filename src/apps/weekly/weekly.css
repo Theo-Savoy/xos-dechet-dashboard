@@ -126,6 +126,16 @@
 .weekly-controls .xos-select { align-self: center; }
 .weekly-display-toggle { margin-left: 0; flex-shrink: 0; }
 
+.weekly-quarter-picker {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: .4rem;
+  min-width: 0;
+}
+
+.weekly-quarter-picker .xos-select { flex: 1 1 auto; }
+.weekly-quarter-picker .xos-btn { flex: 0 0 2.25rem; padding-inline: .6rem; }
+
 .weekly-seg {
   display: inline-flex;
   align-items: center;
@@ -1375,6 +1385,9 @@
   .weekly-controls__cluster {
     align-items: stretch;
   }
+
+  .weekly-quarter-picker { width: 100%; }
+  .weekly-controls .weekly-quarter-picker .xos-select { width: auto; }
 
   .weekly-seg {
     display: flex;
