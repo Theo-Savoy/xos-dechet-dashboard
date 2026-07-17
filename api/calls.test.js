@@ -1173,6 +1173,47 @@ describe("POST /api/calls", () => {
       expect(res.status).toBe(500);
       expect((await res.json()).error).toBe("session_contacts_lookup_failed");
     });
+
+    it("uses the provided name and scheduled_for instead of the defaults", async () => {
+      mockDb
+        .mockResolvedValueOnce({ data: { id: 1, owner: "user-123", name: "Base", status: "active" }, error: null })
+        .mockResolvedValueOnce({
+          data: [{ sf_contact_id: "003000000000001", contact_name: "Alice", outcome: SEMANTIC.followUpNoAnswer }],
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: { id: 20, name: "Base — Relance 18 juil.", status: "active", created_at: "2026-01-01T00:00:00Z" }, error: null })
+        .mockResolvedValueOnce({ data: [{ id: 301, sf_contact_id: "003000000000001", contact_name: "Alice", status: "pending" }], error: null });
+
+      const res = await POST(makeReq("POST", {
+        action: "create_follow_up_session",
+        session_id: 1,
+        name: "Base — Relance 18 juil.",
+        scheduled_for: "2026-07-18",
+      }));
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).session.name).toBe("Base — Relance 18 juil.");
+      const insertedSession = mockChain.insert.mock.calls
+        .map(([payload]) => payload)
+        .find((payload) => payload?.name === "Base — Relance 18 juil.");
+      expect(insertedSession?.scheduled_for).toBe("2026-07-18");
+    });
+
+    it("returns 400 invalid_name for a blank override", async () => {
+      const res = await POST(makeReq("POST", { action: "create_follow_up_session", session_id: 1, name: "   " }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_name");
+    });
+
+    it("returns 400 invalid_scheduled_for for a malformed date", async () => {
+      const res = await POST(makeReq("POST", {
+        action: "create_follow_up_session",
+        session_id: 1,
+        scheduled_for: "not-a-date",
+      }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("invalid_scheduled_for");
+    });
   });
 
   describe("skip_contact", () => {

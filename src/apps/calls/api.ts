@@ -448,10 +448,16 @@ export async function completeSession(token: string, sessionId: number): Promise
 export async function createFollowUpSession(
   token: string,
   sessionId: number,
+  overrides?: { name?: string; scheduledFor?: string },
 ): Promise<{ session: SessionDetail; contacts: SessionContact[] }> {
   return apiFetch(token, "/api/calls", {
     method: "POST",
-    body: JSON.stringify({ action: "create_follow_up_session", session_id: sessionId }),
+    body: JSON.stringify({
+      action: "create_follow_up_session",
+      session_id: sessionId,
+      name: overrides?.name,
+      scheduled_for: overrides?.scheduledFor,
+    }),
   });
 }
 

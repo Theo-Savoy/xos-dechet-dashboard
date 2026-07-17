@@ -24,3 +24,9 @@ export function formatActivityDateFr(value: string | null | undefined): string {
 export function todayParisIso(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
 }
+
+/** Lendemain (Europe/Paris), ex. suggestion de date pour une séance de relance. */
+export function tomorrowParisIso(): string {
+  const [year, month, day] = todayParisIso().split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + 1)).toISOString().slice(0, 10);
+}

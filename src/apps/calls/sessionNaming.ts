@@ -8,3 +8,12 @@ export function nextContinuationName(name: string): string {
   }
   return `${trimmed} #2`;
 }
+
+/** Suggestion lisible pour le nom pré-rempli de la séance de relance (#2). */
+export function suggestFollowUpSessionName(name: string, dateIso: string): string {
+  const base = String(name || "").trim() || "Séance";
+  const match = /^\d{4}-\d{2}-\d{2}$/.test(dateIso)
+    ? new Date(`${dateIso}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+    : "";
+  return match ? `${base} — Relance ${match}` : `${base} — Relance`;
+}

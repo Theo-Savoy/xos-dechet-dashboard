@@ -861,6 +861,36 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     return list;
   };
 
+  const removeRefetchTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (removeRefetchTimer.current != null) window.clearTimeout(removeRefetchTimer.current);
+    };
+  }, []);
+
+  // Un seul refetch de sync même si l'utilisateur retire plusieurs contacts
+  // d'affilée, au lieu d'un refetch complet de la séance par remove.
+  const scheduleRemoveSync = (viewAtCall: View, sessionId: number | null) => {
+    if (removeRefetchTimer.current != null) window.clearTimeout(removeRefetchTimer.current);
+    removeRefetchTimer.current = window.setTimeout(() => {
+      removeRefetchTimer.current = null;
+      void (async () => {
+        try {
+          if (viewAtCall === "recalls") {
+            await refreshRecallsQueue();
+          } else if (sessionId != null) {
+            const refreshed = await fetchSession(token, sessionId);
+            setContacts(refreshed.contacts);
+            setActiveSession(refreshed.session);
+          }
+        } catch (err) {
+          setRunnerError(errorMessage(err));
+        }
+      })();
+    }, 500);
+  };
+
   const resolveLogTarget = (contactId: number): { sessionId: number; contactId: number } | null => {
     if (view === "recalls") {
       const contact = contacts.find((c) => c.id === contactId);
@@ -1160,28 +1190,27 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           : removeContact(token, target.sessionId, target.contactId),
       ),
     );
+    const removedIds = targets
+      .filter((_, index) => results[index]!.status === "fulfilled")
+      .map((target) => target.contactId);
     const failures = results.filter((result) => result.status === "rejected");
-    try {
-      if (focusedContactId && contactIds.includes(focusedContactId)) {
-        setFocusedContactId(null);
-      }
-      if (view === "recalls") {
-        await refreshRecallsQueue();
-      } else if (activeSession) {
-        const refreshed = await fetchSession(token, activeSession.id);
-        setContacts(refreshed.contacts);
-        setActiveSession(refreshed.session);
-      }
-      if (failures.length) {
-        setRunnerError(
-          `${results.length - failures.length} retirés, ${failures.length} en échec — liste actualisée`,
-        );
-      }
-    } catch (err) {
-      setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
+
+    if (focusedContactId && contactIds.includes(focusedContactId)) {
+      setFocusedContactId(null);
     }
+    // Mise à jour locale immédiate : pas de refetch complet de la séance à
+    // chaque remove (c'était la source de lenteur). Le refetch de sync est
+    // debounced ci-dessous.
+    if (removedIds.length > 0) {
+      setContacts((prev) => prev.filter((c) => !removedIds.includes(c.id)));
+    }
+    if (failures.length) {
+      setRunnerError(
+        `${results.length - failures.length} retirés, ${failures.length} en échec — liste actualisée`,
+      );
+    }
+    setRunnerLoading(false);
+    scheduleRemoveSync(view, activeSession?.id ?? null);
   };
 
   const handleUpdateRecall = async (contactIds: number[], recallAt: string | null) => {
@@ -1263,11 +1292,11 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     }
   };
 
-  const handleCreateFollowUp = async () => {
+  const handleCreateFollowUp = async (name: string, scheduledFor: string) => {
     if (!token || !activeSession) return;
     setFollowUpLoading(true);
     try {
-      const data = await createFollowUpSession(token, activeSession.id);
+      const data = await createFollowUpSession(token, activeSession.id, { name, scheduledFor });
       setActiveSession(data.session);
       setContacts(data.contacts);
       setAwaitingEvent(null);
@@ -1659,7 +1688,7 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           followUpLoading={followUpLoading}
           error={runnerError}
           onBack={goToSessions}
-          onCreateFollowUp={() => void handleCreateFollowUp()}
+          onCreateFollowUp={(name, scheduledFor) => void handleCreateFollowUp(name, scheduledFor)}
         />
       )}
 

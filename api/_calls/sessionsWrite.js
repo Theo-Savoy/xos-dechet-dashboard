@@ -272,10 +272,20 @@ export async function handleSessionWrite({ action, body, user, client, headers }
   }
 
   if (action === "create_follow_up_session") {
-    const { session_id } = body;
+    const { session_id, name: nameInput, scheduled_for: scheduledForInput } = body;
 
     if (typeof session_id !== "number" || !Number.isInteger(session_id) || session_id < 1) {
       return new Response(JSON.stringify({ error: "invalid_session_id" }), { status: 400, headers });
+    }
+    if (
+      nameInput !== undefined
+      && nameInput !== null
+      && (typeof nameInput !== "string" || nameInput.trim().length === 0 || nameInput.trim().length > 120)
+    ) {
+      return new Response(JSON.stringify({ error: "invalid_name" }), { status: 400, headers });
+    }
+    if (scheduledForInput !== undefined && scheduledForInput !== null && !isValidScheduledFor(scheduledForInput)) {
+      return new Response(JSON.stringify({ error: "invalid_scheduled_for" }), { status: 400, headers });
     }
 
     const sessionCheck = await assertSessionOwner(client, session_id, user.id);
@@ -301,9 +311,9 @@ export async function handleSessionWrite({ action, body, user, client, headers }
     const created = await insertSessionWithContacts(
       client,
       user.id,
-      nextContinuationName(sessionCheck.session.name),
+      nameInput?.trim() || nextContinuationName(sessionCheck.session.name),
       followUpContacts,
-      todayParisDate(),
+      scheduledForInput || todayParisDate(),
       { sessionType: "relance" },
     );
     if (created.error) {

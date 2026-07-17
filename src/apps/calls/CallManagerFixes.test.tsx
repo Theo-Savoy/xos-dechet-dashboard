@@ -1023,6 +1023,41 @@ describe("RecapView", () => {
     expect(screen.getByText("RDV planifié")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Aucun contact ne nécessite de relance.");
   });
+
+  it("prefills a readable name suggestion and a date for the follow-up session, next to the non-contacted list", async () => {
+    const user = userEvent.setup();
+    const onCreateFollowUp = vi.fn();
+    const skippedContact = {
+      ...alice,
+      id: 2,
+      contact_name: "Bob Durand",
+      status: "skipped" as const,
+      outcome: null,
+    };
+    render(
+      <RecapView
+        session={{ ...session, name: "Prospection Lyon", status: "completed" }}
+        contacts={[skippedContact]}
+        followUpLoading={false}
+        error={null}
+        onBack={vi.fn()}
+        onCreateFollowUp={onCreateFollowUp}
+      />,
+    );
+
+    const nameInput = screen.getByLabelText("Nom de la séance 2") as HTMLInputElement;
+    expect(nameInput.value).toMatch(/^Prospection Lyon — Relance /);
+    expect(screen.getByLabelText("Date de la séance 2")).toBeTruthy();
+
+    // Le bouton de préparation de la relance est juste après la liste des
+    // non-contactés dans le flux visuel de la page.
+    const skippedListIndex = screen.getByText("Non contactés — reportés en follow-up")
+      .compareDocumentPosition(screen.getByRole("button", { name: "Préparer la relance" }));
+    expect(skippedListIndex & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Préparer la relance" }));
+    expect(onCreateFollowUp).toHaveBeenCalledWith(nameInput.value, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
 });
 
 describe("SessionsView hub filters", () => {

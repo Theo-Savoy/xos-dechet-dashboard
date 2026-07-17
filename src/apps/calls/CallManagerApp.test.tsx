@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { isValidElement, useState } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRegistry, getAppManifest } from "../../os/registry";
@@ -420,7 +420,7 @@ describe("CallManagerApp component", () => {
     });
 
     render(<CallManagerApp params={{ session_id: "1" }} />);
-    await user.click(await screen.findByRole("button", { name: /Créer séance #2/i }));
+    await user.click(await screen.findByRole("button", { name: /Préparer la relance/i }));
 
     expect(await screen.findByRole("heading", { name: "Prospection Lyon #2" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Choisir le cap" })).toBeTruthy();
@@ -474,6 +474,80 @@ describe("CallManagerApp component", () => {
     expect(kpis.textContent).toContain("0/4");
     expect(screen.getByRole("progressbar", { name: "Progression RDV : 0 sur 4" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Objectif/ })).toBeNull();
+  });
+
+  it("retiring 5 contacts in a row triggers only one full session refetch (debounce)", async () => {
+    const user = userEvent.setup();
+    const activeSession = {
+      id: 1,
+      name: "Prospection Lyon",
+      status: "active",
+      created_at: "2026-07-10T10:00:00Z",
+      rdv_goal: null,
+      engaged_at: "2026-07-10T10:01:00Z",
+    };
+    const contacts = Array.from({ length: 5 }, (_, i) => ({
+      id: 100 + i,
+      position: i,
+      sf_contact_id: `003000000001${i}AAAA`,
+      sf_account_id: null,
+      contact_name: `Contact ${i}`,
+      account_name: "ACME",
+      phone: null,
+      title: null,
+      linkedin_url: null,
+      status: "pending" as const,
+      outcome: null,
+      comments: null,
+      sf_task_id: null,
+      sf_event_id: null,
+      called_at: null,
+    }));
+
+    let sessionRefetchCount = 0;
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
+      if (url === "/api/calls?resource=team") {
+        return Promise.resolve(new Response(JSON.stringify({ team: [] }), { status: 200 }));
+      }
+      if (url === "/api/calls?session_id=1") {
+        sessionRefetchCount += 1;
+        return Promise.resolve(new Response(JSON.stringify({ session: activeSession, contacts }), { status: 200 }));
+      }
+      if (url.includes("context_contact_id=")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          context: { contact_record_url: null, account_record_url: null, tasks: [], opportunities: [] },
+        }), { status: 200 }));
+      }
+      if (url === "/api/calls" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { action?: string };
+        if (body.action === "remove_contact") {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+        }
+      }
+      return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
+    });
+
+    render(<CallManagerApp params={{ session_id: "1" }} />);
+
+    await user.click(await screen.findByRole("button", { name: "Liste" }));
+    const refetchesAfterOpen = sessionRefetchCount;
+    expect(refetchesAfterOpen).toBe(1);
+
+    for (const contact of contacts) {
+      await user.click(screen.getByLabelText(`Sélectionner ${contact.contact_name}`));
+      await user.click(screen.getByRole("button", { name: "Retirer" }));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "Retirer" }));
+      await waitFor(() => expect(screen.queryByText(contact.contact_name)).toBeNull());
+    }
+
+    // Le remove local (filter du state) est immédiat : aucun refetch complet
+    // tant que le debounce (500ms) n'a pas expiré.
+    expect(sessionRefetchCount).toBe(refetchesAfterOpen);
+
+    await waitFor(() => expect(sessionRefetchCount).toBe(refetchesAfterOpen + 1), { timeout: 2000 });
   });
 
   it("opens an unengaged session in the pre-session flow", async () => {

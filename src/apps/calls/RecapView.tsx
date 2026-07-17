@@ -1,4 +1,8 @@
+import { useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
+import { DatePicker } from "./formControls";
+import { tomorrowParisIso } from "./formControls.helpers";
+import { suggestFollowUpSessionName } from "./sessionNaming";
 import type { SessionContact, SessionDetail } from "./types";
 
 type RecapViewProps = {
@@ -7,7 +11,7 @@ type RecapViewProps = {
   followUpLoading: boolean;
   error: string | null;
   onBack: () => void;
-  onCreateFollowUp: () => void;
+  onCreateFollowUp: (name: string, scheduledFor: string) => void;
 };
 
 export function RecapView({
@@ -27,6 +31,9 @@ export function RecapView({
     skipped.length +
     pending.length;
 
+  const [followUpDate, setFollowUpDate] = useState(tomorrowParisIso);
+  const [followUpName, setFollowUpName] = useState(() => suggestFollowUpSessionName(session.name, tomorrowParisIso()));
+
   return (
     <div className="calls-view">
       <header className="calls-view__header calls-view__header--runner">
@@ -38,15 +45,6 @@ export function RecapView({
             <Tag variant="alert">Terminée</Tag>
             <h2>{session.name}</h2>
           </div>
-        </div>
-        <div className="calls-view__actions">
-          <Button variant="secondary" onClick={onCreateFollowUp} disabled={followUpLoading || followUpCount === 0}>
-            {followUpLoading
-              ? "Création…"
-              : followUpCount
-                ? `Créer séance #2 (${followUpCount})`
-                : "Aucune relance nécessaire"}
-          </Button>
         </div>
       </header>
 
@@ -117,6 +115,38 @@ export function RecapView({
               </li>
             ))}
           </ul>
+        </GlassCard>
+      )}
+
+      {followUpCount > 0 && (
+        <GlassCard className="calls-recap-list calls-recap-followup">
+          <h3>Préparer la relance</h3>
+          <p className="calls-recap-followup__hint">
+            {followUpCount} contact{followUpCount > 1 ? "s" : ""} non contacté{followUpCount > 1 ? "s" : ""} basculeront dans la séance 2.
+          </p>
+          <div className="calls-fb-row">
+            <label className="calls-field">
+              <span>Nom de la séance 2</span>
+              <input
+                type="text"
+                className="calls-input"
+                value={followUpName}
+                onChange={(event) => setFollowUpName(event.target.value)}
+              />
+            </label>
+            <DatePicker label="Date de la séance 2" value={followUpDate} onChange={setFollowUpDate} />
+          </div>
+          <Button
+            onClick={() =>
+              onCreateFollowUp(
+                followUpName.trim() || suggestFollowUpSessionName(session.name, followUpDate),
+                followUpDate,
+              )
+            }
+            disabled={followUpLoading}
+          >
+            {followUpLoading ? "Création…" : "Préparer la relance"}
+          </Button>
         </GlassCard>
       )}
 
