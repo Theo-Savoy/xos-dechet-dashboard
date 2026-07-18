@@ -310,7 +310,7 @@ function CommercialCard({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <Button variant="ghost"
       type="button"
       className={`pilotage-caller-card${selected ? " pilotage-caller-card--selected" : ""}`}
       onClick={onSelect}
@@ -334,7 +334,7 @@ function CommercialCard({
           <strong className="xos-numeric">{caller.kpis.rdv}</strong>
         </div>
       </div>
-    </button>
+    </Button>
   );
 }
 
@@ -588,7 +588,7 @@ export function PilotageView({
         </div>
         <div className="calls-view__actions pilotage-header__actions">
           <div className="pilotage-period-nav" role="group" aria-label="Navigation période">
-            <button
+            <Button variant="ghost"
               type="button"
               className="calls-seg__btn"
               onClick={goPrev}
@@ -597,9 +597,9 @@ export function PilotageView({
               aria-label="Période précédente"
             >
               ‹
-            </button>
+            </Button>
             <span className="pilotage-period-nav__label">{periodLabel}</span>
-            <button
+            <Button variant="ghost"
               type="button"
               className="calls-seg__btn"
               onClick={goNext}
@@ -615,36 +615,36 @@ export function PilotageView({
               aria-label="Période suivante"
             >
               ›
-            </button>
+            </Button>
           </div>
           <div className="calls-seg" role="group" aria-label="Période">
-            <button
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${period === "day" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={period === "day"}
               onClick={() => setPeriod("day")}
             >
               Jour
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${period === "week" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={period === "week"}
               onClick={() => setPeriod("week")}
             >
               Semaine
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${period === "month" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={period === "month"}
               onClick={() => setPeriod("month")}
             >
               Mois
-            </button>
+            </Button>
           </div>
           <div className="calls-seg" role="group" aria-label="Détail">
-            <button
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${detailMode === "days" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={detailMode === "days"}
@@ -660,8 +660,8 @@ export function PilotageView({
               }}
             >
               Jours
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${detailMode === "sessions" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={detailMode === "sessions"}
@@ -672,7 +672,7 @@ export function PilotageView({
               }}
             >
               Séances
-            </button>
+            </Button>
           </div>
           <Button variant="secondary" onClick={() => void load({ force: true })} disabled={loading && !data}>
             Actualiser
@@ -716,22 +716,22 @@ export function PilotageView({
                 <p className="pilotage-compact-card__hint">Cochez pour filtrer.</p>
               </div>
               <div className="calls-seg pilotage-sessions-compact__actions" role="group" aria-label="Sélection séances">
-                <button
+                <Button variant="ghost"
                   type="button"
                   className="calls-seg__btn"
                   onClick={selectAllSessions}
                   disabled={sessions.length === 0 || selectedSessionIds.size === sessions.length}
                 >
                   Tout
-                </button>
-                <button
+                </Button>
+                <Button variant="ghost"
                   type="button"
                   className="calls-seg__btn"
                   onClick={selectNoSessions}
                   disabled={sessions.length === 0 || selectedSessionIds.size === 0}
                 >
                   Aucun
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -804,7 +804,7 @@ export function PilotageView({
                 const open = expandedDay === day.date;
                 return (
                   <li key={day.date} className={`pilotage-day-row${open ? " pilotage-day-row--open" : ""}`}>
-                    <button
+                    <Button variant="ghost"
                       type="button"
                       className="pilotage-day-row__btn"
                       aria-expanded={open}
@@ -822,7 +822,7 @@ export function PilotageView({
                         <span>{pct(day.kpis.rate_decroche)} décroché</span>
                         <span>{day.kpis.rdv} RDV</span>
                       </span>
-                    </button>
+                    </Button>
                     {open && day.by_caller.length > 0 && (
                       <div className="pilotage-day-row__callers">
                         {day.by_caller.map((c) => (
@@ -953,13 +953,13 @@ export function PilotageView({
               <p className="pilotage-panel__hint">Qui a appelé, à qui le RDV revient.</p>
             </div>
             {hasMoreRdv && (
-              <button
+              <Button variant="ghost"
                 type="button"
                 className="calls-seg__btn"
                 onClick={() => setShowAllRdv((open) => !open)}
               >
                 {showAllRdv ? "Réduire" : `Tout voir (${rdvAttributions.length})`}
-              </button>
+              </Button>
             )}
           </div>
           {rdvAttributions.length === 0 ? (
