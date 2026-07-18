@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import logoXos from '../assets/logo-xos.png';
+import { Button } from '../components/ui';
 import {
   fetchNotifications,
   markNotificationsRead,
@@ -355,7 +356,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
 
   return (
     <div className="xos-cc">
-      <button
+      <Button variant="icon"
         type="button"
         className={`xos-cc__trigger${unread > 0 ? ' xos-cc__trigger--badge' : ''}`}
         aria-expanded={open}
@@ -375,11 +376,11 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
         {unread > 0 && (
           <span className="xos-cc__badge">{unread > 9 ? '9+' : unread}</span>
         )}
-      </button>
+      </Button>
 
       {open && (
         <>
-          <button
+          <Button variant="ghost"
             type="button"
             className="xos-cc__backdrop"
             aria-label="Fermer le centre de notifications"
@@ -397,22 +398,22 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
               </div>
               <div className="xos-cc__head-actions">
                 {unread > 0 && (
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     className="xos-cc__linkbtn"
                     onClick={() => void markAll()}
                   >
                     Tout marquer lu
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button variant="icon"
                   type="button"
                   className="xos-cc__close"
                   aria-label="Fermer"
                   onClick={() => setOpen(false)}
                 >
                   &times;
-                </button>
+                </Button>
               </div>
             </header>
 
@@ -489,7 +490,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                           aria-label="Réagir"
                         >
                           {QUICK_REACTION_EMOJIS.map((emoji) => (
-                            <button
+                            <Button variant="icon"
                               key={emoji}
                               ref={(button) => {
                                 if (emoji === QUICK_REACTION_EMOJIS[0]) {
@@ -505,7 +506,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                               onClick={() => void handleReact(item, emoji)}
                             >
                               {emoji}
-                            </button>
+                            </Button>
                           ))}
                           <div
                             ref={
@@ -515,7 +516,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                             }
                             className="xos-cc__react-picker"
                           >
-                            <button
+                            <Button variant="icon"
                               ref={(button) => {
                                 if (button) {
                                   pickerButtonRefs.current.set(item.id, button);
@@ -538,7 +539,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                               }
                             >
                               <span aria-hidden="true">+</span>
-                            </button>
+                            </Button>
                             {pickerOpenId === item.id && (
                               <div
                                 id={`xos-reaction-picker-${item.id}`}
@@ -547,7 +548,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                                 aria-label="Autres réactions"
                               >
                                 {PICKER_REACTION_EMOJIS.map((emoji) => (
-                                  <button
+                                  <Button variant="icon"
                                     key={emoji}
                                     type="button"
                                     role="menuitem"
@@ -561,7 +562,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                                     }}
                                   >
                                     {emoji}
-                                  </button>
+                                  </Button>
                                 ))}
                               </div>
                             )}
@@ -595,7 +596,7 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                         </a>
                       )}
                       {actionParams && onOpenApp && (
-                        <button
+                        <Button variant="secondary"
                           type="button"
                           className="xos-cc__sf"
                           onClick={() => {
@@ -604,16 +605,16 @@ export function ControlCenter({ accessToken, onOpenApp }: ControlCenterProps) {
                           }}
                         >
                           Ouvrir la séance
-                        </button>
+                        </Button>
                       )}
                       {unreadItem && (
-                        <button
+                        <Button variant="ghost"
                           type="button"
                           className="xos-cc__linkbtn"
                           onClick={() => void markOne(item.id)}
                         >
                           Marquer lu
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </article>

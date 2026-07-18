@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Button } from './Button';
 
@@ -37,5 +38,11 @@ describe('Button', () => {
   it('forwards native button props', () => {
     render(<Button disabled>Désactivé</Button>);
     expect((screen.getByRole('button', { name: 'Désactivé' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('forwards a native button ref', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<Button ref={ref}>Action</Button>);
+    expect(ref.current).toBe(screen.getByRole('button', { name: 'Action' }));
   });
 });
