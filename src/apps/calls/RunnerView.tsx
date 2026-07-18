@@ -14,6 +14,7 @@ import { EmptyState } from "./EmptyState";
 import { CommandBar, ShortcutHelp } from "./CommandBar";
 import { ComboOnboardingDemo } from "./ComboOnboardingDemo";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { MyTrophies } from "./MyTrophies";
 import {
   digitFromKeyboardCode,
   hasSeenComboDemo,
@@ -33,7 +34,7 @@ import {
   rdvHeatLevel,
   type RdvHeat,
 } from "./rdvCelebrate";
-import { DatePicker } from "./formControls";
+import { DatePicker, NoteTemplateChips } from "./formControls";
 import { formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls.helpers";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
@@ -274,6 +275,7 @@ export function RunnerView({
   const [toast, setToast] = useState<RunnerToast | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [myTrophiesOpen, setMyTrophiesOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !hasSeenComboDemo());
   const [soundsEnabled, setSoundsEnabled] = useState(readSoundsEnabled);
   const [soundPrefs, setSoundPrefs] = useState(readSoundPrefs);
@@ -2068,6 +2070,7 @@ export function RunnerView({
                   placeholder={willSendRecall ? "Motif du rappel…" : "Notes sur l'appel…"}
                 />
               </label>
+              <NoteTemplateChips value={comments} onChange={setComments} />
 
               {resultat === "RDV planifié" ? (
                 <EventPanel
@@ -2239,12 +2242,17 @@ export function RunnerView({
         soundsEnabled={soundsEnabled}
         soundPrefs={soundPrefs}
         onSoundPrefsChange={setSoundPrefs}
+        currentUserId={currentUserId}
       />
       <ShortcutHelp
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         onOpenCommandBar={() => setCommandBarOpen(true)}
+        onOpenMyTrophies={currentUserId ? () => setMyTrophiesOpen(true) : undefined}
       />
+      {currentUserId && (
+        <MyTrophies open={myTrophiesOpen} onClose={() => setMyTrophiesOpen(false)} userId={currentUserId} />
+      )}
       <ComboOnboardingDemo open={demoOpen} onClose={() => setDemoOpen(false)} />
       <ConfirmDialog
         open={pendingRemove != null}
