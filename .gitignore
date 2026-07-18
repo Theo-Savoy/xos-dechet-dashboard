@@ -13,3 +13,6 @@ dist/
 supabase/.temp/
 Logo_*.png
 .worktrees/
+/test-results/
+/playwright-report/
+/playwright/.cache/
