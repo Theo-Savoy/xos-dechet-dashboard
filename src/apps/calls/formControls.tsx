@@ -123,6 +123,46 @@ export function RdvGoalPicker({
   );
 }
 
+/** Chips MEDDIC lite — spec §2.2. Un clic ajoute le tag au commentaire avec une virgule. */
+export const NOTE_TEMPLATE_CHIPS: readonly string[] = [
+  "Intérêt produit A",
+  "Intérêt produit B",
+  "Intérêt produit C",
+  "Décision ce trimestre",
+  "Décision Q+1",
+  "Pas de projet",
+  "Curieux",
+  "Évalue",
+  "Compare",
+  "Métrique identifiée",
+  "Champion identifié",
+  "Décideur connu",
+];
+
+export function appendNoteChip(value: string, chip: string): string {
+  return value ? `${value}, ${chip}` : chip;
+}
+
+/** N'apparaît que si le commentaire est vide — pas de wizard, pas de popover. */
+export function NoteTemplateChips({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  if (value.trim().length > 0) return null;
+  return (
+    <div className="calls-chip-row calls-note-chips" role="group" aria-label="Modèles de note">
+      {NOTE_TEMPLATE_CHIPS.map((chip) => (
+        <button key={chip} type="button" className="calls-chip" onClick={() => onChange(appendNoteChip(value, chip))}>
+          {chip}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Date picker custom (calendrier mois). */
 export function DatePicker({
   label = "Date",
