@@ -82,6 +82,16 @@
   /* Typographie */
   --xos-font-display: "Brockmann", system-ui, sans-serif;
   --xos-font-numeric: "Neue Montreal", system-ui, sans-serif;
+
+  /* --- Tokens ajoutés (consolidation Lot 1) — le reste ci-dessus est legacy --- */
+  --xos-surface-1: rgba(255, 255, 255, 0.04);
+  --xos-surface-2: rgba(255, 255, 255, 0.08);
+  --xos-glass-bg: rgba(13, 23, 63, 0.72);
+  --xos-border-strong: rgba(255, 255, 255, 0.16);
+  --xos-radius-lg: 16px;
+  --xos-success: #6effbb;
+  --xos-warn: #f5c542;
+  --xos-danger: #ff7e8a;
 }
 
 .xos-numeric {
