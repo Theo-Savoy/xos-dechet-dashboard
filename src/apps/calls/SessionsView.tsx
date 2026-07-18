@@ -264,22 +264,22 @@ export function SessionsView({
             )}
           </div>
           <div className="calls-seg" role="group" aria-label="Période KPIs">
-            <button
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${kpiPeriod === "week" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={kpiPeriod === "week"}
               onClick={() => setKpiPeriod("week")}
             >
               Semaine
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               type="button"
               className={`calls-seg__btn${kpiPeriod === "month" ? " calls-seg__btn--active" : ""}`}
               aria-pressed={kpiPeriod === "month"}
               onClick={() => setKpiPeriod("month")}
             >
               Mois
-            </button>
+            </Button>
           </div>
         </div>
         <div className="calls-stats calls-hub-kpis__grid">
@@ -311,23 +311,23 @@ export function SessionsView({
         <div className="calls-hub-toolbar">
           <div className="calls-hub-toolbar__primary">
             <div className="calls-seg" role="group" aria-label="Vue séances">
-              <button
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${viewMode === "list" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={viewMode === "list"}
                 onClick={() => setViewMode("list")}
               >
                 Liste
-              </button>
-              <button
+              </Button>
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${viewMode === "calendar" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={viewMode === "calendar"}
                 onClick={() => setViewMode("calendar")}
               >
                 Calendrier
-              </button>
-              <button
+              </Button>
+              <Button variant="ghost"
                 type="button"
                 className="calls-seg__btn"
                 onClick={onOpenRecalls}
@@ -338,10 +338,10 @@ export function SessionsView({
                 ) : recallCount > 0 ? (
                   <span className="calls-seg__count xos-numeric">{recallCount}</span>
                 ) : null}
-              </button>
+              </Button>
             </div>
             <div className="calls-seg" role="group" aria-label="Échéance">
-              <button
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${scheduleFilter === "upcoming" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={scheduleFilter === "upcoming"}
@@ -349,8 +349,8 @@ export function SessionsView({
               >
                 À venir
                 <span className="calls-seg__count xos-numeric">{scheduleCounts.upcoming}</span>
-              </button>
-              <button
+              </Button>
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${scheduleFilter === "planned" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={scheduleFilter === "planned"}
@@ -358,8 +358,8 @@ export function SessionsView({
               >
                 Planifiées
                 <span className="calls-seg__count xos-numeric">{scheduleCounts.planned}</span>
-              </button>
-              <button
+              </Button>
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${scheduleFilter === "done" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={scheduleFilter === "done"}
@@ -367,28 +367,28 @@ export function SessionsView({
               >
                 Réalisées
                 <span className="calls-seg__count xos-numeric">{scheduleCounts.done}</span>
-              </button>
-              <button
+              </Button>
+              <Button variant="ghost"
                 type="button"
                 className={`calls-seg__btn${scheduleFilter === "all" ? " calls-seg__btn--active" : ""}`}
                 aria-pressed={scheduleFilter === "all"}
                 onClick={() => setScheduleFilter("all")}
               >
                 Toutes
-              </button>
+              </Button>
             </div>
           </div>
           <div className="calls-list-filter-chips" role="group" aria-label="Type de séance">
-            <button
+            <Button variant="ghost"
               type="button"
               className={`calls-list-filter-chip${typeFilter === "all" ? " calls-list-filter-chip--active" : ""}`}
               aria-pressed={typeFilter === "all"}
               onClick={() => setTypeFilter("all")}
             >
               Tous types
-            </button>
+            </Button>
             {SESSION_TYPE_OPTIONS.map((opt) => (
-              <button
+              <Button variant="ghost"
                 key={opt.value}
                 type="button"
                 className={`calls-list-filter-chip${typeFilter === opt.value ? " calls-list-filter-chip--active" : ""}`}
@@ -396,7 +396,7 @@ export function SessionsView({
                 onClick={() => setTypeFilter(opt.value)}
               >
                 {opt.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -455,7 +455,7 @@ export function SessionsView({
                   className={`calls-session-card calls-session-card--${session.session_type}${session.status === "completed" ? " calls-session-card--done" : ""}`}
                 >
                   <div className="calls-session-card__body">
-                    <button
+                    <Button variant="ghost"
                       type="button"
                       className="calls-session-card__open"
                       onClick={() => onOpenSession(session.id)}
@@ -498,7 +498,7 @@ export function SessionsView({
                           <span className="xos-numeric">{session.pending} restants</span>
                         )}
                       </div>
-                    </button>
+                    </Button>
                     <div className="calls-session-card__actions">
                       {session.is_owner !== false && onShareSession && (
                         <Button
@@ -546,9 +546,9 @@ export function SessionsView({
               </Button>
               <div className="calls-calendar__heading">
                 <h3 className="calls-calendar__title">{monthLabel}</h3>
-                <button type="button" className="calls-calendar__today-btn" onClick={jumpCalendarToday}>
+                <Button variant="ghost" type="button" className="calls-calendar__today-btn" onClick={jumpCalendarToday}>
                   Aujourd&apos;hui
-                </button>
+                </Button>
               </div>
               <Button
                 variant="secondary"
@@ -590,25 +590,25 @@ export function SessionsView({
                     <ul className="calls-calendar__events">
                       {daySessions.slice(0, 3).map((session) => (
                         <li key={session.id}>
-                          <button
+                          <Button variant="ghost"
                             type="button"
                             className={`calls-calendar__event calls-calendar__event--${session.session_type}`}
                             onClick={() => onOpenSession(session.id)}
                             title={session.name}
                           >
                             {session.name}
-                          </button>
+                          </Button>
                         </li>
                       ))}
                       {daySessions.length > 3 && (
                         <li>
-                          <button
+                          <Button variant="ghost"
                             type="button"
                             className="calls-calendar__more"
                             onClick={() => setDayOverflow({ key, sessions: daySessions })}
                           >
                             +{daySessions.length - 3}
-                          </button>
+                          </Button>
                         </li>
                       )}
                     </ul>
@@ -633,7 +633,7 @@ export function SessionsView({
           <ul className="calls-day-overflow-list">
             {dayOverflow.sessions.map((session) => (
               <li key={session.id}>
-                <button
+                <Button variant="ghost"
                   type="button"
                   className="calls-day-overflow-list__item"
                   onClick={() => {
@@ -643,7 +643,7 @@ export function SessionsView({
                 >
                   <strong>{session.name}</strong>
                   <Tag variant="muted">{sessionTypeLabel(session.session_type)}</Tag>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
