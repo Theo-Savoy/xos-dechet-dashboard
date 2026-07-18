@@ -1531,7 +1531,12 @@ function ActivityTrendChart({
   currentIndex: number;
   showCalls: boolean;
 }) {
-  const data: ActivityPoint[] = weeks.map((week, index) => {
+  // On coupe le tableau aux semaines réellement intéressantes : jusqu'à
+  // currentIndex + 2 semaines vides de lookahead. Ça évite que le chart
+  // gaspille sa largeur sur 8-10 semaines vides en début de trimestre.
+  const visibleEnd = Math.min(weeks.length, currentIndex + 3);
+  const visibleWeeks = weeks.slice(0, visibleEnd);
+  const data: ActivityPoint[] = visibleWeeks.map((week, index) => {
     const future = index > currentIndex;
     const label = shortWeekLabel(week.isoWeek) || week.label;
     if (future) return { label, rdv: null, detections: null, calls: null };
@@ -1544,10 +1549,11 @@ function ActivityTrendChart({
   });
   const hasData = data.some((point) => (point.rdv || 0) > 0 || (point.detections || 0) > 0 || (point.calls || 0) > 0);
   const series: Array<{ key: ActivitySeriesKey; name: string; fill: string }> = [
-    { key: "rdv", name: "RDV", fill: "var(--xos-accent)" },
+    { key: "calls", name: "Appels", fill: "#7d8aa3" },
     { key: "detections", name: "Détections", fill: "color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" },
+    { key: "rdv", name: "RDV", fill: "var(--xos-accent)" },
   ];
-  if (showCalls) series.push({ key: "calls", name: "Appels", fill: "#7d8aa3" });
+  if (!showCalls) series.shift();
   return (
     <section className="weekly-section">
       <SectionHeading kicker={COPY.volume.kicker} title={COPY.volume.title} hint={COPY.volume.hint} />
@@ -1561,7 +1567,7 @@ function ActivityTrendChart({
                   <BarChart data={data} syncId="weekly-activity" margin={{ top: 4, right: 8, bottom: index === series.length - 1 ? 4 : 0, left: 0 }}>
                     <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
                     <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} hide={index !== series.length - 1} />
-                    <YAxis stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                    <YAxis stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} width={32} allowDecimals={false} />
                     <Tooltip content={<ActivityWeekTooltip data={data} showCalls={showCalls} />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
                     <Bar dataKey={serie.key} name={serie.name} fill={serie.fill} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
                   </BarChart>
