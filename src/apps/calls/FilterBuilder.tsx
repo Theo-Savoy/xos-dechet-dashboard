@@ -214,7 +214,7 @@ export function FilterBuilder({
             onClick={handleSavePreset}
             disabled={savingPreset || !presetName.trim()}
           >
-            {savingPreset ? "Sauvegarde…" : "Sauvegarder"}
+            {savingPreset ? "Sauvegarde…" : "Garder ce filtre pour plus tard"}
           </Button>
         </div>
       </div>
