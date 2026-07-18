@@ -1178,7 +1178,10 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
 
   const handleRemoveContacts = async (contactIds: number[]) => {
     if (!token || contactIds.length === 0) return;
-    setRunnerLoading(true);
+    // Pas de spinner global ici : l'UI reste réactive pendant les removes,
+    // la mise à jour locale (filter ci-dessous) rend l'action instantanée
+    // à l'œil. Le spinner était trompeur (l'utilisateur voyait 3 minutes de
+    // chargement alors que le state local était déjà synchronisé).
     setRunnerError(null);
     const targets = contactIds
       .map((contactId) => resolveLogTarget(contactId))
@@ -1198,9 +1201,6 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     if (focusedContactId && contactIds.includes(focusedContactId)) {
       setFocusedContactId(null);
     }
-    // Mise à jour locale immédiate : pas de refetch complet de la séance à
-    // chaque remove (c'était la source de lenteur). Le refetch de sync est
-    // debounced ci-dessous.
     if (removedIds.length > 0) {
       setContacts((prev) => prev.filter((c) => !removedIds.includes(c.id)));
     }
@@ -1209,13 +1209,14 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
         `${results.length - failures.length} retirés, ${failures.length} en échec — liste actualisée`,
       );
     }
-    setRunnerLoading(false);
     scheduleRemoveSync(view, activeSession?.id ?? null);
   };
 
   const handleUpdateRecall = async (contactIds: number[], recallAt: string | null) => {
     if (!token || contactIds.length === 0) return;
-    setRunnerLoading(true);
+    // Pas de spinner global : update local immédiat (filter ci-dessous) puis
+    // refetch debounced via refreshRecallsQueue. Le spinner rendait l'UI
+    // gelée inutilement.
     setRunnerError(null);
     const targets = contactIds
       .map((contactId) => resolveLogTarget(contactId))
@@ -1223,26 +1224,28 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     const results = await Promise.allSettled(
       targets.map((target) => updateRecall(token, target.sessionId, target.contactId, recallAt)),
     );
+    const updatedIds = targets
+      .filter((_, index) => results[index]!.status === "fulfilled")
+      .map((target) => target.contactId);
     const failures = results.filter((result) => result.status === "rejected");
     try {
       if (recallAt === null && focusedContactId && contactIds.includes(focusedContactId)) {
         setFocusedContactId(null);
       }
-      if (view === "recalls") {
-        await refreshRecallsQueue();
-      } else if (activeSession) {
-        const refreshed = await fetchSession(token, activeSession.id);
-        setContacts(refreshed.contacts);
+      // Mise à jour locale immédiate pour ne pas attendre le refetch réseau
+      if (updatedIds.length > 0 && recallAt === null) {
+        setContacts((prev) => prev.filter((c) => !updatedIds.includes(c.id)));
       }
       if (failures.length) {
         setRunnerError(
           `${results.length - failures.length} mis à jour, ${failures.length} en échec — liste actualisée`,
         );
       }
+      // Sync debounced : on laisse le state local optimiste vivre, le refetch
+      // corrige les éventuelles divergences après le délai.
+      scheduleRemoveSync(view, activeSession?.id ?? null);
     } catch (err) {
       setRunnerError(errorMessage(err));
-    } finally {
-      setRunnerLoading(false);
     }
   };
 
