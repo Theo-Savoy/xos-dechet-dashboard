@@ -1,3 +1,4 @@
+import { apiFetch, ApiError } from '../../../../lib/apiClient';
 import type { CleanerCapabilities } from '../../contracts';
 import type { OpportunityDiagnostic } from './types';
 
@@ -179,19 +180,22 @@ async function postOpportunityCommand<T>(
   );
 
   try {
-    let response: Response;
+    let body: unknown;
     try {
-      response = await fetch('/api/cleaner', {
+      body = await apiFetch<unknown>(accessToken, '/api/cleaner', {
         method: 'POST',
-        cache: 'no-store',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ module: 'opportunities', ...payload }),
         signal: controller.signal,
       });
     } catch (error) {
+      if (error instanceof ApiError) {
+        throw new OpportunityApiError(
+          bodyMessage(error.body, error.status),
+          error.status === 401 ? 'unauthorized' : 'http_error',
+          error.status,
+          error.body,
+        );
+      }
       if (controller.signal.aborted)
         throw new OpportunityApiError(
           "Le service Opportunités a dépassé le délai d'attente.",
@@ -206,32 +210,7 @@ async function postOpportunityCommand<T>(
         null,
       );
     }
-
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new OpportunityApiError(
-        'La réponse du service Opportunités est invalide.',
-        'invalid_response',
-        response.status,
-      );
-    }
-    if (response.status === 401)
-      throw new OpportunityApiError(
-        bodyMessage(body, response.status),
-        'unauthorized',
-        401,
-        body,
-      );
-    if (!response.ok)
-      throw new OpportunityApiError(
-        bodyMessage(body, response.status),
-        'http_error',
-        response.status,
-        body,
-      );
-    return parse(body, response.status);
+    return parse(body, 200);
   } finally {
     clearTimeout(timeout);
   }
@@ -271,17 +250,27 @@ export async function fetchOpportunityWorkspace(
   );
 
   try {
-    let response: Response;
+    let body: unknown;
     try {
-      response = await fetch(
+      body = await apiFetch<unknown>(
+        accessToken,
         '/api/cleaner?module=opportunities&resource=workspace&limit=200',
-        {
-          cache: 'no-store',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        },
+        { signal: controller.signal },
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401)
+          throw new OpportunityApiError(
+            'Session expirée : reconnectez-vous pour charger les opportunités.',
+            'unauthorized',
+            401,
+          );
+        throw new OpportunityApiError(
+          bodyMessage(error.body, error.status),
+          'http_error',
+          error.status,
+        );
+      }
       if (controller.signal.aborted)
         throw new OpportunityApiError(
           "Le service Opportunités a dépassé le délai d'attente.",
@@ -296,33 +285,6 @@ export async function fetchOpportunityWorkspace(
         null,
       );
     }
-
-    let body: unknown = null;
-    try {
-      body = await response.json();
-    } catch {
-      throw new OpportunityApiError(
-        'La réponse du service Opportunités est invalide.',
-        'invalid_response',
-        response.status,
-      );
-    }
-    if (response.status === 401)
-      throw new OpportunityApiError(
-        'Session expirée : reconnectez-vous pour charger les opportunités.',
-        'unauthorized',
-        401,
-      );
-    if (!response.ok) {
-      const message =
-        typeof body === 'object' &&
-        body &&
-        'message' in body &&
-        typeof body.message === 'string'
-          ? body.message
-          : `Le service Opportunités a répondu ${response.status}.`;
-      throw new OpportunityApiError(message, 'http_error', response.status);
-    }
     if (
       !body ||
       typeof body !== 'object' ||
@@ -331,7 +293,7 @@ export async function fetchOpportunityWorkspace(
       throw new OpportunityApiError(
         "La réponse du service Opportunités ne contient pas de tableau d'items.",
         'invalid_response',
-        response.status,
+        200,
       );
     }
     return body as OpportunityWorkspaceResponse;
@@ -358,14 +320,30 @@ async function fetchOpportunityGet<T>(
     options.timeoutMs ?? 10000,
   );
   try {
-    let response: Response;
+    let body: unknown;
     try {
-      response = await fetch(path, {
-        cache: 'no-store',
-        headers: { Authorization: `Bearer ${accessToken}` },
-        signal: controller.signal,
-      });
+      body = await apiFetch<unknown>(accessToken, path, { signal: controller.signal });
     } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401)
+          throw new OpportunityApiError(
+            bodyMessage(error.body, error.status),
+            'unauthorized',
+            401,
+            error.body,
+          );
+        const code =
+          isRecord(error.body) &&
+          (error.body.error === 'schema_cache' || error.body.code === 'schema_cache')
+            ? 'schema_cache'
+            : 'http_error';
+        throw new OpportunityApiError(
+          bodyMessage(error.body, error.status),
+          code,
+          error.status,
+          error.body,
+        );
+      }
       if (controller.signal.aborted)
         throw new OpportunityApiError(
           "Le service Opportunités a dépassé le délai d'attente.",
@@ -380,37 +358,7 @@ async function fetchOpportunityGet<T>(
         null,
       );
     }
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new OpportunityApiError(
-        'La réponse du service Opportunités est invalide.',
-        'invalid_response',
-        response.status,
-      );
-    }
-    if (response.status === 401)
-      throw new OpportunityApiError(
-        bodyMessage(body, response.status),
-        'unauthorized',
-        401,
-        body,
-      );
-    if (!response.ok) {
-      const code =
-        isRecord(body) &&
-        (body.error === 'schema_cache' || body.code === 'schema_cache')
-          ? 'schema_cache'
-          : 'http_error';
-      throw new OpportunityApiError(
-        bodyMessage(body, response.status),
-        code,
-        response.status,
-        body,
-      );
-    }
-    return parse(body, response.status);
+    return parse(body, 200);
   } finally {
     clearTimeout(timeout);
   }

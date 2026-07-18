@@ -129,15 +129,15 @@ describe('SectorsRecipeView (V17d dry-run only)', () => {
       capabilities: { canApplyMerge: true },
     });
     bulkApplySectors.mockResolvedValue({ ok: true, jobId: 'job-1' });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({ status: 'done', total: 1, processed: 1, errors: [] }),
-          { status: 200 },
-        ),
-      ),
-    );
+    getSectorJobStatus.mockResolvedValue({
+      ok: true,
+      jobId: 'job-1',
+      status: 'done',
+      total: 1,
+      processed: 1,
+      errors: [],
+      results: [],
+    });
 
     render(<SectorsRecipeView accessToken="token" />);
 

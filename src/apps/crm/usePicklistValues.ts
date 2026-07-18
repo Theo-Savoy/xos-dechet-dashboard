@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 
 export type PicklistValue = {
   label: string;
@@ -103,16 +104,13 @@ export function usePicklistValues(field: string): {
     void (async () => {
       try {
         if (!accessToken) throw new Error('Session expirée.');
-        const response = await fetch(
+        const body = await apiFetch<unknown>(
+          accessToken,
           `/api/crm/picklists?field=${encodeURIComponent(field)}`,
-          {
-            cache: 'no-store',
-            headers: { Authorization: `Bearer ${accessToken}` },
-          },
-        );
-        if (!response.ok)
+        ).catch(() => {
           throw new Error('Le chargement de la picklist a échoué.');
-        const nextValues = parseValues(await response.json());
+        });
+        const nextValues = parseValues(body);
         picklistCache.set(field, { values: nextValues, ts: Date.now() });
         if (active) setValues(nextValues);
       } catch (cause) {

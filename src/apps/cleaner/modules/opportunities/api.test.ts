@@ -24,7 +24,7 @@ describe('opportunities API client', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/cleaner?module=opportunities&resource=workspace&limit=200',
       expect.objectContaining({
-        headers: { Authorization: 'Bearer access-token' },
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
         signal: expect.any(AbortSignal),
       }),
     );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, GlassCard, Tag } from '../../components/ui';
+import { apiFetch, ApiError } from '../../lib/apiClient';
 import { supabase } from '../../lib/supabase';
 import TargetsEditor from './TargetsEditor';
 import './hub.css';
@@ -116,16 +117,15 @@ const SETTING_FIELDS: Array<{
   })),
 ];
 
-function statusRequest(token: string) {
-  return fetch('/api/status', {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then(async (response) => {
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok)
+function statusRequest(token: string): Promise<Status> {
+  return apiFetch<Status>(token, '/api/status').catch((cause: unknown) => {
+    if (cause instanceof ApiError) {
+      const body = cause.body as { message?: unknown } | undefined;
       throw new Error(
-        typeof body.message === 'string' ? body.message : 'status_unavailable',
+        typeof body?.message === 'string' ? body.message : 'status_unavailable',
       );
-    return body as Status;
+    }
+    throw cause;
   });
 }
 
@@ -217,21 +217,18 @@ export default function HubApp() {
     if (!token) return;
     setSaving(true);
     try {
-      const response = await fetch('/api/status', {
+      await apiFetch(token, '/api/status', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(body),
+      }).catch((cause: unknown) => {
+        if (cause instanceof ApiError) {
+          const b = cause.body as { message?: unknown } | undefined;
+          throw new Error(
+            typeof b?.message === 'string' ? b.message : 'Écriture refusée.',
+          );
+        }
+        throw cause;
       });
-      const bodyResponse = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(
-          typeof bodyResponse.message === 'string'
-            ? bodyResponse.message
-            : 'Écriture refusée.',
-        );
       await refresh();
     } finally {
       setSaving(false);
@@ -246,26 +243,25 @@ export default function HubApp() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch('/api/status', {
+      await apiFetch(token, '/api/status', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           action: 'update_settings',
           operation: 'upsert',
           key: 'cleaner_v2',
           value: cleanerValue,
         }),
+      }).catch((cause: unknown) => {
+        if (cause instanceof ApiError) {
+          const body = cause.body as { message?: unknown } | undefined;
+          throw new Error(
+            typeof body?.message === 'string'
+              ? body.message
+              : 'Les seuils Labo n’ont pas été enregistrés.',
+          );
+        }
+        throw cause;
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(
-          typeof body.message === 'string'
-            ? body.message
-            : 'Les seuils Labo n’ont pas été enregistrés.',
-        );
       await refresh();
     } catch (cause: unknown) {
       setError(

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import logoXos from '../assets/logo-xos.png';
+import { apiFetch } from '../lib/apiClient';
 import { supabase } from '../lib/supabase';
 import { Dock } from './Dock';
 import { appRegistry, type AppManifest, type AppRole } from './registry';
@@ -137,16 +138,9 @@ function DesktopContent({ userEmail, accessToken }: DesktopProps) {
   const refreshSfStatus = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const res = await fetch('/api/status', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) {
-        setSfStatus('needs_reconnect');
-        return;
-      }
-      const body = (await res.json()) as {
+      const body = await apiFetch<{
         salesforce?: { connected?: boolean; userLinked?: boolean };
-      };
+      }>(accessToken, '/api/status');
       const connected = body.salesforce?.connected === true;
       const userLinked = body.salesforce?.userLinked === true;
       if (!userLinked) setSfStatus('needs_link');

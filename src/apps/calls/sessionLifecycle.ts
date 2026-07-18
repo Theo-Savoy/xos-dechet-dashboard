@@ -1,3 +1,5 @@
+import { parisDayKey } from "../../lib/dates";
+
 type SessionLifecycleFields = {
   status?: string | null;
   scheduled_for?: string | null;
@@ -20,7 +22,7 @@ export function sessionDayKey(
   if (!session.created_at) return "";
   const date = new Date(session.created_at);
   if (Number.isNaN(date.getTime())) return String(session.created_at).slice(0, 10);
-  return new Intl.DateTimeFormat("sv-SE", { timeZone }).format(date);
+  return parisDayKey(date, timeZone);
 }
 
 export function isStaleSession(

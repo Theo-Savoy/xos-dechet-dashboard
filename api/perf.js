@@ -4,6 +4,7 @@ import { getProfile } from "./_calls/profileCache.js";
 import { canViewWeeklyTeam, isWeeklyOwnerExcluded, sfIdKey, trackingModeFor } from "./_config/access.js";
 import mapping from "./_crm/mapping.js";
 import { escapeSOQL, fetchSFToken, searchContacts, buildLightningUrl } from "./_crm/salesforce.js";
+import { addDaysParisIso, parisDayKey } from "./_lib/dates.js";
 import { quarterlyToMonthlyIndicative } from "./_weekly/targets.js";
 
 const CACHE_CONTROL = "private, max-age=30, stale-while-revalidate=120";
@@ -28,21 +29,12 @@ function ownerInClause(field, ownerIds) {
   return ` AND ${field} IN (${ownerIds.map((id) => `'${escapeSOQL(id)}'`).join(", ")})`;
 }
 
-function dateParts(value = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  return { year: Number(get("year")), month: Number(get("month")), day: Number(get("day")) };
-}
-
 export function dateKey(value = new Date()) {
-  const { year, month, day } = dateParts(value instanceof Date ? value : new Date(value));
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return parisDayKey(value instanceof Date ? value : new Date(value), TIMEZONE);
 }
 
 function addDays(key, days) {
-  const date = new Date(`${key}T12:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addDaysParisIso(key, days);
 }
 
 function mondayFor(key) {

@@ -46,8 +46,10 @@ describe('usePicklistValues', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/crm/picklists?field=${encodeURIComponent(FIELD)}`,
       {
-        cache: 'no-store',
-        headers: { Authorization: 'Bearer supabase-token' },
+        headers: {
+          Authorization: 'Bearer supabase-token',
+          'Content-Type': 'application/json',
+        },
       },
     );
   });

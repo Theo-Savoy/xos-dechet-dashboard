@@ -1,3 +1,5 @@
+import { apiFetch, ApiError } from '../../../../../lib/apiClient';
+
 export type SectorSampleAccount = {
   id: string;
   name: string | null;
@@ -80,46 +82,30 @@ function messageFrom(body: unknown, status: number) {
 
 async function request<T>(
   accessToken: string | undefined,
-  init: RequestInit & { path: string },
+  init: { path: string; method?: string; body?: BodyInit },
 ): Promise<T> {
   if (!accessToken)
     throw new SectorRecipeApiError(
       'Session expirée : authentification requise.',
       401,
     );
-  let response: Response;
   try {
-    response = await fetch(init.path, {
-      ...init,
-      cache: 'no-store',
-      headers: {
-        Authorization: 'Bearer ' + accessToken,
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...init.headers,
-      },
+    return await apiFetch<T>(accessToken, init.path, {
+      method: init.method,
+      body: init.body,
     });
   } catch (error) {
+    if (error instanceof ApiError)
+      throw new SectorRecipeApiError(
+        messageFrom(error.body, error.status),
+        error.status,
+      );
     throw new SectorRecipeApiError(
       error instanceof Error
         ? `Impossible de joindre le service Recettes. ${error.message}`
         : 'Impossible de joindre le service Recettes.',
     );
   }
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new SectorRecipeApiError(
-      'La réponse du service Recettes est invalide.',
-      response.status,
-    );
-  }
-  if (!response.ok)
-    throw new SectorRecipeApiError(
-      messageFrom(body, response.status),
-      response.status,
-    );
-  return body as T;
 }
 
 export async function fetchSectorRecipe(

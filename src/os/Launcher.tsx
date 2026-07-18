@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
+import { apiFetch, ApiError } from "../lib/apiClient";
 import { appRegistry, type AppManifest, getAppManifest } from "./registry";
 import "./launcher.css";
 
@@ -134,13 +135,11 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
       setError(false);
 
       try {
-        const res = await fetch(`/api/launcher?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const body = await res.json();
+        const body = await apiFetch<{ results?: SearchResult[] }>(
+          accessToken,
+          `/api/launcher?q=${encodeURIComponent(q)}`,
+          { signal: controller.signal },
+        );
         if (!controller.signal.aborted) {
           setResults(body.results ?? []);
           setLoading(false);
@@ -180,12 +179,12 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
     setLogSearchLoading(true);
     const delay = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/launcher?q=${encodeURIComponent(logSearchQuery)}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        });
-        if (res.ok && !controller.signal.aborted) {
-          const body = await res.json();
+        const body = await apiFetch<{ results?: SearchResult[] }>(
+          accessToken,
+          `/api/launcher?q=${encodeURIComponent(logSearchQuery)}`,
+          { signal: controller.signal },
+        );
+        if (!controller.signal.aborted) {
           setLogSearchResults(body.results ?? []);
         }
       } catch (err) {
@@ -214,12 +213,12 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
     setCreateAccountLoading(true);
     const delay = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/launcher?q=${encodeURIComponent(createAccountQuery)}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        });
-        if (res.ok && !controller.signal.aborted) {
-          const body = await res.json();
+        const body = await apiFetch<{ results?: SearchResult[] }>(
+          accessToken,
+          `/api/launcher?q=${encodeURIComponent(createAccountQuery)}`,
+          { signal: controller.signal },
+        );
+        if (!controller.signal.aborted) {
           const accounts = (body.results ?? []).filter((r: SearchResult) => r.type === "Account");
           setCreateAccountResults(accounts);
         }
@@ -240,12 +239,8 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
     setLogLoading(true);
     setLogError(null);
     try {
-      const res = await fetch("/api/launcher", {
+      await apiFetch(accessToken, "/api/launcher", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: JSON.stringify({
           action: "log_call",
           recordId: logRecord.id,
@@ -253,16 +248,17 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
           comments: logComments,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Erreur serveur");
-      }
       setLogSuccess(true);
       setTimeout(() => {
         setOpen(false);
       }, 1500);
     } catch (err) {
-      setLogError(err instanceof Error ? err.message : "Une erreur est survenue lors de l'enregistrement.");
+      if (err instanceof ApiError) {
+        const body = err.body as { message?: string; error?: string } | undefined;
+        setLogError(body?.message || body?.error || "Erreur serveur");
+      } else {
+        setLogError(err instanceof Error ? err.message : "Une erreur est survenue lors de l'enregistrement.");
+      }
     } finally {
       setLogLoading(false);
     }
@@ -273,12 +269,8 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
     setCreateLoading(true);
     setCreateError(null);
     try {
-      const res = await fetch("/api/launcher", {
+      await apiFetch(accessToken, "/api/launcher", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: JSON.stringify({
           action: "create_contact",
           firstName: createFirstName,
@@ -288,16 +280,17 @@ export function Launcher({ accessToken, onOpenApp, apps = appRegistry }: Launche
           accountId: createAccount?.id,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Erreur serveur");
-      }
       setCreateSuccess(true);
       setTimeout(() => {
         setOpen(false);
       }, 1500);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Une erreur est survenue lors de la création.");
+      if (err instanceof ApiError) {
+        const body = err.body as { message?: string; error?: string } | undefined;
+        setCreateError(body?.message || body?.error || "Erreur serveur");
+      } else {
+        setCreateError(err instanceof Error ? err.message : "Une erreur est survenue lors de la création.");
+      }
     } finally {
       setCreateLoading(false);
     }

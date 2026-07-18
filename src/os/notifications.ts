@@ -1,3 +1,5 @@
+import { apiFetch } from '../lib/apiClient';
+
 export type UserNotification = {
   id: number;
   kind: string;
@@ -23,35 +25,23 @@ export async function fetchNotifications(
   sinceIso?: string,
 ): Promise<{ notifications: UserNotification[]; unread_count: number }> {
   const sinceParam = sinceIso ? `&since=${encodeURIComponent(sinceIso)}` : '';
-  const res = await fetch(`/api/notifications?limit=40${sinceParam}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!res.ok) throw new Error(`notifications_${res.status}`);
-  return res.json() as Promise<{
-    notifications: UserNotification[];
-    unread_count: number;
-  }>;
+  return apiFetch<{ notifications: UserNotification[]; unread_count: number }>(
+    token,
+    `/api/notifications?limit=40${sinceParam}`,
+  );
 }
 
 export async function markNotificationsRead(
   token: string,
   opts: { ids?: number[]; all?: boolean },
 ): Promise<void> {
-  const res = await fetch('/api/notifications', {
+  await apiFetch(token, '/api/notifications', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({
       action: 'mark_read',
       ...(opts.all ? { all: true } : { ids: opts.ids ?? [] }),
     }),
   });
-  if (!res.ok) throw new Error(`notifications_mark_${res.status}`);
 }
 
 const QUICK_REACTION_EMOJIS = ['👏', '🔥', '💪'] as const;
@@ -72,17 +62,12 @@ export async function reactToNotification(
   notificationId: number,
   emoji: GoalReactionEmoji,
 ): Promise<void> {
-  const res = await fetch('/api/notifications', {
+  await apiFetch(token, '/api/notifications', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({
       action: 'react',
       notification_id: notificationId,
       emoji,
     }),
   });
-  if (!res.ok) throw new Error(`notifications_react_${res.status}`);
 }

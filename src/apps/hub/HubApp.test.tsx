@@ -174,7 +174,9 @@ describe('Hub app', () => {
     ).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/status',
-      expect.objectContaining({ headers: { Authorization: 'Bearer token' } }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
     );
   });
 

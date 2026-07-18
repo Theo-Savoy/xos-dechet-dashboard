@@ -2,6 +2,7 @@ import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffec
 import { createPortal } from "react-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { Button, GlassCard, Select, Tag } from "../../components/ui";
+import { apiFetch } from "../../lib/apiClient";
 import { supabase } from "../../lib/supabase";
 import {
   aggregateMonthlyIndicative,
@@ -639,12 +640,10 @@ async function perfRequest(period: PeriodMode, anchorWeekStart?: string | null, 
   if (anchorWeekStart) params.set("week_start", anchorWeekStart);
   if (options?.lite) params.set("lite", "1");
   if (options?.enrich) params.set("enrich", "1");
-  const response = await fetch(`/api/perf?${params}`, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
-    signal,
+  const payload = await apiFetch<PerfResponse>(session.access_token, `/api/perf?${params}`, { signal }).catch(() => {
+    throw new Error("perf_unavailable");
   });
-  if (!response.ok) throw new Error("perf_unavailable");
-  return { payload: await response.json() as PerfResponse, email: session.user.email || null };
+  return { payload, email: session.user.email || null };
 }
 
 type PerfCacheEntry = { payload: PerfResponse; email: string | null };

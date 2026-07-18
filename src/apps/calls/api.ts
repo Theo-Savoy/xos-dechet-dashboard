@@ -1,4 +1,5 @@
 import type { CallTargetPreset, DedupEntry, FilterTree, MaxPerCompany, ResultatCall } from "../../crm";
+import { apiFetch as sharedApiFetch, ApiError } from "../../lib/apiClient";
 import type {
   AccountSearchResult,
   CallStats,
@@ -22,38 +23,24 @@ export class CallsApiError extends Error {
   }
 }
 
-async function parseError(res: Response): Promise<{ code: string; details?: string }> {
-  try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    return {
-      code: body.error ?? `http_${res.status}`,
-      details: typeof body.message === "string" ? body.message : undefined,
-    };
-  } catch {
-    return { code: `http_${res.status}` };
-  }
-}
-
 async function apiFetch<T>(
   token: string,
   url: string,
-  init?: RequestInit,
+  init?: { method?: string; body?: BodyInit; signal?: AbortSignal },
 ): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...init?.headers,
-    },
-  });
-
-  if (!res.ok) {
-    const { code, details } = await parseError(res);
-    throw new CallsApiError(res.status, code, details);
+  try {
+    return await sharedApiFetch<T>(token, url, init);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string; message?: string } | undefined;
+      throw new CallsApiError(
+        err.status,
+        typeof body?.error === "string" ? body.error : `http_${err.status}`,
+        typeof body?.message === "string" ? body.message : undefined,
+      );
+    }
+    throw err;
   }
-
-  return res.json() as Promise<T>;
 }
 
 export type ComboHubPayload = {

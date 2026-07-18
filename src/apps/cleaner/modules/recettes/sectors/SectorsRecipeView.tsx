@@ -11,6 +11,7 @@ import type { CleanerModuleProps } from '../../../shell/moduleRegistry';
 import {
   bulkApplySectors,
   fetchSectorRecipe,
+  getSectorJobStatus,
   type SectorRecipeState,
 } from './api';
 import { SectorsJournalView } from './SectorsJournalView';
@@ -105,25 +106,12 @@ export function SectorsRecipeView({ accessToken }: CleanerModuleProps) {
     }
     setJob({ running: true, processed: 0, total: 0, errors: [] });
     try {
-      const authHeader = 'Bearer ' + accessToken;
       const start = await bulkApplySectors(accessToken, selectedMapping);
       const jobId = start.jobId;
       let done = false;
       while (!done) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        const res = await fetch(
-          `/api/cleaner?module=recettes&resource=sectors&action=status&jobId=${encodeURIComponent(jobId)}`,
-          {
-            headers: { Authorization: authHeader },
-            cache: 'no-store',
-          },
-        );
-        const status = (await res.json()) as {
-          status: string;
-          total: number;
-          processed: number;
-          errors: Array<{ obsoleteId: string; message: string }>;
-        };
+        const status = await getSectorJobStatus(accessToken, jobId);
         setJob({
           running: status.status !== 'done' && status.status !== 'error',
           processed: status.processed,

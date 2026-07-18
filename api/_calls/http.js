@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { todayParisIso } from "../_lib/dates.js";
 import mapping from "../_crm/mapping.js";
 import { buildLightningUrl } from "../_crm/salesforce.js";
 
@@ -19,9 +20,7 @@ export function isValidScheduledFor(value) {
   );
 }
 
-export function todayParisDate() {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
-}
+export const todayParisDate = todayParisIso;
 
 const PGRST_NOT_FOUND = "PGRST116";
 let serviceClient = null;

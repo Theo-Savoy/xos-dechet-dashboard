@@ -169,17 +169,25 @@ describe("Desktop", () => {
 
   it("starts the authenticated Salesforce account-link flow", async () => {
     const navigate = vi.fn();
-    const fetcher = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ authorization_url: "https://login.salesforce.test/authorize" }),
-    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ authorization_url: "https://login.salesforce.test/authorize" }),
+          { status: 200 },
+        ),
+      ),
+    );
 
-    await startSalesforceLink("jwt-token", navigate, fetcher);
+    await startSalesforceLink("jwt-token", navigate);
 
-    expect(fetcher).toHaveBeenCalledWith("/api/auth?flow=salesforce-link", {
-      method: "POST",
-      headers: { Authorization: "Bearer jwt-token" },
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth?flow=salesforce-link",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer jwt-token" }),
+      }),
+    );
     expect(navigate).toHaveBeenCalledWith("https://login.salesforce.test/authorize");
   });
 

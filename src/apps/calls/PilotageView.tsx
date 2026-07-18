@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type Rea
 import { useSession } from "../../auth/useSession";
 import { WindowBootScreen } from "../../components/WindowBootScreen";
 import { Button, GlassCard, Tag } from "../../components/ui";
+import { todayParisIso as todayParisDate } from "../../lib/dates";
 import { CallFunnelCard } from "./CallFunnelCard";
 import { stagesFromPeriodKpis } from "./CallFunnelCard.helpers";
 import { PilotageHeatmap } from "./PilotageHeatmap";
@@ -199,10 +200,6 @@ function KpiFootnote({
       {extras}
     </p>
   );
-}
-
-function todayParisDate(): string {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris" }).format(new Date());
 }
 
 function cockpitCacheKey(period: CockpitPeriod, anchor: string | null): string {

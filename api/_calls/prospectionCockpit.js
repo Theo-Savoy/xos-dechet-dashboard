@@ -1,4 +1,5 @@
 import { canViewTeamPerf, trackingModeFor } from "../_config/access.js";
+import { addDaysParisIso, parisDayKey as sharedParisDayKey } from "../_lib/dates.js";
 import {
   computeHubKpis,
   getParisDateRange,
@@ -11,12 +12,7 @@ import { getProfile } from "./profileCache.js";
 const HEATMAP_DAYS = 91;
 
 function parisDayKey(iso) {
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Paris",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
+  return sharedParisDayKey(new Date(iso));
 }
 
 function dayLabel(dateKey) {
@@ -29,9 +25,7 @@ function dayLabel(dateKey) {
 }
 
 function shiftParisDate(dateStr, deltaDays) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d + deltaDays, 12));
-  return date.toISOString().slice(0, 10);
+  return addDaysParisIso(dateStr, deltaDays);
 }
 
 function buildHeatmap(calledRows, endDateStr) {

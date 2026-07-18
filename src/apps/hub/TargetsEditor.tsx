@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/ui";
+import { apiFetch } from "../../lib/apiClient";
 import "./targets.css";
 
 type MonthlyIndicative = { month: string; label: string; weight: number; raw: number; indicative: number };
@@ -28,18 +29,18 @@ const MONTH_LABELS: Record<string, string> = {
 };
 
 async function fetchTargets(token: string) {
-  const response = await fetch("/api/weekly-targets", { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) throw new Error("targets_unavailable");
-  return response.json() as Promise<TargetsPayload>;
+  return apiFetch<TargetsPayload>(token, "/api/weekly-targets").catch(() => {
+    throw new Error("targets_unavailable");
+  });
 }
 
 async function saveTargets(token: string, quarter: string, values: Record<string, number | null>) {
-  const response = await fetch("/api/weekly-targets", {
+  await apiFetch(token, "/api/weekly-targets", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ quarter, values }),
+  }).catch(() => {
+    throw new Error("targets_save_failed");
   });
-  if (!response.ok) throw new Error("targets_save_failed");
 }
 
 function parseInput(value: string) {

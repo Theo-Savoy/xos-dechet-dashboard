@@ -13,7 +13,7 @@ const response = (body: unknown, status = 200) =>
   });
 
 describe('Task 9 opportunities GET clients', () => {
-  it('fetches analytics with same-origin Bearer, no-store and period', async () => {
+  it('fetches analytics with same-origin Bearer and period', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -29,8 +29,7 @@ describe('Task 9 opportunities GET clients', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/cleaner?module=opportunities&resource=analytics&period=2026-07',
       expect.objectContaining({
-        cache: 'no-store',
-        headers: { Authorization: 'Bearer access-token' },
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
         signal: expect.any(AbortSignal),
       }),
     );
@@ -53,7 +52,9 @@ describe('Task 9 opportunities GET clients', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/cleaner?module=opportunities&resource=history&limit=25&cursor=next-1',
-      expect.objectContaining({ cache: 'no-store' }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+      }),
     );
   });
 });

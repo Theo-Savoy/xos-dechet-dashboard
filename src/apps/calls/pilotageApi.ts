@@ -1,3 +1,4 @@
+import { apiFetch, ApiError } from "../../lib/apiClient";
 import type { PeriodKpis } from "./types";
 
 export type CockpitPeriod = "day" | "week" | "month";
@@ -161,26 +162,15 @@ export async function fetchProspectionCockpit(
   });
   if (anchor) params.set("anchor", anchor);
 
-  const promise = fetch(`/api/calls?${params}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  }).then(async (res) => {
-    if (!res.ok) {
-      let code = `http_${res.status}`;
-      try {
-        const body = (await res.json()) as { error?: string };
-        if (body.error) code = body.error;
-      } catch {
-        /* ignore */
-      }
-      throw new PilotageApiError(res.status, code);
-    }
-    return res.json() as Promise<ProspectionCockpit>;
-  }).then((data) => {
+  const promise = apiFetch<ProspectionCockpit>(token, `/api/calls?${params}`).then((data) => {
     cockpitCache.set(key, { token, at: Date.now(), data });
     return data;
+  }).catch((err) => {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | undefined;
+      throw new PilotageApiError(err.status, typeof body?.error === "string" ? body.error : `http_${err.status}`);
+    }
+    throw err;
   });
 
   cockpitCache.set(key, { token, at: now, promise });

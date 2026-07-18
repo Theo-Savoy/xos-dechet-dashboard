@@ -17,7 +17,7 @@ const response = (body: unknown, status = 200) =>
   });
 
 describe('opportunities command API', () => {
-  it('sends the exact preview payload with bearer auth and no-store', async () => {
+  it('sends the exact preview payload with bearer auth', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       response({
         previewId: '42',
@@ -39,7 +39,6 @@ describe('opportunities command API', () => {
       '/api/cleaner',
       expect.objectContaining({
         method: 'POST',
-        cache: 'no-store',
         headers: {
           Authorization: 'Bearer access-token',
           'Content-Type': 'application/json',

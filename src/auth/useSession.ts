@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { apiFetch } from "../lib/apiClient";
 import { supabase } from "../lib/supabase";
 
 export function useSession() {
@@ -18,23 +19,13 @@ export function useSession() {
       bridging.current = true;
       try {
         const providerRefreshToken = s.provider_refresh_token;
-        const res = await fetch("/api/auth", {
+        await apiFetch(s.access_token, "/api/auth", {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${s.access_token}`,
-            ...(providerRefreshToken ? { "Content-Type": "application/json" } : {}),
-          },
           ...(providerRefreshToken
             ? { body: JSON.stringify({ salesforce_refresh_token: providerRefreshToken }) }
             : {}),
         });
         if (cancelled || generation.current !== gen) return;
-        if (!res.ok) {
-          setBridgeError(true);
-          setSession(null);
-          setLoading(false);
-          return;
-        }
         bridged.current = true;
         setSession(s);
         setBridgeError(false);

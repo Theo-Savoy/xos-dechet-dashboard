@@ -100,7 +100,7 @@ describe("useSession — auth bridge", () => {
     expect(result.current.loading).toBe(true);
 
     await act(async () => {
-      bridgeResolver!(new Response(null, { status: 200 }));
+      bridgeResolver!(new Response(null, { status: 204 }));
     });
 
     await waitFor(() => {
@@ -173,7 +173,7 @@ describe("useSession — auth bridge", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      bridgeResolver!(new Response(null, { status: 200 }));
+      bridgeResolver!(new Response(null, { status: 204 }));
     });
 
     await waitFor(() => {
@@ -189,7 +189,7 @@ describe("useSession — auth bridge", () => {
       getSessionResolver!({ data: { session: mockSession } });
     });
     await act(async () => {
-      bridgeResolver!(new Response(null, { status: 200 }));
+      bridgeResolver!(new Response(null, { status: 204 }));
     });
     await waitFor(() => {
       expect(result.current.session).toBe(mockSession);
@@ -231,7 +231,7 @@ describe("useSession — auth bridge", () => {
 
     // Stale bridge resolves ok — must NOT resurrect the session
     await act(async () => {
-      bridgeResolver!(new Response(null, { status: 200 }));
+      bridgeResolver!(new Response(null, { status: 204 }));
     });
 
     expect(result.current.session).toBeNull();
