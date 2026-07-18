@@ -1,24 +1,61 @@
 import { useState } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import { DatePicker } from "./formControls";
-import { tomorrowParisIso } from "./formControls.helpers";
+import { formatIsoDateFr, tomorrowParisIso } from "./formControls.helpers";
 import { suggestFollowUpSessionName } from "./sessionNaming";
 import type { SessionContact, SessionDetail } from "./types";
+
+export type WeeklyCallStats = { callsThisWeek: number; isNewRecord: boolean };
 
 type RecapViewProps = {
   session: SessionDetail;
   contacts: SessionContact[];
   followUpLoading: boolean;
   error: string | null;
+  /** Comparaison hebdo (record vs médiane 4 dernières) — absente si non calculée, alors le nudge reste silencieux. */
+  weeklyCallStats?: WeeklyCallStats;
   onBack: () => void;
   onCreateFollowUp: (name: string, scheduledFor: string) => void;
 };
+
+function computePaceNudge(session: SessionDetail, called: SessionContact[]): { text: string; rateLabel: string } | null {
+  const start = session.engaged_at ?? session.created_at;
+  const endTimestamps = called.map((c) => c.called_at).filter((v): v is string => Boolean(v));
+  if (!start || endTimestamps.length === 0) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = Math.max(...endTimestamps.map((t) => new Date(t).getTime()));
+  const durationMin = Math.max((endMs - startMs) / 60000, 1);
+  const rate = called.length / durationMin;
+  const avgMin = Math.max(1, Math.round(durationMin / called.length));
+  const rateLabel = rate.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return { text: `${rateLabel} appels/min · ${avgMin} min/appel en moyenne`, rateLabel };
+}
+
+function computeRecordNudge(weeklyCallStats: WeeklyCallStats | undefined, rateLabel: string | null): string | null {
+  if (!weeklyCallStats) return null;
+  if (weeklyCallStats.isNewRecord) {
+    return `Nouveau record hebdo : ${weeklyCallStats.callsThisWeek} appels cette semaine`;
+  }
+  if (!rateLabel) return null;
+  return `Tu es dans ta moyenne, ${rateLabel} appels/min`;
+}
+
+function computeFollowUpNudge(followUpCount: number, followUpDate: string): string | null {
+  if (followUpCount <= 0) return null;
+  return `${followUpCount} contact${followUpCount > 1 ? "s" : ""} non contacté${followUpCount > 1 ? "s" : ""} — créer la séance de relance du ${formatIsoDateFr(followUpDate)} ?`;
+}
+
+function computeAbandonedNudge(session: SessionDetail, pendingCount: number): string | null {
+  if (session.status !== "completed" || pendingCount <= 0) return null;
+  return `Séance clôturée sans être terminée — ${pendingCount} contact${pendingCount > 1 ? "s" : ""} à trancher`;
+}
 
 export function RecapView({
   session,
   contacts,
   followUpLoading,
   error,
+  weeklyCallStats,
   onBack,
   onCreateFollowUp,
 }: RecapViewProps) {
@@ -33,6 +70,14 @@ export function RecapView({
 
   const [followUpDate, setFollowUpDate] = useState(tomorrowParisIso);
   const [followUpName, setFollowUpName] = useState(() => suggestFollowUpSessionName(session.name, tomorrowParisIso()));
+
+  const pace = computePaceNudge(session, called);
+  const nudges = [
+    pace?.text ?? null,
+    computeRecordNudge(weeklyCallStats, pace?.rateLabel ?? null),
+    computeFollowUpNudge(followUpCount, followUpDate),
+    computeAbandonedNudge(session, pending.length),
+  ].filter((text): text is string => Boolean(text));
 
   return (
     <div className="calls-view">
@@ -66,6 +111,16 @@ export function RecapView({
           <strong className="xos-numeric">{pending.length}</strong>
         </GlassCard>
       </div>
+
+      {nudges.length > 0 && (
+        <GlassCard className="calls-recap-nudges">
+          <ul>
+            {nudges.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </GlassCard>
+      )}
 
       {error && (
         <GlassCard className="calls-error">
