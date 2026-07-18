@@ -59,6 +59,56 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.xos-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--xos-text);
+}
+
+.xos-btn--ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.xos-btn--danger {
+  background: var(--xos-accent-danger);
+  color: #2a0a0e;
+}
+
+.xos-btn--danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--xos-accent-danger) 85%, white);
+}
+
+.xos-btn--icon {
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--xos-border);
+  color: var(--xos-text);
+}
+
+.xos-btn--icon:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.xos-btn--sm {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8125rem;
+  border-radius: 0.5rem;
+}
+
+.xos-btn--sm.xos-btn--icon {
+  padding: 0.3rem;
+}
+
+.xos-btn--lg {
+  padding: 0.7rem 1.35rem;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+}
+
+.xos-btn--lg.xos-btn--icon {
+  padding: 0.7rem;
+}
+
 .xos-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -82,6 +132,26 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
   color: var(--xos-text);
   animation: xos-modal-enter 180ms ease-out;
+}
+
+.xos-modal-backdrop--glass {
+  padding: 0;
+  background: color-mix(in srgb, var(--xos-window-shell-bg) 36%, transparent);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.xos-modal--glass {
+  width: min(46rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  background: color-mix(in srgb, var(--xos-window-content-bg) 54%, transparent);
+  border-color: color-mix(in srgb, var(--xos-border) 78%, var(--xos-accent) 22%);
+  box-shadow:
+    0 24px 72px rgba(0, 0, 0, 0.58),
+    0 4px 20px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(28px) saturate(145%);
+  -webkit-backdrop-filter: blur(28px) saturate(145%);
 }
 
 .xos-modal__header,
@@ -376,6 +446,86 @@
 .xos-select__option--active {
   background: color-mix(in srgb, var(--xos-accent) 18%, transparent);
   color: var(--xos-accent);
+}
+
+.xos-skeleton {
+  display: block;
+  width: 100%;
+  height: 1rem;
+  border-radius: 0.4rem;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 25%,
+    rgba(255, 255, 255, 0.14) 37%,
+    rgba(255, 255, 255, 0.06) 63%
+  );
+  background-size: 400% 100%;
+  animation: xos-skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes xos-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xos-skeleton {
+    animation: none;
+  }
+}
+
+.xos-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.xos-progress__track {
+  flex: 1;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.xos-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--xos-accent), color-mix(in srgb, var(--xos-accent) 70%, white));
+  transition: width 0.25s ease;
+}
+
+.xos-progress__label {
+  font-size: 0.8rem;
+  color: var(--xos-text-muted);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.xos-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 1.5rem 1rem 1.25rem;
+  text-align: center;
+}
+
+.xos-empty-state__art {
+  color: var(--xos-accent);
+  margin-bottom: 0.25rem;
+}
+
+.xos-empty-state h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-family: var(--xos-font-display);
+}
+
+.xos-empty-state p {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--xos-text-muted);
+  line-height: 1.45;
 }
 
 .xos-select__group {

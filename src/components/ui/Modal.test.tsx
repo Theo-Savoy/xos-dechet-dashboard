@@ -32,4 +32,17 @@ describe('Modal', () => {
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(buttons.at(-1));
   });
+
+  it('applies glass variant classes and closes on Escape', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open title="Combo" onClose={onClose} variant="glass">
+        Corps
+      </Modal>,
+    );
+    expect(screen.getByRole('dialog').classList.contains('xos-modal--glass')).toBe(true);
+    expect(screen.getByTestId('modal-backdrop').classList.contains('xos-modal-backdrop--glass')).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

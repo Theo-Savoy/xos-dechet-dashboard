@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './Button';
+import { useComboOverlay } from './useComboOverlay';
 import './ui.css';
 
 type ModalAction = {
@@ -22,6 +23,8 @@ export type ModalProps = {
   onClose: () => void;
   primaryAction?: ModalAction;
   secondaryAction?: ModalAction;
+  /** 'glass' : plein écran, fond glass appuyé (remplace les modales maison type calls-modal). */
+  variant?: 'default' | 'glass';
 };
 
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -33,12 +36,18 @@ export function Modal({
   onClose,
   primaryAction,
   secondaryAction,
+  variant = 'default',
 }: ModalProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const isGlass = variant === 'glass';
+
+  // Variante glass : plein écran, réutilise le comportement (focus trap + Esc + scroll lock)
+  // déjà validé par les overlays Combo plutôt qu'une seconde implémentation.
+  useComboOverlay(isGlass && open, panelRef, onClose);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isGlass) return;
     const previous = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
     const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE);
@@ -67,20 +76,20 @@ export function Modal({
       document.removeEventListener('keydown', onKeyDown);
       previous?.focus();
     };
-  }, [onClose, open]);
+  }, [isGlass, onClose, open]);
 
   if (!open) return null;
   const stopPropagation = (event: ReactKeyboardEvent | React.MouseEvent) =>
     event.stopPropagation();
   return createPortal(
     <div
-      className="xos-modal-backdrop"
+      className={isGlass ? 'xos-modal-backdrop xos-modal-backdrop--glass' : 'xos-modal-backdrop'}
       data-testid="modal-backdrop"
       onClick={onClose}
     >
       <div
         ref={panelRef}
-        className="xos-modal"
+        className={isGlass ? 'xos-modal xos-modal--glass' : 'xos-modal'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
