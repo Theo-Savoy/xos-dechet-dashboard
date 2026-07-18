@@ -441,14 +441,17 @@ function shortPeriodLabel(label: string | null | undefined) {
   return shortWeekLabel(label) || label;
 }
 
-function pctChange(current: number, previous: number | undefined) {
+type PctChange = number | "new" | null;
+
+function pctChange(current: number, previous: number | undefined): PctChange {
   if (previous === undefined) return null;
-  if (previous === 0) return current === 0 ? 0 : null;
+  if (previous === 0) return current === 0 ? 0 : "new";
   return (current - previous) / Math.abs(previous);
 }
 
-function formatPctChange(value: number | null) {
+function formatPctChange(value: PctChange) {
   if (value === null) return null;
+  if (value === "new") return "nouveau";
   if (value === 0) return "=";
   return `${value > 0 ? "+" : "−"}${percent.format(Math.abs(value))}`;
 }
@@ -457,7 +460,7 @@ function wowDelta(current: number, previous: number | undefined) {
   return pctChange(current, previous);
 }
 
-function formatDelta(value: number | null) {
+function formatDelta(value: PctChange) {
   return formatPctChange(value);
 }
 
@@ -769,6 +772,25 @@ function tableFooter(metric: TableMetric, weekMode: boolean, currentIndex: numbe
   return { total, average, delta };
 }
 
+function priorQuarterDisplayLabel(label: string) {
+  const match = /^FY(\d+)-Q([1-4])$/i.exec(label);
+  return match ? `Q${match[2]} FY${match[1]}` : label;
+}
+
+function DeltaTableCell({ delta, weekMode, priorQuarterLabel }: { delta: PctChange; weekMode: boolean; priorQuarterLabel: string }) {
+  const tone = typeof delta === "number" && delta < 0
+    ? "weekly-delta--down"
+    : typeof delta === "number" && delta > 0
+      ? "weekly-delta--up"
+      : undefined;
+  const tip = delta === null || delta === "new"
+    ? "Pas de référence : pas de données Q-1"
+    : weekMode
+      ? "Comparé à la semaine précédente"
+      : `Comparé à ${priorQuarterDisplayLabel(priorQuarterLabel)} sur les mêmes semaines écoulées`;
+  return <td className={tone}><Tip text={tip}>{formatDelta(delta) || "—"}</Tip></td>;
+}
+
 function MetricTable({ owner, weeks, pulse, pipeline, priorPulse, priorPipeline, quarter, currentIndex, weekMode, compareLabel, priorQuarterLabel }: {
   owner: Owner; weeks: Week[]; pulse: Pulse[]; pipeline: Pipeline[]; priorPulse?: Pulse[]; priorPipeline?: Pipeline[];
   quarter: Quarter | undefined; currentIndex: number; weekMode: boolean; compareLabel: string; priorQuarterLabel: string;
@@ -823,7 +845,7 @@ function MetricTable({ owner, weeks, pulse, pipeline, priorPulse, priorPipeline,
               {metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}
               {!weekMode && <td className="weekly-table-avg">{formatValue(avg, metric.format)}</td>}
               <td className="weekly-table-total">{formatValue(footer.total, metric.format)}</td>
-              <td className={footer.delta !== null && footer.delta < 0 ? "weekly-delta--down" : footer.delta !== null && footer.delta > 0 ? "weekly-delta--up" : undefined}>{formatDelta(footer.delta) || "—"}</td>
+              <DeltaTableCell delta={footer.delta} weekMode={weekMode} priorQuarterLabel={priorQuarterLabel} />
             </tr>
           );
         })}</tbody>
@@ -839,7 +861,7 @@ function MetricCell({ label, value, previous, moneyValue = false }: { label: str
   return <div>
     <span>{label}</span>
     <strong className="xos-numeric">{moneyValue ? money.format(value) : value}</strong>
-    {deltaText && <small className={`weekly-delta ${delta && delta < 0 ? "weekly-delta--down" : delta && delta > 0 ? "weekly-delta--up" : ""}`}>{deltaText}</small>}
+    {deltaText && <small className={`weekly-delta ${typeof delta === "number" && delta < 0 ? "weekly-delta--down" : typeof delta === "number" && delta > 0 ? "weekly-delta--up" : ""}`}>{deltaText}</small>}
   </div>;
 }
 
@@ -1062,7 +1084,7 @@ function TeamMetricTable({
               {metric.values.map((value, index) => <td key={weeks[index].start} className={index === currentIndex ? "weekly-table-current" : undefined}>{index > currentIndex ? "—" : formatValue(value, metric.format)}</td>)}
               {!weekMode && <td className="weekly-table-avg">{formatValue(avg, metric.format)}</td>}
               <td className="weekly-table-total">{formatValue(footer.total, metric.format)}</td>
-              <td className={footer.delta !== null && footer.delta < 0 ? "weekly-delta--down" : footer.delta !== null && footer.delta > 0 ? "weekly-delta--up" : undefined}>{formatDelta(footer.delta) || "—"}</td>
+              <DeltaTableCell delta={footer.delta} weekMode={weekMode} priorQuarterLabel={priorQuarterLabel} />
             </tr>
           );
         })}</tbody>
@@ -1473,16 +1495,26 @@ function MoneyChartTooltip({ active, payload, label }: { active?: boolean; paylo
   );
 }
 
-function CountChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name?: string; value?: number | null; color?: string }>; label?: string }) {
-  if (!active || !payload?.length) return null;
+type ActivityPoint = { label: string; rdv: number | null; detections: number | null; calls: number | null };
+type ActivitySeriesKey = "rdv" | "detections" | "calls";
+
+function ActivityWeekTooltip({ active, label, data, showCalls }: { active?: boolean; label?: string; data: ActivityPoint[]; showCalls: boolean }) {
+  if (!active || !label) return null;
+  const row = data.find((point) => point.label === label);
+  if (!row) return null;
+  const rows: Array<{ name: string; value: number | null; color: string }> = [
+    { name: "RDV", value: row.rdv, color: "var(--xos-accent)" },
+    { name: "Détections", value: row.detections, color: "color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" },
+  ];
+  if (showCalls) rows.push({ name: "Appels", value: row.calls, color: "#7d8aa3" });
   return (
     <div className="weekly-chart-tooltip">
-      {label ? <small>{label}</small> : null}
-      {payload.map((entry) => (
+      <small>{label}</small>
+      {rows.map((entry) => (
         <div className="weekly-chart-tooltip__row" key={entry.name}>
           <span className="weekly-chart-tooltip__dot" style={{ background: entry.color }} />
           <span>{entry.name}</span>
-          <strong className="xos-numeric">{entry.value === null || entry.value === undefined ? "—" : countFmt.format(Number(entry.value))}</strong>
+          <strong className="xos-numeric">{entry.value === null || entry.value === undefined ? "—" : countFmt.format(entry.value)}</strong>
         </div>
       ))}
     </div>
@@ -1499,10 +1531,10 @@ function ActivityTrendChart({
   currentIndex: number;
   showCalls: boolean;
 }) {
-  const data = weeks.map((week, index) => {
+  const data: ActivityPoint[] = weeks.map((week, index) => {
     const future = index > currentIndex;
     const label = shortWeekLabel(week.isoWeek) || week.label;
-    if (future) return { label, rdv: null as number | null, detections: null as number | null, calls: null as number | null };
+    if (future) return { label, rdv: null, detections: null, calls: null };
     return {
       label,
       rdv: sumAt(owners, pulseFor, index, (row) => row.meetings),
@@ -1511,23 +1543,32 @@ function ActivityTrendChart({
     };
   });
   const hasData = data.some((point) => (point.rdv || 0) > 0 || (point.detections || 0) > 0 || (point.calls || 0) > 0);
+  const series: Array<{ key: ActivitySeriesKey; name: string; fill: string }> = [
+    { key: "rdv", name: "RDV", fill: "var(--xos-accent)" },
+    { key: "detections", name: "Détections", fill: "color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" },
+  ];
+  if (showCalls) series.push({ key: "calls", name: "Appels", fill: "#7d8aa3" });
   return (
     <section className="weekly-section">
       <SectionHeading kicker={COPY.volume.kicker} title={COPY.volume.title} hint={COPY.volume.hint} />
       <GlassCard className={`weekly-chart-card weekly-activity-card${!hasData ? " weekly-chart-card--empty" : ""}`}>
-        <div className="weekly-chart weekly-chart--activity">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
-              <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} />
-              <YAxis hide allowDecimals={false} />
-              <Tooltip content={<CountChartTooltip />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
-              <Legend wrapperStyle={{ color: "var(--xos-text-muted)", fontSize: 12 }} />
-              <Bar dataKey="rdv" name="RDV" fill="var(--xos-accent)" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
-              <Bar dataKey="detections" name="Détections" fill="color-mix(in srgb, var(--xos-accent) 45%, #5b8def)" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
-              {showCalls && <Bar dataKey="calls" name="Appels" fill="#7d8aa3" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />}
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="weekly-activity-grid">
+          {series.map((serie, index) => (
+            <div className="weekly-activity-row" key={serie.key} data-testid={`weekly-activity-mini-${serie.key}`}>
+              <span className="weekly-activity-row__label">{serie.name}</span>
+              <div className="weekly-chart weekly-chart--activity-mini">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} syncId="weekly-activity" margin={{ top: 4, right: 8, bottom: index === series.length - 1 ? 4 : 0, left: 0 }}>
+                    <CartesianGrid stroke="color-mix(in srgb, var(--xos-border) 55%, transparent)" vertical={false} />
+                    <XAxis dataKey="label" stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} hide={index !== series.length - 1} />
+                    <YAxis stroke="var(--xos-text-muted)" tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                    <Tooltip content={<ActivityWeekTooltip data={data} showCalls={showCalls} />} cursor={chartBarCursor} wrapperStyle={{ outline: "none", zIndex: 20 }} />
+                    <Bar dataKey={serie.key} name={serie.name} fill={serie.fill} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ))}
         </div>
       </GlassCard>
     </section>
