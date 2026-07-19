@@ -36,9 +36,15 @@ export interface ProgressToNext {
 
 export const PALIER_ORDER: PalierId[] = ["bronze", "argent", "or", "platine", "diamant", "challenger"];
 
+/**
+ * BUG-03 : l'axe Impact stocke des XP (10 par RDV, spec §1.1), pas un compteur
+ * de RDV brut — les seuils ci-dessous sont donc les seuils "RDV cumulés" de la
+ * spec §1.3 multipliés par IMPACT_XP_PER_RDV (3→30, 7→70, 15→150, 30→300,
+ * 60→600, 100→1000).
+ */
 export const PALIERS: Record<ComboXpAxis, Record<PalierId, number>> = {
   vitesse: { bronze: 10, argent: 30, or: 75, platine: 150, diamant: 300, challenger: 500 },
-  impact: { bronze: 3, argent: 7, or: 15, platine: 30, diamant: 60, challenger: 100 },
+  impact: { bronze: 30, argent: 70, or: 150, platine: 300, diamant: 600, challenger: 1000 },
   regularite: { bronze: 3, argent: 7, or: 14, platine: 30, diamant: 60, challenger: 100 },
 };
 
@@ -48,6 +54,15 @@ const EVENT_AXIS: Record<ComboXpEventType, ComboXpAxis> = {
   shortcut: "vitesse",
   rdv: "impact",
   "day-logged": "regularite",
+};
+
+/** XP par unité de `qty` — un RDV vaut 10 XP Impact (spec §1.1), les autres événements 1:1. */
+export const IMPACT_XP_PER_RDV = 10;
+
+const EVENT_XP_MULTIPLIER: Record<ComboXpEventType, number> = {
+  shortcut: 1,
+  rdv: IMPACT_XP_PER_RDV,
+  "day-logged": 1,
 };
 
 function xpStorageKey(userId: string): string {
@@ -190,7 +205,8 @@ export function applyEvent(
     return { xp: previousXp, previousXp, paliersFranchis: [] };
   }
 
-  const newXp: ComboXp = { ...previousXp, [axis]: previousXp[axis] + qty, lastSeen: new Date().toISOString() };
+  const xpGain = qty * EVENT_XP_MULTIPLIER[event];
+  const newXp: ComboXp = { ...previousXp, [axis]: previousXp[axis] + xpGain, lastSeen: new Date().toISOString() };
 
   const paliersFranchis = detectPaliers(previousXp, newXp);
   saveXp(userId, newXp);

@@ -51,9 +51,9 @@ describe("comboXp", () => {
     expect(result.xp.regularite).toBe(0);
   });
 
-  it("applyEvent rdv increments impact only", () => {
+  it("applyEvent rdv increments impact only, 10 XP per RDV (BUG-03)", () => {
     const result = applyEvent(USER, "rdv");
-    expect(result.xp.impact).toBe(1);
+    expect(result.xp.impact).toBe(10);
     expect(result.xp.vitesse).toBe(0);
   });
 
@@ -65,7 +65,7 @@ describe("comboXp", () => {
 
   it("applyEvent accepts a qty greater than 1", () => {
     const result = applyEvent(USER, "rdv", 3);
-    expect(result.xp.impact).toBe(3);
+    expect(result.xp.impact).toBe(30);
   });
 
   it("applyEvent persists across calls", () => {
@@ -88,7 +88,7 @@ describe("comboXp", () => {
   });
 
   it("currentPalier uses per-axis thresholds", () => {
-    expect(currentPalier("impact", 3)).toBe("bronze");
+    expect(currentPalier("impact", 30)).toBe("bronze");
     expect(currentPalier("regularite", 14)).toBe("or");
   });
 
@@ -108,8 +108,8 @@ describe("comboXp", () => {
   });
 
   it("detectPaliers finds crossings across multiple axes", () => {
-    const previousXp: ComboXp = { vitesse: 9, impact: 2, regularite: 0, badges: [], lastSeen: "" };
-    const newXp: ComboXp = { vitesse: 10, impact: 3, regularite: 0, badges: [], lastSeen: "" };
+    const previousXp: ComboXp = { vitesse: 9, impact: 20, regularite: 0, badges: [], lastSeen: "" };
+    const newXp: ComboXp = { vitesse: 10, impact: 30, regularite: 0, badges: [], lastSeen: "" };
     expect(detectPaliers(previousXp, newXp)).toEqual([
       { axis: "vitesse", palier: "bronze" },
       { axis: "impact", palier: "bronze" },
