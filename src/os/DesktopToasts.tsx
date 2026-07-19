@@ -3,6 +3,9 @@ import { Button } from '../components/ui/Button';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Tag } from '../components/ui/Tag';
 import {
+  GAMIFICATION_TOAST_EMOJI,
+  GAMIFICATION_TOAST_LABEL,
+  isGamificationToastKind,
   markNotificationsRead,
   reactionEmoji,
   type UserNotification,
@@ -23,7 +26,19 @@ type ToastState = {
 };
 
 function isToastNotification(item: UserNotification): boolean {
-  return item.kind === 'session_goal_hit' || item.kind === 'goal_reaction';
+  return (
+    item.kind === 'session_goal_hit' ||
+    item.kind === 'goal_reaction' ||
+    isGamificationToastKind(item.kind)
+  );
+}
+
+function gamificationToastColorClass(kind: string): string | null {
+  if (kind === 'xp_palier_atteint' || kind === 'badge_one_timer') {
+    return 'xos-desktop-toast--success';
+  }
+  if (kind === 'streak_palier_atteint') return 'xos-desktop-toast--streak';
+  return null;
 }
 
 function isReactedExpired(timestamp: number | undefined): boolean {
@@ -138,6 +153,12 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
     <div className="xos-desktop-toasts" aria-label="Notifications récentes">
       {visibleToasts.map(({ notification, phase }) => {
         const emoji = reactionEmoji(notification);
+        const gamificationKind = isGamificationToastKind(notification.kind)
+          ? notification.kind
+          : null;
+        const colorClass = gamificationKind
+          ? gamificationToastColorClass(gamificationKind)
+          : null;
         const handleClick = () => {
           dismissToast(notification.id, true);
           requestOpenControlCenter(notification.id);
@@ -145,7 +166,7 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
         return (
           <GlassCard
             key={notification.id}
-            className={`xos-desktop-toast xos-desktop-toast--${phase}`}
+            className={`xos-desktop-toast xos-desktop-toast--${phase}${colorClass ? ` ${colorClass}` : ''}`}
             role="status"
             aria-live="polite"
             tabIndex={0}
@@ -160,9 +181,11 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
             <div className="xos-desktop-toast__head">
               <Tag variant="accent">Combo</Tag>
               <span className="xos-desktop-toast__kind">
-                {notification.kind === 'goal_reaction'
-                  ? 'Réaction'
-                  : 'Objectif'}
+                {gamificationKind
+                  ? GAMIFICATION_TOAST_LABEL[gamificationKind]
+                  : notification.kind === 'goal_reaction'
+                    ? 'Réaction'
+                    : 'Objectif'}
               </span>
               <Button
                 type="button"
@@ -177,7 +200,11 @@ export function DesktopToasts({ accessToken }: { accessToken: string }) {
                 &times;
               </Button>
             </div>
-            <h2 className="xos-desktop-toast__title">{notification.title}</h2>
+            <h2 className="xos-desktop-toast__title">
+              {gamificationKind &&
+                `${GAMIFICATION_TOAST_EMOJI[gamificationKind]} `}
+              {notification.title}
+            </h2>
             {emoji ? (
               <p
                 className="xos-desktop-toast__emoji"

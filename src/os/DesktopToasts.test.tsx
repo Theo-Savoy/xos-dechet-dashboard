@@ -35,6 +35,26 @@ const goalHit = {
   read_at: null,
 };
 
+const xpPalier = {
+  id: 9,
+  kind: 'xp_palier_atteint',
+  title: 'Argent vitesse · 30 raccourcis cumulés',
+  body: '',
+  payload: { axe: 'vitesse', palier: 'argent' },
+  created_at: '2026-07-13T18:00:00.000Z',
+  read_at: null,
+};
+
+const streakPalier = {
+  id: 10,
+  kind: 'streak_palier_atteint',
+  title: '14 jours d’affilée',
+  body: '',
+  payload: { type: 'classique', jours: 14 },
+  created_at: '2026-07-13T18:00:00.000Z',
+  read_at: null,
+};
+
 const goalReaction = {
   id: 8,
   kind: 'goal_reaction',
@@ -71,6 +91,32 @@ describe('DesktopToasts', () => {
       'Objectif atteint !',
     );
     expect(screen.getByText('Bravo, 10 RDV obtenus.')).toBeTruthy();
+  });
+
+  it('renders an xp_palier_atteint toast with its emoji and success color', () => {
+    render(
+      <NotificationsProvider initialNotifications={[xpPalier]}>
+        <DesktopToasts accessToken="token" />
+      </NotificationsProvider>,
+    );
+
+    const toast = screen.getByRole('status');
+    expect(toast.className).toContain('xos-desktop-toast--success');
+    expect(toast.textContent).toContain('📈 Argent vitesse · 30 raccourcis cumulés');
+    expect(screen.getByText('Palier')).toBeTruthy();
+  });
+
+  it('renders a streak_palier_atteint toast with the accent color', () => {
+    render(
+      <NotificationsProvider initialNotifications={[streakPalier]}>
+        <DesktopToasts accessToken="token" />
+      </NotificationsProvider>,
+    );
+
+    const toast = screen.getByRole('status');
+    expect(toast.className).toContain('xos-desktop-toast--streak');
+    expect(toast.textContent).toContain('🔥 14 jours d’affilée');
+    expect(screen.getByText('Streak')).toBeTruthy();
   });
 
   it('dismisses a clicked toast and marks its notification read', () => {

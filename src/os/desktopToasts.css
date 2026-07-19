@@ -38,6 +38,22 @@
   animation: xos-desktop-toast-out 0.18s ease-in both;
 }
 
+.xos-desktop-toast--success {
+  border-color: color-mix(in srgb, var(--xos-success) 32%, var(--xos-border));
+}
+
+.xos-desktop-toast--success .xos-desktop-toast__kind {
+  color: var(--xos-success);
+}
+
+.xos-desktop-toast--streak {
+  border-color: color-mix(in srgb, var(--xos-accent) 32%, var(--xos-border));
+}
+
+.xos-desktop-toast--streak .xos-desktop-toast__kind {
+  color: var(--xos-accent);
+}
+
 .xos-desktop-toast__head {
   display: flex;
   align-items: center;

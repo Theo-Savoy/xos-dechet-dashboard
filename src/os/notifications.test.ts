@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  GAMIFICATION_TOAST_KINDS,
   GOAL_REACTION_EMOJIS,
   PICKER_REACTION_EMOJIS,
   QUICK_REACTION_EMOJIS,
   fetchNotifications,
+  isGamificationToastKind,
 } from './notifications';
 
 beforeEach(() => {
@@ -36,6 +38,24 @@ describe('goal reaction palette', () => {
       '⭐',
     ]);
     expect(GOAL_REACTION_EMOJIS).toHaveLength(8);
+  });
+});
+
+describe('gamification toast kinds', () => {
+  it('lists the 3 celebratory kinds from spec §3.1', () => {
+    expect(GAMIFICATION_TOAST_KINDS).toEqual([
+      'xp_palier_atteint',
+      'badge_one_timer',
+      'streak_palier_atteint',
+    ]);
+  });
+
+  it('recognizes gamification kinds and rejects other kinds', () => {
+    expect(isGamificationToastKind('xp_palier_atteint')).toBe(true);
+    expect(isGamificationToastKind('badge_one_timer')).toBe(true);
+    expect(isGamificationToastKind('streak_palier_atteint')).toBe(true);
+    expect(isGamificationToastKind('session_goal_hit')).toBe(false);
+    expect(isGamificationToastKind('goal_reaction')).toBe(false);
   });
 });
 
