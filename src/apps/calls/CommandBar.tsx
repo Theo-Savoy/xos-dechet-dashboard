@@ -8,7 +8,7 @@ import {
 } from "./comboKeyboard";
 import type { ComboSoundPrefs } from "./comboSoundPrefs";
 import { useComboOverlay } from "./comboOverlay";
-import { useComboXp } from "./useComboXp";
+import { useComboXp } from "./comboXp";
 
 type CommandBarProps = {
   open: boolean;

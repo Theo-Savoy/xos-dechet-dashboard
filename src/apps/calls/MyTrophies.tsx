@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Button, GlassCard } from "../../components/ui";
 import { useComboOverlay } from "./comboOverlay";
-import { summarizeComboBadges, summarizeComboStreaks, useComboXp } from "./useComboXp";
+import { summarizeComboBadges, summarizeComboStreaks, useComboXp } from "./comboXp";
 
 type MyTrophiesProps = {
   open: boolean;

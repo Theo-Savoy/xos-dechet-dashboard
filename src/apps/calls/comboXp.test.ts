@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyEvent, currentPalier, detectPaliers, hasEventRecorded, loadXp, progressToNext, saveXp } from "./comboXp";
+import {
+  applyEvent,
+  currentPalier,
+  detectPaliers,
+  hasEventRecorded,
+  loadXp,
+  progressToNext,
+  saveXp,
+  summarizeComboBadges,
+  summarizeComboStreaks,
+  summarizeComboXp,
+} from "./comboXp";
 import type { ComboXp } from "./comboXp";
+import { comboStreaksStorageKey } from "./comboStreaks";
 
 function installLocalStorage() {
   const store: Record<string, string> = {};
@@ -195,6 +207,55 @@ describe("comboXp", () => {
       expect(hasEventRecorded(USER, "vitesse:L:2026-07-19")).toBe(false);
       applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
       expect(hasEventRecorded(USER, "vitesse:L:2026-07-19")).toBe(true);
+    });
+  });
+
+  // BUG-12 : fusionné depuis l'ex-useComboXp.test.ts (doublon supprimé).
+  describe("summarize* (lecture/présentation, ex-useComboXp)", () => {
+    it("defaults to zeroed axes and no badge when storage is empty", () => {
+      const summary = summarizeComboXp("user-1");
+      expect(summary.axes).toEqual([
+        { id: "vitesse", label: "Vitesse", count: 0, palier: null },
+        { id: "impact", label: "Impact", count: 0, palier: null },
+        { id: "regularite", label: "Régularité", count: 0, palier: null },
+      ]);
+      expect(summary.lastBadge).toBeNull();
+    });
+
+    it("computes the current palier per axis from cumulative counts", () => {
+      saveXp("user-1", { vitesse: 30, impact: 70, regularite: 14, badges: [], lastSeen: "" });
+      const summary = summarizeComboXp("user-1");
+      expect(summary.axes.find((a) => a.id === "vitesse")).toMatchObject({ count: 30, palier: "Argent" });
+      expect(summary.axes.find((a) => a.id === "impact")).toMatchObject({ count: 70, palier: "Argent" });
+      expect(summary.axes.find((a) => a.id === "regularite")).toMatchObject({ count: 14, palier: "Or" });
+    });
+
+    it("surfaces the most recently unlocked badge", () => {
+      saveXp("user-1", { vitesse: 1, impact: 0, regularite: 1, badges: ["premier_pas", "eclair"], lastSeen: "" });
+      expect(summarizeComboXp("user-1").lastBadge).toEqual({ id: "eclair", label: "⚡ Éclair" });
+    });
+
+    it("lists unlocked badges most-recent-first", () => {
+      saveXp("user-1", { vitesse: 0, impact: 0, regularite: 0, badges: ["premier_pas", "eclair"], lastSeen: "" });
+      expect(summarizeComboBadges("user-1")).toEqual([
+        { id: "eclair", label: "⚡ Éclair" },
+        { id: "premier_pas", label: "🐣 Premier pas" },
+      ]);
+    });
+
+    it("reads streak counters independently per type", () => {
+      window.localStorage.setItem(
+        comboStreaksStorageKey("user-1"),
+        JSON.stringify({ classique: 14, productif: 3, intense: 0 }),
+      );
+      const streaks = summarizeComboStreaks("user-1");
+      expect(streaks.find((s) => s.id === "classique")).toMatchObject({ days: 14, palier: "Or" });
+      expect(streaks.find((s) => s.id === "intense")).toMatchObject({ days: 0, palier: null });
+    });
+
+    it("keeps users isolated by storage key", () => {
+      saveXp("user-a", { vitesse: 500, impact: 0, regularite: 0, badges: [], lastSeen: "" });
+      expect(summarizeComboXp("user-b").axes.find((a) => a.id === "vitesse")?.count).toBe(0);
     });
   });
 });

@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandBar, ShortcutHelp } from "./CommandBar";
 import { DEFAULT_SOUND_PREFS } from "./comboSoundPrefs";
-import { comboXpStorageKey } from "./useComboXp";
+import { comboXpStorageKey } from "./comboXp";
 
 function installLocalStorage() {
   const store: Record<string, string> = {};
@@ -34,7 +34,7 @@ describe("CommandBar XP section", () => {
   it("shows one line per axis with the current palier when a user is given", () => {
     window.localStorage.setItem(
       comboXpStorageKey("user-1"),
-      JSON.stringify({ vitesse: 30, impact: 7, regularite: 14, badges: ["premier_pas"], lastSeen: "" }),
+      JSON.stringify({ vitesse: 30, impact: 70, regularite: 14, badges: ["premier_pas"], lastSeen: "" }),
     );
     render(
       <CommandBar
@@ -48,7 +48,7 @@ describe("CommandBar XP section", () => {
       />,
     );
     expect(screen.getByText(/Vitesse 30 · Argent/)).toBeTruthy();
-    expect(screen.getByText(/Impact 7 · Argent/)).toBeTruthy();
+    expect(screen.getByText(/Impact 70 · Argent/)).toBeTruthy();
     expect(screen.getByText(/Régularité 14 · Or/)).toBeTruthy();
     expect(screen.getByText(/Dernier badge/)).toBeTruthy();
   });
