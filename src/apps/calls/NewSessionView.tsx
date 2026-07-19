@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, GlassCard, Tag } from "../../components/ui";
 import {
   type CallTargetPreset,
@@ -41,7 +41,6 @@ type NewSessionViewProps = {
   team?: TeamMember[];
   onBack: () => void;
   onOpenAccountSearch?: () => void;
-  onPreview: () => void;
   onLoadPreset: (preset: CallTargetPreset) => void;
   onSavePreset: (name: string, shared: boolean) => void;
   onDeletePreset: (id: number) => void;
@@ -105,7 +104,6 @@ export function NewSessionView({
   team = [],
   onBack,
   onOpenAccountSearch,
-  onPreview,
   onLoadPreset,
   onSavePreset,
   onDeletePreset,
@@ -151,13 +149,35 @@ export function NewSessionView({
     );
   }, [preview, dedup, dedupMode]);
 
+  // La preview se recalcule automatiquement à chaque changement de filtre :
+  // on ne réinitialise la sélection qu'au tout premier chargement (cap par
+  // défaut) puis, aux rafraîchissements suivants, on ne retire que les
+  // contacts qui ont disparu de la nouvelle liste — le reste de la
+  // sélection manuelle de l'utilisateur survit au refresh.
+  const hadPreviewRef = useRef(false);
+
   useEffect(() => {
-    setSelectedIds(selectIdsWithCompanyCap(preview, maxPerCompany, eligibleIds));
-    setCapHint(
-      maxPerCompany
-        ? `Aperçu : max ${maxPerCompany}/entreprise, jusqu'à ${contactLimit} contacts (priorité directeurs / responsables).`
-        : null,
-    );
+    if (preview.length === 0) {
+      hadPreviewRef.current = false;
+      setSelectedIds(new Set());
+      setCapHint(null);
+      return;
+    }
+    if (!hadPreviewRef.current) {
+      hadPreviewRef.current = true;
+      setSelectedIds(selectIdsWithCompanyCap(preview, maxPerCompany, eligibleIds));
+      setCapHint(
+        maxPerCompany
+          ? `Aperçu : max ${maxPerCompany}/entreprise, jusqu'à ${contactLimit} contacts (priorité directeurs / responsables).`
+          : null,
+      );
+      return;
+    }
+    const previewIds = new Set(preview.map((c) => c.sf_contact_id));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => previewIds.has(id) && eligibleIds.has(id)));
+      return next;
+    });
   }, [preview, eligibleIds, maxPerCompany, contactLimit]);
 
   const selectedContacts = useMemo(
@@ -390,7 +410,6 @@ export function NewSessionView({
         onContactLimitChange={onContactLimitChange}
         maxPerCompany={maxPerCompany}
         onMaxPerCompanyChange={onMaxPerCompanyChange}
-        onPreview={onPreview}
         presets={presets}
         presetsLoading={presetsLoading}
         savingPreset={savingPreset}
@@ -436,6 +455,9 @@ export function NewSessionView({
                   {selectedContacts.length} sélectionné{selectedContacts.length > 1 ? "s" : ""} /{" "}
                   {preview.length}
                 </Tag>
+                {previewLoading && (
+                  <Tag role="status" aria-live="polite">Mise à jour…</Tag>
+                )}
               </div>
               <div className="calls-preview__actions">
                 <Button variant="secondary" onClick={selectAll}>
@@ -529,14 +551,19 @@ export function NewSessionView({
         </>
       )}
 
+      {previewLoading && preview.length === 0 && (
+        <GlassCard className="calls-empty calls-empty--hero" role="status" aria-live="polite">
+          <Tag variant="accent">Ciblage</Tag>
+          <h3>Mise à jour…</h3>
+          <p>Calcul de la liste correspondant à vos filtres.</p>
+        </GlassCard>
+      )}
+
       {!previewLoading && preview.length === 0 && !error && (
         <GlassCard className="calls-empty calls-empty--hero">
           <Tag variant="accent">Ciblage</Tag>
           <h3>Prévisualisez votre liste</h3>
-          <p>Réglez les filtres, puis lancez une prévisualisation pour sélectionner les contacts.</p>
-          <Button onClick={onPreview} disabled={previewLoading}>
-            Prévisualiser
-          </Button>
+          <p>Réglez les filtres — la liste des contacts s&apos;affiche automatiquement.</p>
         </GlassCard>
       )}
     </div>

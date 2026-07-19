@@ -36,7 +36,6 @@ type FilterBuilderProps = {
   onContactLimitChange: (limit: ContactLimit) => void;
   maxPerCompany: MaxPerCompany | null;
   onMaxPerCompanyChange: (value: MaxPerCompany | null) => void;
-  onPreview: () => void;
   presets: CallTargetPreset[];
   presetsLoading: boolean;
   savingPreset: boolean;
@@ -113,7 +112,6 @@ export function FilterBuilder({
   onContactLimitChange,
   maxPerCompany,
   onMaxPerCompanyChange,
-  onPreview,
   presets,
   presetsLoading,
   savingPreset,
@@ -481,13 +479,14 @@ export function FilterBuilder({
             ))}
           </select>
         </label>
-        <Button onClick={onPreview} disabled={previewLoading}>
-          {previewLoading ? "Recherche…" : "Aperçu de la liste"}
-        </Button>
-        {previewCount !== null && !previewLoading && (
-          <Tag variant="accent">
-            Aperçu : {previewCount} contact{previewCount > 1 ? "s" : ""}
-          </Tag>
+        {previewLoading ? (
+          <Tag role="status" aria-live="polite">Mise à jour de la liste…</Tag>
+        ) : (
+          previewCount !== null && (
+            <Tag variant="accent">
+              Aperçu : {previewCount} contact{previewCount > 1 ? "s" : ""}
+            </Tag>
+          )
         )}
       </footer>
     </GlassCard>

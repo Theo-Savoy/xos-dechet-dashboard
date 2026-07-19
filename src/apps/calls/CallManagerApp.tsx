@@ -65,6 +65,7 @@ import "./calls.css";
 
 const CONTEXT_PREFETCH_AHEAD = 3;
 const CONTEXT_CACHE_MAX = 32;
+const FILTER_DEBOUNCE_MS = 500;
 
 type View = "sessions" | "new" | "account-search" | "pre-session" | "runner" | "recap" | "recalls" | "pilotage" | "loading-params";
 
@@ -442,14 +443,6 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
     onParamsChangeRef.current?.(navigationParamsForView(view, activeSession?.id));
   }, [view, activeSession?.id]);
 
-  const invalidatePreview = () => {
-    previewRequest.current += 1;
-    setPreview([]);
-    setDedup([]);
-    setPreviewTruncated(false);
-    setPreviewLoading(false);
-  };
-
   useEffect(() => {
     if (!token || view !== "new") return;
     const requestId = matchCountRequest.current + 1;
@@ -472,20 +465,61 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           if (matchCountRequest.current === requestId) setMatchCountLoading(false);
         }
       })();
-    }, 450);
+    }, FILTER_DEBOUNCE_MS);
     return () => {
       window.clearTimeout(timer);
     };
   }, [token, view, filters]);
 
+  // Aperçu détaillé recalculé automatiquement à chaque changement de filtre
+  // (même debounce que le compteur ci-dessus). On vide la liste tout de
+  // suite pour ne jamais afficher des contacts issus de l'ancien filtre
+  // pendant le chargement, puis on ignore toute réponse devenue obsolète.
+  useEffect(() => {
+    if (!token || view !== "new") return;
+    const requestId = previewRequest.current + 1;
+    previewRequest.current = requestId;
+    setPreview([]);
+    setDedup([]);
+    setExcludedCount(0);
+    setPreviewTruncated(false);
+    setPreviewLoading(true);
+    setNewError(null);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const data = await fetchContactList(token, filters, { limit: contactLimit, maxPerCompany });
+          if (previewRequest.current !== requestId) return;
+          setPreview(data.contacts);
+          setDedup(data.dedup);
+          setExcludedCount(data.excluded_count ?? 0);
+          setPreviewTruncated(data.truncated);
+          if (data.contacts.length === 0) {
+            setNewError("Aucun contact ne correspond aux filtres.");
+          }
+        } catch (err) {
+          if (previewRequest.current !== requestId) return;
+          setNewError(errorMessage(err));
+          setPreview([]);
+          setDedup([]);
+          setExcludedCount(0);
+          setPreviewTruncated(false);
+        } finally {
+          if (previewRequest.current === requestId) setPreviewLoading(false);
+        }
+      })();
+    }, FILTER_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [token, view, filters, contactLimit, maxPerCompany]);
+
   const handleFiltersChange = (next: FilterTree) => {
     setFilters(next);
-    invalidatePreview();
   };
 
   const handleLoadPreset = (preset: CallTargetPreset) => {
     setFilters(normalizeFilterTree(preset.filters));
-    invalidatePreview();
   };
 
   const handleCreateAudience = async (payload: {
@@ -524,40 +558,10 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
 
   const handleContactLimitChange = (limit: ContactLimit) => {
     setContactLimit(limit);
-    invalidatePreview();
   };
 
   const handleMaxPerCompanyChange = (value: MaxPerCompany | null) => {
     setMaxPerCompany(value);
-    invalidatePreview();
-  };
-
-  const handlePreview = async () => {
-    if (!token) return;
-    const requestId = previewRequest.current + 1;
-    previewRequest.current = requestId;
-    setPreviewLoading(true);
-    setNewError(null);
-    try {
-      const data = await fetchContactList(token, filters, { limit: contactLimit, maxPerCompany });
-      if (previewRequest.current !== requestId) return;
-      setPreview(data.contacts);
-      setDedup(data.dedup);
-      setExcludedCount(data.excluded_count ?? 0);
-      setPreviewTruncated(data.truncated);
-      if (data.contacts.length === 0) {
-        setNewError("Aucun contact ne correspond aux filtres.");
-      }
-    } catch (err) {
-      if (previewRequest.current !== requestId) return;
-      setNewError(errorMessage(err));
-      setPreview([]);
-      setDedup([]);
-      setExcludedCount(0);
-      setPreviewTruncated(false);
-    } finally {
-      if (previewRequest.current === requestId) setPreviewLoading(false);
-    }
   };
 
   const handleSavePreset = async (name: string, shared: boolean) => {
@@ -1636,7 +1640,6 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           team={team}
           onBack={goToSessions}
           onOpenAccountSearch={() => setView("account-search")}
-          onPreview={() => void handlePreview()}
           onLoadPreset={handleLoadPreset}
           onSavePreset={(name, shared) => void handleSavePreset(name, shared)}
           onDeletePreset={(id) => void handleDeletePreset(id)}
