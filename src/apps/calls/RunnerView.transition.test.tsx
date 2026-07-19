@@ -78,7 +78,7 @@ describe("RunnerView contact card transition", () => {
     expect(contactCards()[0]?.className).toContain("calls-contact-card--idle");
   });
 
-  it("keeps the outgoing card visible during the transition", () => {
+  it("keeps a single card and fades text during the transition", () => {
     vi.useFakeTimers();
     const { rerender } = render(
       <RunnerView {...baseProps} contacts={[bob, alice]} currentContact={bob} />,
@@ -92,8 +92,9 @@ describe("RunnerView contact card transition", () => {
       />,
     );
 
-    expect(contactCards()).toHaveLength(2);
-    expect(contactCards()[0]?.className).toContain("calls-contact-card--outgoing");
+    // Un seul conteneur : texte déjà swapé, fade-in en cours.
+    expect(contactCards()).toHaveLength(1);
+    expect(contactCards()[0]?.className).toContain("calls-contact-card--incoming");
     expect(screen.getByRole("heading", { name: "Alice Martin" })).toBeTruthy();
 
     act(() => {
@@ -104,7 +105,7 @@ describe("RunnerView contact card transition", () => {
     vi.useRealTimers();
   });
 
-  it("activates incoming then idle classes during the slide", () => {
+  it("activates incoming then idle classes during the fade", () => {
     vi.useFakeTimers();
     const { rerender } = render(
       <RunnerView {...baseProps} contacts={[bob, alice]} currentContact={bob} />,

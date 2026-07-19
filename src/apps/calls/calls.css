@@ -1757,7 +1757,7 @@
   line-height: 1.1;
 }
 
-/* Transition entre fiches après un log — crossfade sobre (pas de slide). */
+/* Transition entre fiches : conteneur fixe, micro-fade du texte uniquement. */
 .calls-contact-card-viewport {
   position: relative;
 }
@@ -1768,32 +1768,31 @@
 
 .calls-contact-card {
   position: relative;
+}
+
+.calls-contact-card__fade {
   transition: opacity 150ms ease;
 }
 
-.calls-contact-card-viewport > .calls-contact-card--outgoing {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
+.calls-contact-card--outgoing .calls-contact-card__fade {
   opacity: 1;
-  pointer-events: none;
 }
 
-.calls-contact-card-viewport > .calls-contact-card--outgoing-active {
+.calls-contact-card--outgoing-active .calls-contact-card__fade {
   opacity: 0;
 }
 
-.calls-contact-card-viewport > .calls-contact-card--incoming {
+.calls-contact-card--incoming .calls-contact-card__fade {
   opacity: 0;
 }
 
-.calls-contact-card-viewport > .calls-contact-card--incoming-active,
-.calls-contact-card-viewport > .calls-contact-card--idle {
+.calls-contact-card--incoming-active .calls-contact-card__fade,
+.calls-contact-card--idle .calls-contact-card__fade {
   opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .calls-contact-card {
+  .calls-contact-card__fade {
     transition: none;
   }
 }
