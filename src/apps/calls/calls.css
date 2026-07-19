@@ -1747,6 +1747,63 @@
   line-height: 1.1;
 }
 
+/* Transition entre fiches après un log — sortie/entrée CSS pures (BUG G.14). */
+.calls-contact-card {
+  position: relative;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.calls-contact-card--leaving {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.calls-contact-card--entering {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.calls-contact-card--idle {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.calls-log-checkmark {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--xos-accent-success);
+  color: #0b1220;
+  font-size: 1.1rem;
+  line-height: 1;
+  animation: calls-log-checkmark-in 600ms ease-out;
+}
+
+@keyframes calls-log-checkmark-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateX(0.5rem);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.1) translateX(0);
+  }
+  35% {
+    transform: scale(1) translateX(0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .calls-contact-card__role {
   margin: 0.4rem 0 0;
   color: var(--xos-text-muted);

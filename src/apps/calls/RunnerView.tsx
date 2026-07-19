@@ -312,10 +312,13 @@ export function RunnerView({
   const [confettiHeat, setConfettiHeat] = useState<RdvHeat>(1);
   const [goalBurst, setGoalBurst] = useState(false);
   const [kpiGoalPulse, setKpiGoalPulse] = useState(false);
+  const [cardAnimState, setCardAnimState] = useState<"idle" | "entering" | "leaving">("idle");
+  const [showLogCheckmark, setShowLogCheckmark] = useState(false);
   const sessionRdvRef = useRef(sessionRdvCount);
   const sessionContactsRef = useRef(contacts);
   sessionContactsRef.current = contacts;
   const bootstrappedDetail = useRef(false);
+  const prevFocusedContactIdRef = useRef<number | null>(null);
   const eventPanelRef = useRef<EventPanelHandle>(null);
 
   useEffect(() => {
@@ -619,6 +622,37 @@ export function RunnerView({
     setScheduleRecall(RELANCE_DEFAULT_RESULTATS.includes(resultat));
   }, [resultat]);
 
+  // Transition fiche → fiche : la carte sort (leaving) puis la nouvelle entre (entering) avant de se stabiliser.
+  useEffect(() => {
+    if (!focusedContact) return;
+    if (prevFocusedContactIdRef.current === null) {
+      prevFocusedContactIdRef.current = focusedContact.id;
+      return;
+    }
+    if (prevFocusedContactIdRef.current === focusedContact.id) return;
+    setCardAnimState("leaving");
+    const leaveTimer = window.setTimeout(() => {
+      prevFocusedContactIdRef.current = focusedContact.id;
+      setCardAnimState("entering");
+    }, 180);
+    return () => window.clearTimeout(leaveTimer);
+    // Reacts to a change of identity (focusedContact.id) only — re-running on every
+    // field update of the same contact would replay the leave/enter animation needlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedContact?.id]);
+
+  useEffect(() => {
+    if (cardAnimState !== "entering") return;
+    const enterTimer = window.setTimeout(() => setCardAnimState("idle"), 200);
+    return () => window.clearTimeout(enterTimer);
+  }, [cardAnimState]);
+
+  useEffect(() => {
+    if (!showLogCheckmark) return;
+    const timer = window.setTimeout(() => setShowLogCheckmark(false), 600);
+    return () => window.clearTimeout(timer);
+  }, [showLogCheckmark]);
+
   useEffect(() => {
     setBulkScheduleRecall(RELANCE_DEFAULT_RESULTATS.includes(bulkResultat));
   }, [bulkResultat]);
@@ -705,6 +739,7 @@ export function RunnerView({
       doNotCall,
     });
     playComboSound(willSendRecall ? "recall" : "success", { master: soundsEnabled });
+    setShowLogCheckmark(true);
     setToast({
       kind: "plain",
       message: willSendRecall
@@ -731,6 +766,7 @@ export function RunnerView({
       },
       { start, durationMin, subject: meta.subject, ownerSfUserId: meta.ownerSfUserId },
     );
+    setShowLogCheckmark(true);
     celebrateRdv();
   };
 
@@ -1868,7 +1904,12 @@ export function RunnerView({
         </div>
       ) : focusedContact ? (
         <div className="calls-cockpit-detail">
-          <GlassCard className="calls-contact-card">
+          <GlassCard className={`calls-contact-card calls-contact-card--${cardAnimState}`}>
+            {showLogCheckmark && (
+              <div className="calls-log-checkmark" aria-hidden="true">
+                ✓
+              </div>
+            )}
             <div className="calls-contact-card__main">
               <div className="calls-contact-card__who">
                 <div className="calls-contact-card__chips">
