@@ -654,6 +654,43 @@
   animation: calls-pre-session-content-enter 280ms ease-out both;
 }
 
+.calls-pre-session__nudge {
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-color: color-mix(in srgb, var(--xos-accent) 22%, var(--xos-border));
+}
+
+.calls-pre-session__nudge p {
+  margin: 0;
+  color: var(--xos-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.calls-pre-session__nudge p + p {
+  margin-top: 0.45rem;
+}
+
+.calls-pre-session__nudge strong {
+  color: var(--xos-text);
+}
+
+.calls-pre-session__nudge-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--xos-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  cursor: pointer;
+}
+
+.calls-pre-session__nudge-link:hover,
+.calls-pre-session__nudge-link:focus-visible {
+  color: color-mix(in srgb, var(--xos-accent) 82%, white);
+}
+
 .calls-pre-session__stage-copy,
 .calls-pre-session__objective-intro {
   display: grid;

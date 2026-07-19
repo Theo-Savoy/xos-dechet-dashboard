@@ -263,6 +263,56 @@ describe('PreSessionFlow', () => {
     expect(screen.queryByText(/Combien de rendez-vous veux-tu/)).toBeNull();
   });
 
+  it('shows the recall nudge with a link when recalls are due today', () => {
+    const onOpenRecalls = vi.fn();
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        recallQueueCount={3}
+        onOpenRecalls={onOpenRecalls}
+        onLaunch={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole('note', { name: 'Suggestion de départ' }).textContent,
+    ).toContain('Commence par les rappels : 3 dûs aujourd\'hui');
+    fireEvent.click(screen.getByRole('button', { name: 'Voir les rappels' }));
+    expect(onOpenRecalls).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the inactivity nudge when the last session was over 7 days ago', () => {
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        daysSinceLastSession={9}
+        onLaunch={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Ça fait/)).toBeTruthy();
+    expect(screen.getByText(/on reprend avec tes presets/)).toBeTruthy();
+  });
+
+  it('stays silent when there is nothing to suggest', () => {
+    render(
+      <PreSessionFlow
+        session={session}
+        contacts={[contact]}
+        recallQueueCount={0}
+        daysSinceLastSession={2}
+        onLaunch={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('note', { name: 'Suggestion de départ' })).toBeNull();
+  });
+
   it('exposes the pre-session responsive safeguards in the calls stylesheet', async () => {
     expect(callsCss).toContain('.calls-pre-session');
     expect(callsCss).toContain('max-height: calc(100dvh - 2rem)');

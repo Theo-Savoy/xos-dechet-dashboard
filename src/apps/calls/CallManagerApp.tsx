@@ -45,7 +45,7 @@ import type { LogPayload } from "./RunnerView.types";
 import { SessionsView } from "./SessionsView";
 import { PreSessionFlow } from "./PreSessionFlow";
 import { ShareSessionPanel } from "./ShareSessionPanel";
-import { shouldShowPreSession, isStaleSession, sessionDayKey } from "./sessionLifecycle";
+import { shouldShowPreSession, isStaleSession, sessionDayKey, computeDaysSinceLastSession } from "./sessionLifecycle";
 import { RolloverDecisionView, type RolloverDecision } from "./RolloverDecisionView";
 import type { AudienceSessionGroup } from "./api";
 import { nextContinuationName } from "./sessionNaming";
@@ -1624,6 +1624,15 @@ export default function CallManagerApp({ params, onParamsChange }: CallManagerAp
           session={activeSession}
           contacts={contacts}
           loading={runnerLoading}
+          recallQueueCount={recallCount}
+          daysSinceLastSession={computeDaysSinceLastSession(sessions, {
+            excludeSessionId: activeSession.id,
+            today: todayParisIso(),
+          })}
+          onOpenRecalls={() => {
+            goToSessions();
+            void openRecalls();
+          }}
           onLaunch={handleLaunchPreSession}
           onCancel={goToSessions}
         />

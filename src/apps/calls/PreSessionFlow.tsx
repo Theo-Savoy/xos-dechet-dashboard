@@ -7,6 +7,9 @@ type PreSessionFlowProps = {
   session: SessionDetail;
   contacts: SessionContact[];
   loading?: boolean;
+  recallQueueCount?: number;
+  daysSinceLastSession?: number | null;
+  onOpenRecalls?: () => void;
   onLaunch: (goal: number) => Promise<void>;
   onCancel: () => void;
 };
@@ -44,6 +47,9 @@ export function PreSessionFlow({
   session,
   contacts,
   loading = false,
+  recallQueueCount = 0,
+  daysSinceLastSession = null,
+  onOpenRecalls,
   onLaunch,
   onCancel,
 }: PreSessionFlowProps) {
@@ -63,6 +69,11 @@ export function PreSessionFlow({
       ? goal
       : null;
   const phaseIndex = PHASE_ORDER.indexOf(phase);
+  const showRecallNudge = recallQueueCount > 0;
+  const showInactivityNudge =
+    !showRecallNudge
+    && daysSinceLastSession != null
+    && daysSinceLastSession > 7;
 
   useComboOverlay(true, panelRef, onCancel);
 
@@ -169,6 +180,42 @@ export function PreSessionFlow({
         >
           {phase === 'review' && (
             <>
+              {(showRecallNudge || showInactivityNudge) && (
+                <GlassCard
+                  variant="subdued"
+                  className="calls-pre-session__nudge"
+                  role="note"
+                  aria-label="Suggestion de départ"
+                >
+                  {showRecallNudge && (
+                    <p>
+                      Commence par les rappels :{' '}
+                      <strong className="xos-numeric">{recallQueueCount}</strong> dû
+                      {recallQueueCount > 1 ? 's' : ''} aujourd&apos;hui
+                      {onOpenRecalls && (
+                        <>
+                          {' '}
+                          —{' '}
+                          <button
+                            type="button"
+                            className="calls-pre-session__nudge-link"
+                            onClick={onOpenRecalls}
+                          >
+                            Voir les rappels
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {showInactivityNudge && daysSinceLastSession != null && (
+                    <p>
+                      Ça fait{' '}
+                      <strong className="xos-numeric">{daysSinceLastSession}</strong> jour
+                      {daysSinceLastSession > 1 ? 's' : ''} — on reprend avec tes presets ?
+                    </p>
+                  )}
+                </GlassCard>
+              )}
               <div className="calls-pre-session__stage-copy">
                 <span className="calls-pre-session__stage-kicker">
                   Matière prête

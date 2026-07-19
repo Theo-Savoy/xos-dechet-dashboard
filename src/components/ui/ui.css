@@ -10,6 +10,11 @@
   color: var(--xos-text);
 }
 
+.xos-glass-card--subdued {
+  background: color-mix(in srgb, var(--xos-window-content-bg) 72%, transparent);
+  border-color: color-mix(in srgb, var(--xos-border) 85%, transparent);
+}
+
 .xos-btn {
   display: inline-flex;
   align-items: center;
