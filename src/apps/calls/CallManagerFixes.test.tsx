@@ -1316,7 +1316,6 @@ describe("call targeting copy and controls", () => {
     onContactLimitChange: vi.fn(),
     maxPerCompany: null as null,
     onMaxPerCompanyChange: vi.fn(),
-    onPreview: vi.fn(),
     presets: [] as [],
     presetsLoading: false,
     savingPreset: false,
@@ -1495,7 +1494,6 @@ describe("preview selection and enriched rows", () => {
         savingPreset={false}
         currentUserId="user-1"
         onBack={vi.fn()}
-        onPreview={vi.fn()}
         onLoadPreset={vi.fn()}
         onSavePreset={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -1544,7 +1542,6 @@ describe("preview selection and enriched rows", () => {
         savingPreset={false}
         currentUserId="user-1"
         onBack={vi.fn()}
-        onPreview={vi.fn()}
         onLoadPreset={vi.fn()}
         onSavePreset={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -1612,7 +1609,6 @@ describe("preview selection and enriched rows", () => {
         savingPreset={false}
         currentUserId="user-1"
         onBack={vi.fn()}
-        onPreview={vi.fn()}
         onLoadPreset={vi.fn()}
         onSavePreset={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -1648,7 +1644,6 @@ describe("preview selection and enriched rows", () => {
         savingPreset={false}
         currentUserId="user-1"
         onBack={vi.fn()}
-        onPreview={vi.fn()}
         onLoadPreset={vi.fn()}
         onSavePreset={vi.fn()}
         onDeletePreset={vi.fn()}
@@ -1705,7 +1700,6 @@ describe("dedup modes in preview selection", () => {
     savingPreset: false,
     currentUserId: "user-1",
     onBack: vi.fn(),
-    onPreview: vi.fn(),
     onLoadPreset: vi.fn(),
     onSavePreset: vi.fn(),
     onDeletePreset: vi.fn(),
@@ -1758,7 +1752,6 @@ describe("error announcements", () => {
         savingPreset={false}
         currentUserId="user-1"
         onBack={vi.fn()}
-        onPreview={vi.fn()}
         onLoadPreset={vi.fn()}
         onSavePreset={vi.fn()}
         onDeletePreset={vi.fn()}

@@ -49,3 +49,13 @@ describe.each([500, 800, 1200])('Combo at %ipx', (width) => {
     }).toMatchSnapshot();
   });
 });
+
+describe('calls-name-form--sticky', () => {
+  it('sticks to the bottom of the scroll area, not the top', () => {
+    const match = callsCss.match(/\.calls-name-form--sticky\s*\{[^}]*\}/);
+    expect(match).toBeTruthy();
+    const rule = match![0];
+    expect(rule).toMatch(/bottom:\s*0\.75rem/);
+    expect(rule).not.toMatch(/\btop:/);
+  });
+});

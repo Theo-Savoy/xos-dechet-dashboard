@@ -206,7 +206,7 @@ describe("CallManagerApp component", () => {
     });
   });
 
-  it("navigates to new session view", async () => {
+  it("navigates to new session view without a manual preview button", async () => {
     const user = userEvent.setup();
     render(<CallManagerApp />);
 
@@ -217,7 +217,8 @@ describe("CallManagerApp component", () => {
     await user.click(screen.getByText("Nouvelle séance"));
 
     expect(screen.getByText("Composer une liste")).toBeTruthy();
-    expect(screen.getByText("Aperçu de la liste")).toBeTruthy();
+    expect(screen.queryByText("Aperçu de la liste")).toBeNull();
+    expect(screen.queryByText("Prévisualiser")).toBeNull();
   });
 
   it("opens the first ABM session directly in the pre-session flow", async () => {
@@ -671,7 +672,7 @@ describe("CallManagerApp component", () => {
     expect(onParamsChange).toHaveBeenCalledWith({ view: "new" });
   });
 
-  it("invalidates the preview and ignores an older preview response", async () => {
+  it("recalculates the detailed preview automatically after a filter change, ignoring stale responses", async () => {
     const user = userEvent.setup();
     let resolveFirst!: (response: Response) => void;
     let resolveSecond!: (response: Response) => void;
@@ -693,6 +694,10 @@ describe("CallManagerApp component", () => {
         return Promise.resolve(new Response(JSON.stringify({ presets: [] }), { status: 200 }));
       }
       if (url === "/api/calls" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { count_only?: boolean };
+        if (body.count_only) {
+          return Promise.resolve(new Response(JSON.stringify({ count: 3, capped: false }), { status: 200 }));
+        }
         previewRequest += 1;
         return previewRequest === 1 ? first : second;
       }
@@ -704,9 +709,18 @@ describe("CallManagerApp component", () => {
 
     render(<CallManagerApp />);
     await user.click(await screen.findByText("Nouvelle séance"));
-    await user.click(screen.getByText("Aperçu de la liste"));
+
+    // Aucun bouton « Aperçu » : le premier aperçu détaillé part tout seul
+    // après le debounce, dès l'arrivée sur la vue.
+    expect(screen.queryByText("Aperçu de la liste")).toBeNull();
+    expect(screen.queryByText("Prévisualiser")).toBeNull();
+    await waitFor(() => expect(previewRequest).toBe(1), { timeout: 2000 });
+
     await user.click(screen.getByLabelText("A un numéro de mobile"));
-    await user.click(screen.getByText("Aperçu de la liste"));
+
+    // Un changement de filtre déclenche une deuxième requête après le même
+    // debounce, sans nouveau clic.
+    await waitFor(() => expect(previewRequest).toBe(2), { timeout: 2000 });
 
     resolveSecond(
       new Response(
@@ -719,6 +733,8 @@ describe("CallManagerApp component", () => {
     );
     await screen.findByText("Contact récent");
 
+    // La réponse du premier appel (obsolète) arrive après coup et ne doit
+    // pas écraser la liste plus récente.
     resolveFirst(
       new Response(
         JSON.stringify({
@@ -731,6 +747,38 @@ describe("CallManagerApp component", () => {
     await waitFor(() => expect(screen.getByText("Contact récent")).toBeTruthy());
 
     expect(screen.queryByText("Contact obsolète")).toBeNull();
+  });
+
+  it("shows a readable error when the detailed preview request fails, and keeps it visible", async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/calls?resource=hub") return hubResponse();
+      if (url === "/api/calls?stats=1") {
+        return Promise.resolve(new Response(JSON.stringify(mockStats), { status: 200 }));
+      }
+      if (url === "/api/calls?resource=presets") {
+        return Promise.resolve(new Response(JSON.stringify({ presets: [] }), { status: 200 }));
+      }
+      if (url === "/api/calls" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { count_only?: boolean };
+        if (body.count_only) {
+          return Promise.resolve(new Response(JSON.stringify({ count: 3, capped: false }), { status: 200 }));
+        }
+        return Promise.resolve(new Response(JSON.stringify({ error: "sf_query_error" }), { status: 502 }));
+      }
+      if (url === "/api/calls") {
+        return Promise.resolve(new Response(JSON.stringify(mockSessions), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
+    });
+
+    render(<CallManagerApp />);
+    await user.click(await screen.findByText("Nouvelle séance"));
+
+    const alert = await screen.findByRole("alert", {}, { timeout: 2000 });
+    expect(alert.textContent).toContain("Salesforce a refusé la requête");
   });
 
   it("logs call and Event together when RDV planifié is selected", async () => {
