@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyEvent, currentPalier, detectPaliers, loadXp, progressToNext, saveXp } from "./comboXp";
+import {
+  applyEvent,
+  currentPalier,
+  detectPaliers,
+  hasEventRecorded,
+  loadXp,
+  progressToNext,
+  saveXp,
+  summarizeComboBadges,
+  summarizeComboStreaks,
+  summarizeComboXp,
+} from "./comboXp";
 import type { ComboXp } from "./comboXp";
+import { comboStreaksStorageKey } from "./comboStreaks";
 
 function installLocalStorage() {
   const store: Record<string, string> = {};
@@ -51,9 +63,9 @@ describe("comboXp", () => {
     expect(result.xp.regularite).toBe(0);
   });
 
-  it("applyEvent rdv increments impact only", () => {
+  it("applyEvent rdv increments impact only, 10 XP per RDV (BUG-03)", () => {
     const result = applyEvent(USER, "rdv");
-    expect(result.xp.impact).toBe(1);
+    expect(result.xp.impact).toBe(10);
     expect(result.xp.vitesse).toBe(0);
   });
 
@@ -65,7 +77,7 @@ describe("comboXp", () => {
 
   it("applyEvent accepts a qty greater than 1", () => {
     const result = applyEvent(USER, "rdv", 3);
-    expect(result.xp.impact).toBe(3);
+    expect(result.xp.impact).toBe(30);
   });
 
   it("applyEvent persists across calls", () => {
@@ -88,7 +100,7 @@ describe("comboXp", () => {
   });
 
   it("currentPalier uses per-axis thresholds", () => {
-    expect(currentPalier("impact", 3)).toBe("bronze");
+    expect(currentPalier("impact", 30)).toBe("bronze");
     expect(currentPalier("regularite", 14)).toBe("or");
   });
 
@@ -108,8 +120,8 @@ describe("comboXp", () => {
   });
 
   it("detectPaliers finds crossings across multiple axes", () => {
-    const previousXp: ComboXp = { vitesse: 9, impact: 2, regularite: 0, badges: [], lastSeen: "" };
-    const newXp: ComboXp = { vitesse: 10, impact: 3, regularite: 0, badges: [], lastSeen: "" };
+    const previousXp: ComboXp = { vitesse: 9, impact: 20, regularite: 0, badges: [], lastSeen: "" };
+    const newXp: ComboXp = { vitesse: 10, impact: 30, regularite: 0, badges: [], lastSeen: "" };
     expect(detectPaliers(previousXp, newXp)).toEqual([
       { axis: "vitesse", palier: "bronze" },
       { axis: "impact", palier: "bronze" },
@@ -149,5 +161,101 @@ describe("comboXp", () => {
     expect(progress.next).toBeNull();
     expect(progress.pctToNext).toBe(100);
     expect(progress.valueToNext).toBe(0);
+  });
+
+  describe("BUG-02: anti-abus dedup", () => {
+    it("2 clics du même raccourci le même jour = 1 XP Vitesse", () => {
+      const first = applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
+      expect(first.xp.vitesse).toBe(1);
+      expect(second.xp.vitesse).toBe(1);
+      expect(second.paliersFranchis).toEqual([]);
+    });
+
+    it("does not dedupe distinct actionIds the same day", () => {
+      applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "shortcut", 1, { actionId: "F", dateParis: "2026-07-19" });
+      expect(second.xp.vitesse).toBe(2);
+    });
+
+    it("does not dedupe the same actionId on a different day", () => {
+      applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-20" });
+      expect(second.xp.vitesse).toBe(2);
+    });
+
+    it("Vitesse without actionId is never deduped (no dedupe key)", () => {
+      applyEvent(USER, "shortcut", 1, { dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "shortcut", 1, { dateParis: "2026-07-19" });
+      expect(second.xp.vitesse).toBe(2);
+    });
+
+    it("2 crédits Régularité le même jour = 1 seul crédit (un streak par jour)", () => {
+      const first = applyEvent(USER, "day-logged", 1, { dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "day-logged", 1, { dateParis: "2026-07-19" });
+      expect(first.xp.regularite).toBe(1);
+      expect(second.xp.regularite).toBe(1);
+    });
+
+    it("Régularité credits again on a new day", () => {
+      applyEvent(USER, "day-logged", 1, { dateParis: "2026-07-19" });
+      const second = applyEvent(USER, "day-logged", 1, { dateParis: "2026-07-20" });
+      expect(second.xp.regularite).toBe(2);
+    });
+
+    it("marks the dedupe key as recorded via hasEventRecorded", () => {
+      expect(hasEventRecorded(USER, "vitesse:L:2026-07-19")).toBe(false);
+      applyEvent(USER, "shortcut", 1, { actionId: "L", dateParis: "2026-07-19" });
+      expect(hasEventRecorded(USER, "vitesse:L:2026-07-19")).toBe(true);
+    });
+  });
+
+  // BUG-12 : fusionné depuis l'ex-useComboXp.test.ts (doublon supprimé).
+  describe("summarize* (lecture/présentation, ex-useComboXp)", () => {
+    it("defaults to zeroed axes and no badge when storage is empty", () => {
+      const summary = summarizeComboXp("user-1");
+      expect(summary.axes).toEqual([
+        { id: "vitesse", label: "Vitesse", count: 0, palier: null },
+        { id: "impact", label: "Impact", count: 0, palier: null },
+        { id: "regularite", label: "Régularité", count: 0, palier: null },
+      ]);
+      expect(summary.lastBadge).toBeNull();
+    });
+
+    it("computes the current palier per axis from cumulative counts", () => {
+      saveXp("user-1", { vitesse: 30, impact: 70, regularite: 14, badges: [], lastSeen: "" });
+      const summary = summarizeComboXp("user-1");
+      expect(summary.axes.find((a) => a.id === "vitesse")).toMatchObject({ count: 30, palier: "Argent" });
+      expect(summary.axes.find((a) => a.id === "impact")).toMatchObject({ count: 70, palier: "Argent" });
+      expect(summary.axes.find((a) => a.id === "regularite")).toMatchObject({ count: 14, palier: "Or" });
+    });
+
+    it("surfaces the most recently unlocked badge", () => {
+      saveXp("user-1", { vitesse: 1, impact: 0, regularite: 1, badges: ["premier_pas", "eclair"], lastSeen: "" });
+      expect(summarizeComboXp("user-1").lastBadge).toEqual({ id: "eclair", label: "⚡ Éclair" });
+    });
+
+    it("lists unlocked badges most-recent-first", () => {
+      saveXp("user-1", { vitesse: 0, impact: 0, regularite: 0, badges: ["premier_pas", "eclair"], lastSeen: "" });
+      expect(summarizeComboBadges("user-1")).toEqual([
+        { id: "eclair", label: "⚡ Éclair" },
+        { id: "premier_pas", label: "🐣 Premier pas" },
+      ]);
+    });
+
+    it("reads streak counters independently per type", () => {
+      window.localStorage.setItem(
+        comboStreaksStorageKey("user-1"),
+        JSON.stringify({ classique: 14, productif: 3, intense: 0 }),
+      );
+      const streaks = summarizeComboStreaks("user-1");
+      expect(streaks.find((s) => s.id === "classique")).toMatchObject({ days: 14, palier: "Or" });
+      expect(streaks.find((s) => s.id === "intense")).toMatchObject({ days: 0, palier: null });
+    });
+
+    it("keeps users isolated by storage key", () => {
+      saveXp("user-a", { vitesse: 500, impact: 0, regularite: 0, badges: [], lastSeen: "" });
+      expect(summarizeComboXp("user-b").axes.find((a) => a.id === "vitesse")?.count).toBe(0);
+    });
   });
 });

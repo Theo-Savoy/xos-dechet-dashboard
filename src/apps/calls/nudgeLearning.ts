@@ -1,3 +1,4 @@
+/** BUG-09 : ⌘K est explicitement exclu des raccourcis nudgeables (spec §2.5) — il ouvre la command bar, jamais un nudge. */
 export type ShortcutId =
   | "K"
   | "J"
@@ -9,13 +10,14 @@ export type ShortcutId =
   | "4"
   | "5"
   | "cmd-enter"
-  | "cmd-k"
   | "?";
 
 export type LearningNudgePhase = "intensive" | "reguliere" | "espacee" | "acceptee";
 
 export type LearningState = {
   mouseCount: number;
+  /** BUG-05 : total de clics cumulé depuis toujours, jamais remis à zéro (contrairement à mouseCount). */
+  totalMouseCount: number;
   nudgesSeen: number;
   lastNudgeAt: string | null;
   phase: LearningNudgePhase;
@@ -27,7 +29,23 @@ export const NUDGE_LEARNING_KEY_PREFIX = "xos-combo-nudge-learning:";
 export const NUDGE_LEARNING_SESSION_PREFIX = "xos-combo-nudge-learning-session:";
 export const NUDGE_LEARNING_WEEK_PREFIX = "xos-combo-nudge-learning-week:";
 
-const INTENSIVE_THRESHOLD = 5;
+/**
+ * BUG-04 : seuil de la phase intensive par raccourci — la spec (§2.5) exige
+ * 3 clics pour Vue liste (L) et Vue fiche (F), 5 pour tous les autres.
+ */
+const INTENSIVE_THRESHOLDS: Record<ShortcutId, number> = {
+  K: 5,
+  J: 5,
+  L: 3,
+  F: 3,
+  "1": 5,
+  "2": 5,
+  "3": 5,
+  "4": 5,
+  "5": 5,
+  "cmd-enter": 5,
+  "?": 5,
+};
 const REGULIERE_THRESHOLD = 10;
 const ESPACEE_THRESHOLD = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -99,6 +117,7 @@ export function derivePhase(nudgesSeen: number): LearningNudgePhase {
 export function defaultLearningState(): LearningState {
   return {
     mouseCount: 0,
+    totalMouseCount: 0,
     nudgesSeen: 0,
     lastNudgeAt: null,
     phase: "intensive",
@@ -133,11 +152,17 @@ function normalizeState(state: Partial<LearningState> | undefined): LearningStat
     typeof state?.nudgesSeen === "number" && state.nudgesSeen >= 0
       ? Math.floor(state.nudgesSeen)
       : 0;
+  const mouseCount =
+    typeof state?.mouseCount === "number" && state.mouseCount >= 0
+      ? Math.floor(state.mouseCount)
+      : 0;
   return {
-    mouseCount:
-      typeof state?.mouseCount === "number" && state.mouseCount >= 0
-        ? Math.floor(state.mouseCount)
-        : 0,
+    mouseCount,
+    // Migration douce des états déjà persistés sans totalMouseCount (BUG-05).
+    totalMouseCount:
+      typeof state?.totalMouseCount === "number" && state.totalMouseCount >= 0
+        ? Math.floor(state.totalMouseCount)
+        : mouseCount,
     nudgesSeen,
     lastNudgeAt: typeof state?.lastNudgeAt === "string" ? state.lastNudgeAt : null,
     phase: derivePhase(nudgesSeen),
@@ -211,7 +236,7 @@ function evaluateShouldShow(
   if (state.nudgesSeen >= 3) return false;
 
   if (state.nudgesSeen === 0) {
-    return state.mouseCount >= INTENSIVE_THRESHOLD;
+    return state.mouseCount >= INTENSIVE_THRESHOLDS[shortcutId];
   }
 
   if (state.nudgesSeen === 1) {
@@ -221,7 +246,9 @@ function evaluateShouldShow(
 
   if (state.nudgesSeen === 2) {
     if (isEspaceeShownThisWeek(userId, shortcutId)) return false;
-    return state.mouseCount >= ESPACEE_THRESHOLD;
+    // BUG-05 : seuil cumulatif depuis toujours (30 clics au total), pas 30
+    // de plus depuis le dernier nudge — sinon le 3e nudge n'arrive qu'à 45.
+    return state.totalMouseCount >= ESPACEE_THRESHOLD;
   }
 
   return false;
@@ -233,6 +260,7 @@ export function registerMouseClick(
 ): { shouldShow: boolean; state: LearningState } {
   const state = loadLearningState(shortcutId, userId);
   state.mouseCount += 1;
+  state.totalMouseCount += 1;
   state.phase = derivePhase(state.nudgesSeen);
 
   const shouldShow = evaluateShouldShow(shortcutId, userId, state);
@@ -256,6 +284,19 @@ export function markNudgeSeen(shortcutId: ShortcutId, userId: string): void {
   state.lastNudgeAt = new Date(nowMs()).toISOString();
   state.mouseCount = 0;
   state.phase = derivePhase(state.nudgesSeen);
+  pendingDismiss.delete(pendingKey(userId, shortcutId));
+  saveLearningState(shortcutId, userId, state);
+}
+
+/**
+ * BUG-06 : à appeler quand l'utilisateur utilise le raccourci clavier
+ * lui-même — passe directement en phase "acceptee" (silence définitif),
+ * sans repasser par resetLearning ni remettre les compteurs à zéro.
+ */
+export function markAdopted(shortcutId: ShortcutId, userId: string): void {
+  const state = loadLearningState(shortcutId, userId);
+  state.nudgesSeen = 3;
+  state.phase = "acceptee";
   pendingDismiss.delete(pendingKey(userId, shortcutId));
   saveLearningState(shortcutId, userId, state);
 }

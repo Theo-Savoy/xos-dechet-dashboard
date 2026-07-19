@@ -2,6 +2,40 @@
 
 export const INTENSE_STREAK_THRESHOLD = 20;
 
+export type ComboStreakId = "classique" | "productif" | "intense";
+
+export type ComboStreaksState = Record<ComboStreakId, number>;
+
+const EMPTY_STREAKS_STATE: ComboStreaksState = { classique: 0, productif: 0, intense: 0 };
+
+export function comboStreaksStorageKey(userId: string): string {
+  return `xos-combo-streaks:${userId}`;
+}
+
+/** BUG-01 : `comboEvents.recordSessionComplete` est l'unique écrivain de ce store. */
+export function loadStreaks(userId: string): ComboStreaksState {
+  try {
+    const raw = window.localStorage?.getItem(comboStreaksStorageKey(userId));
+    if (!raw) return { ...EMPTY_STREAKS_STATE };
+    const parsed = JSON.parse(raw) as Partial<ComboStreaksState>;
+    return {
+      classique: typeof parsed.classique === "number" ? parsed.classique : 0,
+      productif: typeof parsed.productif === "number" ? parsed.productif : 0,
+      intense: typeof parsed.intense === "number" ? parsed.intense : 0,
+    };
+  } catch {
+    return { ...EMPTY_STREAKS_STATE };
+  }
+}
+
+export function saveStreaks(userId: string, streaks: ComboStreaksState): void {
+  try {
+    window.localStorage?.setItem(comboStreaksStorageKey(userId), JSON.stringify(streaks));
+  } catch {
+    /* ignore */
+  }
+}
+
 export interface StreakResult {
   currentDays: number;
   bestEver: number;

@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MyTrophies } from "./MyTrophies";
-import { comboXpStorageKey } from "./useComboXp";
+import { comboXpStorageKey } from "./comboXp";
 
 function installLocalStorage() {
   const store: Record<string, string> = {};
