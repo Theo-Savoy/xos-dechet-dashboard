@@ -37,7 +37,8 @@ import {
   type RdvHeat,
 } from "./rdvCelebrate";
 import { DatePicker } from "./formControls";
-import { NoteTemplateSections } from "./noteTemplates";
+// MEDDIC masqué — import conservé pour réactivation.
+// import { NoteTemplateSections } from "./noteTemplates";
 import { formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls.helpers";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
@@ -2300,7 +2301,8 @@ export function RunnerView({
                   placeholder={willSendRecall ? "Motif du rappel…" : "Notes sur l'appel…"}
                 />
               </label>
-              <NoteTemplateSections value={comments} onChange={setComments} resultat={resultat} />
+              {/* MEDDIC sections masquées — code conservé, rendu désactivé.
+                  <NoteTemplateSections value={comments} onChange={setComments} resultat={resultat} /> */}
 
               {resultat === "RDV planifié" ? (
                 <EventPanel

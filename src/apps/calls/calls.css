@@ -2051,6 +2051,12 @@
 
 .calls-cockpit-list {
   padding: 1rem;
+  /* Aligné sur le mode fiche : pas de glass, fond page brut. */
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 
 .calls-cockpit-list__toolbar {
