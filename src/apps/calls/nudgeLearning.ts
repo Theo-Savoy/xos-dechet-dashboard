@@ -290,6 +290,19 @@ export function markNudgeSeen(shortcutId: ShortcutId, userId: string): void {
   saveLearningState(shortcutId, userId, state);
 }
 
+/**
+ * BUG-06 : à appeler quand l'utilisateur utilise le raccourci clavier
+ * lui-même — passe directement en phase "acceptee" (silence définitif),
+ * sans repasser par resetLearning ni remettre les compteurs à zéro.
+ */
+export function markAdopted(shortcutId: ShortcutId, userId: string): void {
+  const state = loadLearningState(shortcutId, userId);
+  state.nudgesSeen = 3;
+  state.phase = "acceptee";
+  pendingDismiss.delete(pendingKey(userId, shortcutId));
+  saveLearningState(shortcutId, userId, state);
+}
+
 export function resetLearning(shortcutId: ShortcutId, userId: string): void {
   const store = readStore(userId);
   delete store[shortcutId];

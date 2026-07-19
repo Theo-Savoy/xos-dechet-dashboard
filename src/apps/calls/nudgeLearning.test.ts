@@ -6,6 +6,7 @@ import {
   __setLocalStorage,
   __setSessionStorage,
   loadLearningState,
+  markAdopted,
   markNudgeSeen,
   registerMouseClick,
   resetLearning,
@@ -217,6 +218,41 @@ describe("nudgeLearning", () => {
         expect(fifth.shouldShow).toBe(true);
         resetLearning(id, USER_ID);
       }
+    });
+  });
+
+  describe("BUG-06: markAdopted on keyboard use", () => {
+    it("clic clavier après 2 rappels vus → nudges suivants silencieux", () => {
+      clickTimes(SHORTCUT, 5);
+      markNudgeSeen(SHORTCUT, USER_ID);
+      clickTimes(SHORTCUT, 10);
+      markNudgeSeen(SHORTCUT, USER_ID);
+      expect(loadLearningState(SHORTCUT, USER_ID).phase).toBe("espacee");
+
+      markAdopted(SHORTCUT, USER_ID);
+
+      const state = loadLearningState(SHORTCUT, USER_ID);
+      expect(state.phase).toBe("acceptee");
+      expect(state.nudgesSeen).toBe(3);
+
+      const burst = clickTimes(SHORTCUT, 100);
+      expect(burst.shouldShow).toBe(false);
+      expect(shouldShowNudge(SHORTCUT, USER_ID)).toBe(false);
+    });
+
+    it("does not reset mouse counters on adoption", () => {
+      clickTimes(SHORTCUT, 5);
+      markAdopted(SHORTCUT, USER_ID);
+      const state = loadLearningState(SHORTCUT, USER_ID);
+      expect(state.mouseCount).toBe(5);
+      expect(state.totalMouseCount).toBe(5);
+    });
+
+    it("silences nudges immediately even from the very first keyboard use", () => {
+      clickTimes(SHORTCUT, 2);
+      markAdopted(SHORTCUT, USER_ID);
+      expect(shouldShowNudge(SHORTCUT, USER_ID)).toBe(false);
+      expect(loadLearningState(SHORTCUT, USER_ID).phase).toBe("acceptee");
     });
   });
 });
