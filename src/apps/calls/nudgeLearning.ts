@@ -1,3 +1,4 @@
+/** BUG-09 : ⌘K est explicitement exclu des raccourcis nudgeables (spec §2.5) — il ouvre la command bar, jamais un nudge. */
 export type ShortcutId =
   | "K"
   | "J"
@@ -9,7 +10,6 @@ export type ShortcutId =
   | "4"
   | "5"
   | "cmd-enter"
-  | "cmd-k"
   | "?";
 
 export type LearningNudgePhase = "intensive" | "reguliere" | "espacee" | "acceptee";
@@ -32,7 +32,6 @@ export const NUDGE_LEARNING_WEEK_PREFIX = "xos-combo-nudge-learning-week:";
 /**
  * BUG-04 : seuil de la phase intensive par raccourci — la spec (§2.5) exige
  * 3 clics pour Vue liste (L) et Vue fiche (F), 5 pour tous les autres.
- * cmd-k est désactivé (0) : ⌘K ouvre la command bar, jamais nudgé.
  */
 const INTENSIVE_THRESHOLDS: Record<ShortcutId, number> = {
   K: 5,
@@ -45,7 +44,6 @@ const INTENSIVE_THRESHOLDS: Record<ShortcutId, number> = {
   "4": 5,
   "5": 5,
   "cmd-enter": 5,
-  "cmd-k": 0,
   "?": 5,
 };
 const REGULIERE_THRESHOLD = 10;
