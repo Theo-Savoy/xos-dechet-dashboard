@@ -1757,25 +1757,64 @@
   line-height: 1.1;
 }
 
-/* Transition entre fiches après un log — sortie/entrée CSS pures (BUG G.14). */
+/* Transition entre fiches après un log — viewport avec carte sortante + entrante. */
+.calls-contact-card-viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.calls-contact-card-viewport > .calls-contact-card {
+  width: 100%;
+}
+
 .calls-contact-card {
   position: relative;
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity 250ms ease, transform 250ms ease;
 }
 
-.calls-contact-card--leaving {
-  opacity: 0;
-  transform: translateX(-20px);
-}
-
-.calls-contact-card--entering {
-  opacity: 0;
-  transform: translateX(20px);
-}
-
-.calls-contact-card--idle {
-  opacity: 1;
+.calls-contact-card-viewport > .calls-contact-card--outgoing {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   transform: translateX(0);
+  opacity: 1;
+  pointer-events: none;
+}
+
+.calls-contact-card-viewport > .calls-contact-card--outgoing-active {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.calls-contact-card-viewport > .calls-contact-card--incoming {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.calls-contact-card-viewport > .calls-contact-card--incoming-active,
+.calls-contact-card-viewport > .calls-contact-card--idle {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calls-contact-card-viewport > .calls-contact-card--outgoing,
+  .calls-contact-card-viewport > .calls-contact-card--incoming {
+    transform: none;
+  }
+
+  .calls-contact-card-viewport > .calls-contact-card--outgoing-active {
+    opacity: 0;
+  }
+
+  .calls-contact-card-viewport > .calls-contact-card--incoming {
+    opacity: 0;
+  }
+
+  .calls-contact-card-viewport > .calls-contact-card--incoming-active,
+  .calls-contact-card-viewport > .calls-contact-card--idle {
+    opacity: 1;
+  }
 }
 
 .calls-log-checkmark {
@@ -2439,7 +2478,7 @@
 }
 
 /* Journaliser avant le contexte : log à portée sans scroll. */
-.calls-cockpit-detail > .calls-contact-card {
+.calls-cockpit-detail > .calls-contact-card-viewport {
   order: 1;
 }
 
@@ -3894,23 +3933,154 @@
   margin-top: -0.35rem;
 }
 
-.calls-medic-chips {
+.calls-medic-sections {
   display: grid;
+  gap: 0.35rem;
+  margin-top: -0.2rem;
+}
+
+.calls-medic-section {
+  border: 1px solid color-mix(in srgb, var(--xos-border) 80%, transparent);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.calls-medic-section--locked {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.calls-medic-section__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.calls-medic-section__toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  margin-top: -0.35rem;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0.25rem 0.15rem;
+  cursor: pointer;
 }
 
-.calls-medic-category {
-  display: grid;
-  gap: 0.3rem;
+.calls-medic-section--locked .calls-medic-section__toggle {
+  cursor: default;
 }
 
-.calls-medic-category__label {
+.calls-medic-section__label {
+  flex-shrink: 0;
   font-family: var(--xos-font-display);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--xos-text-muted);
+}
+
+.calls-medic-section__value {
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--xos-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calls-medic-section__placeholder {
+  font-size: 0.82rem;
+  color: var(--xos-text-muted);
+  font-style: italic;
+}
+
+.calls-medic-section__edit {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--xos-accent);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.35rem;
+  cursor: pointer;
+}
+
+.calls-medic-section__panel {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0 0.45rem 0.55rem;
+}
+
+.calls-medic-section__select.xos-select {
+  width: 100%;
+}
+
+.calls-medic-section__select .xos-select__trigger {
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.calls-medic-section__detail-input {
+  width: 100%;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--xos-text);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.calls-medic-section__confirm {
+  justify-self: start;
+  border: 1px solid var(--xos-border);
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--xos-text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+
+.calls-medic-section__confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .calls-medic-sections {
+    gap: 0.28rem;
+  }
+
+  .calls-medic-section__head {
+    min-height: 1.85rem;
+    padding-inline: 0.35rem;
+  }
+
+  .calls-medic-section__value,
+  .calls-medic-section__placeholder {
+    font-size: 0.78rem;
+  }
 }
 
 .calls-cmdk__head {

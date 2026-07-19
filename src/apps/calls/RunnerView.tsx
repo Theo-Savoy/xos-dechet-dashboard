@@ -37,7 +37,7 @@ import {
   type RdvHeat,
 } from "./rdvCelebrate";
 import { DatePicker } from "./formControls";
-import { NoteTemplateChips } from "./noteTemplates";
+import { NoteTemplateSections } from "./noteTemplates";
 import { formatActivityDateFr, formatIsoDateFr, todayParisIso } from "./formControls.helpers";
 import { LinkedInRecordLink, SalesforceRecordLink } from "./BrandLinks";
 import { ProgressBar } from "./ProgressBar";
@@ -236,6 +236,154 @@ function computeKpis(contacts: SessionContact[]) {
   return { total, remaining, called, decroches, argumentes, rdv };
 }
 
+type ContactCardPanelProps = {
+  contact: SessionContact;
+  className: string;
+  showCheckmark: boolean;
+  displayTitle: string | null;
+  displayEmail: string | null;
+  sfContactUrl: string | null;
+  contextApplies: boolean;
+  contextBusy: boolean;
+  contactContext: ContactContext | null;
+  isRecallQueue: boolean;
+  onUpdateRecall: (ids: number[], date: string) => void;
+  "aria-hidden"?: boolean;
+};
+
+function ContactCardPanel({
+  contact,
+  className,
+  showCheckmark,
+  displayTitle,
+  displayEmail,
+  sfContactUrl,
+  contextApplies,
+  contextBusy,
+  contactContext,
+  isRecallQueue,
+  onUpdateRecall,
+  "aria-hidden": ariaHidden,
+}: ContactCardPanelProps) {
+  return (
+    <GlassCard className={className} aria-hidden={ariaHidden}>
+      {showCheckmark && (
+        <div className="calls-log-checkmark" aria-hidden="true">
+          ✓
+        </div>
+      )}
+      <div className="calls-contact-card__main">
+        <div className="calls-contact-card__who">
+          <div className="calls-contact-card__chips">
+            {contact.claim_active && contact.claimed_by_label && (
+              <Tag variant="alert">Pris par {contact.claimed_by_label}</Tag>
+            )}
+            {isRecallQueue && contact.origin_session_name && (
+              <Tag variant="accent">{contact.origin_session_name}</Tag>
+            )}
+            {(contact.attempt_count ?? 0) > 0 && (
+              <Tag variant={isRecallQueue ? "accent" : "muted"}>
+                {formatAttemptLabel(contact.attempt_count ?? 0)}
+              </Tag>
+            )}
+            {contact.status !== "pending" && (
+              <Tag variant={listStatusDisplay(contact).variant}>
+                {listStatusDisplay(contact).label}
+              </Tag>
+            )}
+            {!contextBusy && contextApplies && contactContext?.npa && (
+              <Tag variant="alert">Ne pas rappeler (NPA)</Tag>
+            )}
+          </div>
+          <h3>{contact.contact_name}</h3>
+          <p className="calls-contact-card__role">
+            {[displayTitle, contact.account_name || "Compte inconnu"].filter(Boolean).join(" · ")}
+          </p>
+          <div
+            className={`calls-contact-card__context-meta${contextBusy ? " calls-contact-card__context-meta--loading" : ""}`}
+          >
+            {contextApplies && contactContext?.industry && (
+              <p className="calls-contact-card__industry">
+                Secteur · {contactContext.industry}
+              </p>
+            )}
+            {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
+              <div className="calls-contact-card__peers" aria-label="Références clients">
+                <span className="calls-contact-card__peers-label">Refs</span>
+                <ul className="calls-contact-card__peers-list">
+                  {contactContext.peer_clients.map((peer) => (
+                    <li key={peer.id}>
+                      {peer.record_url ? (
+                        <a
+                          className="calls-contact-card__peer"
+                          href={peer.record_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={peer.name}
+                        >
+                          {peer.name}
+                        </a>
+                      ) : (
+                        <span className="calls-contact-card__peer calls-contact-card__peer--static" title={peer.name}>
+                          {peer.name}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          {(isRecallQueue || contact.status !== "pending") && contact.recall_at && (
+            <div className="calls-contact-card__recall-meta">
+              <span>Rappel</span>
+              <DatePicker
+                compact
+                label="Modifier la date de rappel"
+                value={contact.recall_at}
+                onChange={(next) => {
+                  if (next !== contact.recall_at) {
+                    onUpdateRecall([contact.id], next);
+                  }
+                }}
+                triggerClassName="calls-inline-link"
+              />
+            </div>
+          )}
+        </div>
+        <div className="calls-contact-card__links">
+          {sfContactUrl && <SalesforceRecordLink href={sfContactUrl} />}
+          {contact.linkedin_url && <LinkedInRecordLink href={contact.linkedin_url} />}
+        </div>
+      </div>
+
+      <div className="calls-contact-card__cta">
+        <div className="calls-contact-card__cta-copy">
+          {contact.phone ? (
+            <a href={`tel:${contact.phone}`} className="calls-phone-link xos-numeric">
+              {contact.phone}
+            </a>
+          ) : (
+            <p className="calls-contact-card__no-phone">Aucun numéro</p>
+          )}
+          {displayEmail ? (
+            <a href={`mailto:${displayEmail}`} className="calls-email-link">
+              {displayEmail}
+            </a>
+          ) : (
+            <p className="calls-contact-card__no-email">Aucun email</p>
+          )}
+        </div>
+        {contact.phone && (
+          <Button onClick={() => window.open(`tel:${contact.phone}`, "_self")}>
+            Appeler
+          </Button>
+        )}
+      </div>
+    </GlassCard>
+  );
+}
+
 export function RunnerView({
   session,
   contacts,
@@ -312,13 +460,16 @@ export function RunnerView({
   const [confettiHeat, setConfettiHeat] = useState<RdvHeat>(1);
   const [goalBurst, setGoalBurst] = useState(false);
   const [kpiGoalPulse, setKpiGoalPulse] = useState(false);
-  const [cardAnimState, setCardAnimState] = useState<"idle" | "entering" | "leaving">("idle");
+  const [outgoingContact, setOutgoingContact] = useState<SessionContact | null>(null);
+  const [cardTransitionActive, setCardTransitionActive] = useState(false);
   const [showLogCheckmark, setShowLogCheckmark] = useState(false);
   const sessionRdvRef = useRef(sessionRdvCount);
   const sessionContactsRef = useRef(contacts);
   sessionContactsRef.current = contacts;
   const bootstrappedDetail = useRef(false);
   const prevFocusedContactIdRef = useRef<number | null>(null);
+  const prevContactSnapshotRef = useRef<SessionContact | null>(null);
+  const cardTransitionRafRef = useRef<number | null>(null);
   const eventPanelRef = useRef<EventPanelHandle>(null);
 
   useEffect(() => {
@@ -622,30 +773,45 @@ export function RunnerView({
     setScheduleRecall(RELANCE_DEFAULT_RESULTATS.includes(resultat));
   }, [resultat]);
 
-  // Transition fiche → fiche : la carte sort (leaving) puis la nouvelle entre (entering) avant de se stabiliser.
+  // Transition fiche → fiche : snapshot sortant + entrée latérale dans un viewport commun.
   useEffect(() => {
     if (!focusedContact) return;
-    if (prevFocusedContactIdRef.current === null) {
-      prevFocusedContactIdRef.current = focusedContact.id;
-      return;
+
+    const prevId = prevFocusedContactIdRef.current;
+    if (prevId !== null && prevId !== focusedContact.id) {
+      if (prevContactSnapshotRef.current) {
+        setOutgoingContact(prevContactSnapshotRef.current);
+      }
+      setCardTransitionActive(false);
+      cardTransitionRafRef.current = requestAnimationFrame(() => {
+        cardTransitionRafRef.current = requestAnimationFrame(() => {
+          setCardTransitionActive(true);
+          cardTransitionRafRef.current = null;
+        });
+      });
+      const timer = window.setTimeout(() => {
+        setOutgoingContact(null);
+        setCardTransitionActive(false);
+        prevFocusedContactIdRef.current = focusedContact.id;
+        prevContactSnapshotRef.current = focusedContact;
+      }, 250);
+      return () => {
+        window.clearTimeout(timer);
+        if (cardTransitionRafRef.current != null) {
+          cancelAnimationFrame(cardTransitionRafRef.current);
+          cardTransitionRafRef.current = null;
+        }
+      };
     }
-    if (prevFocusedContactIdRef.current === focusedContact.id) return;
-    setCardAnimState("leaving");
-    const leaveTimer = window.setTimeout(() => {
-      prevFocusedContactIdRef.current = focusedContact.id;
-      setCardAnimState("entering");
-    }, 180);
-    return () => window.clearTimeout(leaveTimer);
+
+    prevFocusedContactIdRef.current = focusedContact.id;
+    if (!outgoingContact) {
+      prevContactSnapshotRef.current = focusedContact;
+    }
     // Reacts to a change of identity (focusedContact.id) only — re-running on every
     // field update of the same contact would replay the leave/enter animation needlessly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedContact?.id]);
-
-  useEffect(() => {
-    if (cardAnimState !== "entering") return;
-    const enterTimer = window.setTimeout(() => setCardAnimState("idle"), 200);
-    return () => window.clearTimeout(enterTimer);
-  }, [cardAnimState]);
 
   useEffect(() => {
     if (!showLogCheckmark) return;
@@ -1904,121 +2070,43 @@ export function RunnerView({
         </div>
       ) : focusedContact ? (
         <div className="calls-cockpit-detail">
-          <GlassCard className={`calls-contact-card calls-contact-card--${cardAnimState}`}>
-            {showLogCheckmark && (
-              <div className="calls-log-checkmark" aria-hidden="true">
-                ✓
-              </div>
+          <div className="calls-contact-card-viewport">
+            {outgoingContact && (
+              <ContactCardPanel
+                contact={outgoingContact}
+                className={`calls-contact-card calls-contact-card--outgoing${cardTransitionActive ? " calls-contact-card--outgoing-active" : ""}`}
+                showCheckmark={false}
+                displayTitle={outgoingContact.title ?? null}
+                displayEmail={outgoingContact.email ?? null}
+                sfContactUrl={outgoingContact.sf_contact_url ?? null}
+                contextApplies={false}
+                contextBusy={false}
+                contactContext={null}
+                isRecallQueue={isRecallQueue}
+                onUpdateRecall={onUpdateRecall}
+                aria-hidden={true}
+              />
             )}
-            <div className="calls-contact-card__main">
-              <div className="calls-contact-card__who">
-                <div className="calls-contact-card__chips">
-                  {focusedContact.claim_active && focusedContact.claimed_by_label && (
-                    <Tag variant="alert">Pris par {focusedContact.claimed_by_label}</Tag>
-                  )}
-                  {isRecallQueue && focusedContact.origin_session_name && (
-                    <Tag variant="accent">{focusedContact.origin_session_name}</Tag>
-                  )}
-                  {(focusedContact.attempt_count ?? 0) > 0 && (
-                    <Tag variant={isRecallQueue ? "accent" : "muted"}>
-                      {formatAttemptLabel(focusedContact.attempt_count ?? 0)}
-                    </Tag>
-                  )}
-                  {focusedContact.status !== "pending" && (
-                    <Tag variant={listStatusDisplay(focusedContact).variant}>
-                      {listStatusDisplay(focusedContact).label}
-                    </Tag>
-                  )}
-                  {!contextBusy && contextApplies && contactContext?.npa && (
-                    <Tag variant="alert">Ne pas rappeler (NPA)</Tag>
-                  )}
-                </div>
-                <h3>{focusedContact.contact_name}</h3>
-                <p className="calls-contact-card__role">
-                  {[displayTitle, focusedContact.account_name || "Compte inconnu"].filter(Boolean).join(" · ")}
-                </p>
-                <div
-                  className={`calls-contact-card__context-meta${contextBusy ? " calls-contact-card__context-meta--loading" : ""}`}
-                >
-                {contextApplies && contactContext?.industry && (
-                  <p className="calls-contact-card__industry">
-                    Secteur · {contactContext.industry}
-                  </p>
-                )}
-                {contextApplies && contactContext?.peer_clients && contactContext.peer_clients.length > 0 && (
-                  <div className="calls-contact-card__peers" aria-label="Références clients">
-                    <span className="calls-contact-card__peers-label">Refs</span>
-                    <ul className="calls-contact-card__peers-list">
-                      {contactContext.peer_clients.map((peer) => (
-                        <li key={peer.id}>
-                          {peer.record_url ? (
-                            <a
-                              className="calls-contact-card__peer"
-                              href={peer.record_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={peer.name}
-                            >
-                              {peer.name}
-                            </a>
-                          ) : (
-                            <span className="calls-contact-card__peer calls-contact-card__peer--static" title={peer.name}>
-                              {peer.name}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                </div>
-                {(isRecallQueue || focusedContact.status !== "pending") && focusedContact.recall_at && (
-                  <div className="calls-contact-card__recall-meta">
-                    <span>Rappel</span>
-                    <DatePicker
-                      compact
-                      label="Modifier la date de rappel"
-                      value={focusedContact.recall_at}
-                      onChange={(next) => {
-                        if (next !== focusedContact.recall_at) {
-                          onUpdateRecall([focusedContact.id], next);
-                        }
-                      }}
-                      triggerClassName="calls-inline-link"
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="calls-contact-card__links">
-                {sfContactUrl && <SalesforceRecordLink href={sfContactUrl} />}
-                {focusedContact.linkedin_url && <LinkedInRecordLink href={focusedContact.linkedin_url} />}
-              </div>
-            </div>
-
-            <div className="calls-contact-card__cta">
-              <div className="calls-contact-card__cta-copy">
-                {focusedContact.phone ? (
-                  <a href={`tel:${focusedContact.phone}`} className="calls-phone-link xos-numeric">
-                    {focusedContact.phone}
-                  </a>
-                ) : (
-                  <p className="calls-contact-card__no-phone">Aucun numéro</p>
-                )}
-                {displayEmail ? (
-                  <a href={`mailto:${displayEmail}`} className="calls-email-link">
-                    {displayEmail}
-                  </a>
-                ) : (
-                  <p className="calls-contact-card__no-email">Aucun email</p>
-                )}
-              </div>
-              {focusedContact.phone && (
-                <Button onClick={() => window.open(`tel:${focusedContact.phone}`, "_self")}>
-                  Appeler
-                </Button>
-              )}
-            </div>
-          </GlassCard>
+            <ContactCardPanel
+              contact={focusedContact}
+              className={`calls-contact-card ${
+                outgoingContact
+                  ? cardTransitionActive
+                    ? "calls-contact-card--incoming-active"
+                    : "calls-contact-card--incoming"
+                  : "calls-contact-card--idle"
+              }`}
+              showCheckmark={showLogCheckmark}
+              displayTitle={displayTitle}
+              displayEmail={displayEmail}
+              sfContactUrl={sfContactUrl}
+              contextApplies={contextApplies}
+              contextBusy={contextBusy}
+              contactContext={contactContext}
+              isRecallQueue={isRecallQueue}
+              onUpdateRecall={onUpdateRecall}
+            />
+          </div>
 
           <div className="calls-cockpit-side">
             {contextBusy ? (
@@ -2212,7 +2300,7 @@ export function RunnerView({
                   placeholder={willSendRecall ? "Motif du rappel…" : "Notes sur l'appel…"}
                 />
               </label>
-              <NoteTemplateChips value={comments} onChange={setComments} resultat={resultat} />
+              <NoteTemplateSections value={comments} onChange={setComments} resultat={resultat} />
 
               {resultat === "RDV planifié" ? (
                 <EventPanel

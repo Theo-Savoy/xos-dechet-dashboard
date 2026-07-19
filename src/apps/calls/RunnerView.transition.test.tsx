@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RunnerView } from "./RunnerView";
 import type { SessionContact, SessionDetail } from "./types";
 
+const callsCss = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require("node:fs") as typeof import("node:fs");
+  return fs.readFileSync("src/apps/calls/calls.css", "utf8");
+});
+
 beforeEach(() => {
   window.localStorage?.setItem("xos-combo-demo-seen", "1");
   window.localStorage?.setItem("xos-combo-sounds", "0");
@@ -60,25 +66,24 @@ const baseProps = {
   onLogMany: vi.fn(),
 };
 
-function cardClassNames(): string {
-  return document.querySelector(".calls-contact-card")?.className ?? "";
+function contactCards(): HTMLElement[] {
+  return Array.from(document.querySelectorAll(".calls-contact-card"));
 }
 
 describe("RunnerView contact card transition", () => {
   it("starts idle on the first focused contact", () => {
     render(<RunnerView {...baseProps} contacts={[bob]} currentContact={bob} />);
     expect(screen.getByRole("heading", { name: "Bob Durand" })).toBeTruthy();
-    expect(cardClassNames()).toContain("calls-contact-card--idle");
+    expect(contactCards()).toHaveLength(1);
+    expect(contactCards()[0]?.className).toContain("calls-contact-card--idle");
   });
 
-  it("plays leaving → entering → idle when the focused contact changes after a log", () => {
+  it("keeps the outgoing card visible during the transition", () => {
     vi.useFakeTimers();
     const { rerender } = render(
       <RunnerView {...baseProps} contacts={[bob, alice]} currentContact={bob} />,
     );
-    expect(cardClassNames()).toContain("calls-contact-card--idle");
 
-    // Simulates the parent advancing to the next contact once "logAndNext" resolves.
     rerender(
       <RunnerView
         {...baseProps}
@@ -86,19 +91,69 @@ describe("RunnerView contact card transition", () => {
         currentContact={alice}
       />,
     );
-    expect(cardClassNames()).toContain("calls-contact-card--leaving");
 
-    act(() => {
-      vi.advanceTimersByTime(180);
-    });
-    expect(cardClassNames()).toContain("calls-contact-card--entering");
+    expect(contactCards()).toHaveLength(2);
+    expect(contactCards()[0]?.className).toContain("calls-contact-card--outgoing");
     expect(screen.getByRole("heading", { name: "Alice Martin" })).toBeTruthy();
 
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(250);
     });
-    expect(cardClassNames()).toContain("calls-contact-card--idle");
+    expect(contactCards()).toHaveLength(1);
+    expect(contactCards()[0]?.className).toContain("calls-contact-card--idle");
     vi.useRealTimers();
+  });
+
+  it("activates incoming then idle classes during the slide", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(
+      <RunnerView {...baseProps} contacts={[bob, alice]} currentContact={bob} />,
+    );
+
+    rerender(
+      <RunnerView
+        {...baseProps}
+        contacts={[{ ...bob, status: "called" }, alice]}
+        currentContact={alice}
+      />,
+    );
+
+    const incoming = contactCards().find((card) => card.className.includes("calls-contact-card--incoming"));
+    expect(incoming).toBeTruthy();
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(contactCards()[0]?.className).toContain("calls-contact-card--idle");
+    vi.useRealTimers();
+  });
+
+  it("cleans up transition timers on unmount", () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const { rerender, unmount } = render(
+      <RunnerView {...baseProps} contacts={[bob, alice]} currentContact={bob} />,
+    );
+
+    rerender(
+      <RunnerView
+        {...baseProps}
+        contacts={[{ ...bob, status: "called" }, alice]}
+        currentContact={alice}
+      />,
+    );
+
+    unmount();
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    clearTimeoutSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("includes reduced-motion rules for contact card transitions", () => {
+    expect(callsCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(callsCss).toContain(".calls-contact-card--outgoing");
+    expect(callsCss).toContain(".calls-contact-card--incoming");
   });
 
   it("shows a checkmark for 600ms right after a successful log", () => {
