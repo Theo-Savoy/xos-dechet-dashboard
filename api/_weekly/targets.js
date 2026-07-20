@@ -21,22 +21,13 @@ const MONTH_LABELS = {
   "12": "Déc.",
 };
 
-/** Arrondi « ordre de grandeur » : 1, 2,5 ou 5 × 10^n */
-export function roundToMagnitude(value) {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  const exp = Math.floor(Math.log10(value));
-  const base = 10 ** exp;
-  const normalized = value / base;
-  let factor = 10;
-  if (normalized < 1.5) factor = 1;
-  else if (normalized < 3.5) factor = 2.5;
-  else if (normalized < 7.5) factor = 5;
-  return Math.round(factor * base);
-}
+const INDICATIVE_STEP = 1000;
 
 /**
  * Répartit un objectif trimestriel en objectifs mensuels indicatifs
  * selon les poids saisonniers historiques (month_in_quarter).
+ * Arrondi au millier le plus proche + méthode du plus grand reste pour
+ * que la somme des indicatifs colle à l'objectif (arrondi au millier).
  */
 export function quarterlyToMonthlyIndicative(quarterlyTarget, quarterLabel, seasonality) {
   if (!Number.isFinite(quarterlyTarget) || quarterlyTarget <= 0) return [];
@@ -47,15 +38,28 @@ export function quarterlyToMonthlyIndicative(quarterlyTarget, quarterLabel, seas
   const weights = seasonality?.month_in_quarter?.[qKey];
   if (!months?.length) return [];
 
-  return months.map((month) => {
-    const weight = weights?.[month] ?? 1 / months.length;
-    const raw = quarterlyTarget * weight;
-    return {
-      month,
-      label: MONTH_LABELS[month] || month,
-      weight,
-      raw,
-      indicative: roundToMagnitude(raw),
-    };
-  });
+  const step = INDICATIVE_STEP;
+  const raws = months.map((month) => quarterlyTarget * (weights?.[month] ?? 1 / months.length));
+  const target = Math.round(quarterlyTarget / step) * step;
+  const floors = raws.map((raw) => Math.floor(raw / step) * step);
+  let residual = target - floors.reduce((sum, value) => sum + value, 0);
+  const order = raws
+    .map((raw, index) => ({ remainder: raw - floors[index], index }))
+    .sort((a, b) => b.remainder - a.remainder);
+  const indicatives = [...floors];
+  let cursor = 0;
+  while (residual !== 0 && order.length) {
+    const delta = residual > 0 ? step : -step;
+    indicatives[order[cursor % order.length].index] += delta;
+    residual -= delta;
+    cursor += 1;
+  }
+
+  return months.map((month, index) => ({
+    month,
+    label: MONTH_LABELS[month] || month,
+    weight: weights?.[month] ?? 1 / months.length,
+    raw: raws[index],
+    indicative: indicatives[index],
+  }));
 }

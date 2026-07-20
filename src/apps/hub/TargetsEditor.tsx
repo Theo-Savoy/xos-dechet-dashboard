@@ -50,30 +50,38 @@ function parseInput(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : NaN;
 }
 
-function roundToMagnitude(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  const exp = Math.floor(Math.log10(value));
-  const base = 10 ** exp;
-  const normalized = value / base;
-  let factor = 10;
-  if (normalized < 1.5) factor = 1;
-  else if (normalized < 3.5) factor = 2.5;
-  else if (normalized < 7.5) factor = 5;
-  return Math.round(factor * base);
-}
+const INDICATIVE_STEP = 1000;
 
+// Répartit l'objectif trimestriel sur les mois au millier le plus proche, puis
+// répartit le résidu par la méthode du plus grand reste pour que la somme des
+// indicatifs colle à l'objectif (arrondi au millier). L'ancien arrondi à
+// l'ordre de grandeur (1/2,5/5 × 10^n) produisait des pas de 5k et une somme
+// qui dérivait — ex. 80k → 25k + 10k + 50k = 75k.
 function monthlyFromTemplate(quarterly: number, template: MonthTemplate[]) {
   if (!quarterly || !template.length) return [];
-  return template.map((entry) => {
-    const raw = quarterly * entry.weight;
-    return {
-      month: entry.month,
-      label: MONTH_LABELS[entry.month] || entry.month,
-      weight: entry.weight,
-      raw,
-      indicative: roundToMagnitude(raw),
-    };
-  });
+  const step = INDICATIVE_STEP;
+  const raws = template.map((entry) => quarterly * entry.weight);
+  const target = Math.round(quarterly / step) * step;
+  const floors = raws.map((raw) => Math.floor(raw / step) * step);
+  let residual = target - floors.reduce((sum, value) => sum + value, 0);
+  const order = raws
+    .map((raw, index) => ({ remainder: raw - floors[index], index }))
+    .sort((a, b) => b.remainder - a.remainder);
+  const indicatives = [...floors];
+  let cursor = 0;
+  while (residual !== 0 && order.length) {
+    const delta = residual > 0 ? step : -step;
+    indicatives[order[cursor % order.length].index] += delta;
+    residual -= delta;
+    cursor += 1;
+  }
+  return template.map((entry, index) => ({
+    month: entry.month,
+    label: MONTH_LABELS[entry.month] || entry.month,
+    weight: entry.weight,
+    raw: raws[index],
+    indicative: indicatives[index],
+  }));
 }
 
 export default function TargetsEditor({ token }: { token: string }) {
@@ -133,7 +141,7 @@ export default function TargetsEditor({ token }: { token: string }) {
             ? ` · pondération sur ${payload.seasonality.sample_years.length || "—"} ans`
             : " · mois répartis à parts égales"}
         </p>
-        <p className="hub-targets-hint">Objectif trimestre en €. Les mois sont indicatifs, arrondis à l’ordre de grandeur.</p>
+        <p className="hub-targets-hint">Objectif trimestre en €. Les mois sont indicatifs, arrondis au millier (somme = objectif).</p>
       </div>
       <div className="hub-targets-table" role="table" aria-label="Objectifs trimestre">
         <div className="hub-targets-head" role="row">
