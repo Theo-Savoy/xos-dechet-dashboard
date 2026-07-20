@@ -28,7 +28,11 @@
     radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--xos-accent) 14%, transparent), transparent 40%),
     radial-gradient(circle at 90% 100%, rgba(56, 189, 248, 0.06), transparent 36%),
     rgba(4, 8, 28, 0.72);
-  overflow-y: auto;
+  /* Pas d'overflow-y ici : .calls-app a min-height:100% et grandit avec le
+     contenu, il ne scrolle jamais. Tout overflow != visible crée un scroll
+     container pour position:sticky — la card de création de liste restait
+     piégée ici au lieu de coller au bas de .xos-window__content (le vrai
+     conteneur de scroll). Retiré pour libérer le sticky. */
 }
 
 .calls-view {
