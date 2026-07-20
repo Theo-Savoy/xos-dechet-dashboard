@@ -1355,8 +1355,36 @@
 .calls-name-form {
   display: grid;
   grid-template-columns: auto minmax(10rem, 1.4fr) minmax(8rem, 0.8fr) auto auto;
-  gap: 0.75rem 1rem;
+  gap: 0.5rem 0.75rem;
   align-items: end;
+  /* Card compacte : padding resserré (les contrôles internes le sont via
+     les règles scopées ci-dessous — les classes partagées .calls-input/
+     .calls-chip restent inchangées ailleurs). */
+  padding: 0.7rem 0.9rem;
+}
+
+.calls-name-form .calls-input,
+.calls-name-form .calls-select {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.calls-name-form .calls-field {
+  gap: 0.25rem;
+}
+
+.calls-name-form .calls-field > span,
+.calls-name-form .calls-fb-control__label {
+  font-size: 0.75rem;
+}
+
+.calls-name-form .calls-chip {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.calls-name-form .calls-chip-row {
+  gap: 0.3rem;
 }
 
 .calls-name-form__meta {
@@ -1372,15 +1400,15 @@
 .calls-name-form__share {
   grid-column: 1 / -1;
   display: grid;
-  gap: 0.45rem;
+  gap: 0.35rem;
   padding-top: 0.15rem;
   border-top: 1px solid color-mix(in srgb, var(--xos-border) 70%, transparent);
 }
 
 .calls-name-form__split {
   display: grid;
-  gap: 0.65rem;
-  padding-top: 0.7rem;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
   border-top: 1px solid color-mix(in srgb, var(--xos-border) 78%, transparent);
 }
 
@@ -1389,26 +1417,26 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--xos-text-muted);
 }
 
 .calls-name-form__share-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .calls-share-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.28rem 0.65rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
   border: 1px solid var(--xos-border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
   color: var(--xos-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   cursor: pointer;
   user-select: none;
 }
@@ -1429,9 +1457,15 @@
   position: sticky;
   bottom: 0.75rem;
   z-index: 30;
-  background: color-mix(in srgb, rgba(8, 12, 32, 0.92) 88%, transparent);
+  /* Glass : fond semi-transparent + blur — le contenu qui défile derrière
+     reste perceptible sans nuire à la lisibilité des champs. */
+  background: rgba(10, 14, 36, 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
   border-color: color-mix(in srgb, var(--xos-accent) 35%, var(--xos-border));
-  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 -10px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Laisse de la place en bas du scroll pour que la barre sticky ne masque
